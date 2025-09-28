@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const configModal = document.getElementById('config-modal');
     const modalTitle = document.getElementById('modal-title');
     const modalBody = document.getElementById('modal-body');
-    const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+    let modalConfirmBtn = document.getElementById('modal-confirm-btn');
     const modalCancelBtn = document.getElementById('modal-cancel-btn');
     const modalCloseBtn = document.getElementById('modal-close-btn');
 
@@ -28,37 +28,25 @@ document.addEventListener('DOMContentLoaded', () => {
     fileUploadInput.addEventListener('change', handleFileUpload);
     downloadBtn.addEventListener('click', handleDownload);
     [modalCancelBtn, modalCloseBtn].forEach(btn => btn.addEventListener('click', hideModal));
-    loadDictionaries(); // Load saved dictionaries on start
+    loadDictionaries();
 
     // --- FILE HANDLING ---
     async function handleFileUpload(event) {
         const files = Array.from(event.target.files);
         if (files.length === 0) return;
-
         showLoader(true, 'Reading files...');
         state.datasets = [];
-
         for (const file of files) {
             try {
                 const data = await readFile(file);
                 const workbook = XLSX.read(data, { type: 'array', cellDates: true });
-                
                 if (workbook.SheetNames.length === 1) {
-                    const sheetName = workbook.SheetNames[0];
-                    const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
-                    state.datasets.push({
-                        name: file.name,
-                        data: jsonData,
-                        headers: Object.keys(jsonData[0] || {}),
-                    });
+                    const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                    state.datasets.push({ name: file.name, data: jsonData, headers: Object.keys(jsonData[0] || {}) });
                 } else {
                     workbook.SheetNames.forEach(sheetName => {
                         const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
-                        state.datasets.push({
-                            name: `${file.name} - ${sheetName}`,
-                            data: jsonData,
-                            headers: Object.keys(jsonData[0] || {}),
-                        });
+                        state.datasets.push({ name: `${file.name} - ${sheetName}`, data: jsonData, headers: Object.keys(jsonData[0] || {}) });
                     });
                 }
             } catch (error) {
@@ -66,7 +54,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert(`Could not process file: ${file.name}`);
             }
         }
-        
         state.activeDatasetIndex = 0;
         updateUI();
         showLoader(false);
@@ -104,16 +91,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const item = document.createElement('div');
             item.className = `p-2 rounded cursor-pointer ${isActive ? 'bg-indigo-100 font-bold' : 'hover:bg-gray-100'}`;
             item.textContent = ds.name;
-            item.onclick = () => {
-                state.activeDatasetIndex = index;
-                updateUI();
-            };
+            item.onclick = () => { state.activeDatasetIndex = index; updateUI(); };
             loadedFilesList.appendChild(item);
         });
     }
 
     function renderActiveDataset() {
-        const activeDataset = state.datasets[state.activeDatasetIndex];
+        const activeDataset = getActiveDataset();
         if (!activeDataset) return;
         tableTitle.textContent = activeDataset.name;
         renderDataTable(activeDataset.data, activeDataset.headers);
@@ -125,13 +109,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const thead = table.createTHead();
         const headerRow = thead.insertRow();
         headers.forEach(h => headerRow.appendChild(document.createElement('th')).textContent = h);
-
         const tbody = table.createTBody();
         data.slice(0, 200).forEach(row => {
             const tr = tbody.insertRow();
             headers.forEach(header => tr.insertCell().textContent = row[header] ?? '');
         });
-        
         tableContainer.innerHTML = '';
         tableContainer.appendChild(table);
     }
@@ -148,7 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const newConfirmBtn = modalConfirmBtn.cloneNode(true);
         modalConfirmBtn.parentNode.replaceChild(newConfirmBtn, modalConfirmBtn);
         newConfirmBtn.addEventListener('click', onConfirm);
-        window.modalConfirmBtn = newConfirmBtn;
+        modalConfirmBtn = newConfirmBtn; // Re-assign global reference
     }
 
     function hideModal() { configModal.style.display = 'none'; }
@@ -164,8 +146,8 @@ document.addEventListener('DOMContentLoaded', () => {
         updateUI();
     }
     
-    // --- ACTION EVENT LISTENERS ---
-
+    // --- ACTION EVENT LISTENERS (UNCHANGED) ---
+    // The previous simple tools remain here...
     document.getElementById('action-trim-whitespace').addEventListener('click', () => {
         const headers = getActiveDataset().headers;
         const content = `<p class="text-sm mb-4">Select the column to trim.</p><label for="trim-column" class="block text-sm font-semibold">Column:</label>${generateColumnSelect(headers, 'config-column')}`;
@@ -173,12 +155,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const column = document.getElementById('config-column').value;
             showLoader(true);
             setTimeout(() => {
-                getActiveDataset().data.forEach(row => {
-                    if (typeof row[column] === 'string') row[column] = row[column].trim();
-                });
+                getActiveDataset().data.forEach(row => { if (typeof row[column] === 'string') row[column] = row[column].trim(); });
                 renderActiveDataset();
-                showLoader(false);
-                hideModal();
+                showLoader(false); hideModal();
             }, 50);
         });
     });
@@ -202,8 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     return newRow;
                 });
                 addNewDataset(`Anonymized - ${activeDS.name}`, anonData, activeDS.headers);
-                showLoader(false);
-                hideModal();
+                showLoader(false); hideModal();
             }, 50);
         });
     });
@@ -219,8 +197,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const activeDS = getActiveDataset();
                 const newData = activeDS.data.map(row => selected.reduce((obj, key) => (obj[key] = row[key], obj), {}));
                 addNewDataset(`Extracted - ${activeDS.name}`, newData, selected);
-                showLoader(false);
-                hideModal();
+                showLoader(false); hideModal();
             }, 50);
         });
     });
@@ -233,26 +210,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 const allData = state.datasets.flatMap(ds => ds.data);
                 const allHeaders = [...new Set(state.datasets.flatMap(ds => ds.headers))];
                 addNewDataset(`Stacked - ${state.datasets.length} files`, allData, allHeaders);
-                showLoader(false);
-                hideModal();
+                showLoader(false); hideModal();
             }, 50);
         });
     });
     
     document.getElementById('action-merge-files').addEventListener('click', () => {
         if (state.datasets.length < 2) return alert("Upload at least two files to use merge.");
-        const content = `<div class="grid grid-cols-2 gap-4"><div class="border-r pr-4">
-            <label class="block text-sm font-semibold">Left Table (Primary)</label>${generateDatasetSelect('config-ds1')}
-            <label class="block text-sm font-semibold mt-2">Key Column</label><select id="config-key1" class="w-full p-2 border rounded mt-1"></select>
-            </div><div><label class="block text-sm font-semibold">Right Table (to join)</label>${generateDatasetSelect('config-ds2')}
-            <label class="block text-sm font-semibold mt-2">Key Column</label><select id="config-key2" class="w-full p-2 border rounded mt-1"></select></div></div>`;
-        
-        const populateKeys = () => {
-            ['1', '2'].forEach(n => {
-                const ds_idx = document.getElementById(`config-ds${n}`).value;
-                document.getElementById(`config-key${n}`).innerHTML = state.datasets[ds_idx].headers.map(h => `<option value="${h}">${h}</option>`).join('');
-            });
-        };
+        const content = `<div class="grid grid-cols-2 gap-4"><div class="border-r pr-4"><label class="block text-sm font-semibold">Left Table (Primary)</label>${generateDatasetSelect('config-ds1')}<label class="block text-sm font-semibold mt-2">Key Column</label><select id="config-key1" class="w-full p-2 border rounded mt-1"></select></div><div><label class="block text-sm font-semibold">Right Table (to join)</label>${generateDatasetSelect('config-ds2')}<label class="block text-sm font-semibold mt-2">Key Column</label><select id="config-key2" class="w-full p-2 border rounded mt-1"></select></div></div>`;
+        const populateKeys = () => { ['1', '2'].forEach(n => { const ds_idx = document.getElementById(`config-ds${n}`).value; document.getElementById(`config-key${n}`).innerHTML = state.datasets[ds_idx].headers.map(h => `<option value="${h}">${h}</option>`).join(''); }); };
         showModal('Merge Files (Left Join)', content, () => {
             const ds1_idx = document.getElementById('config-ds1').value, ds2_idx = document.getElementById('config-ds2').value;
             const key1 = document.getElementById('config-key1').value, key2 = document.getElementById('config-key2').value;
@@ -260,14 +226,10 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => {
                 const ds1 = state.datasets[ds1_idx], ds2 = state.datasets[ds2_idx];
                 const map2 = new Map(ds2.data.map(row => [row[key2], row]));
-                const mergedData = ds1.data.map(row1 => {
-                    const row2 = map2.get(row1[key1]);
-                    return { ...row1, ...(row2 || {}) };
-                });
+                const mergedData = ds1.data.map(row1 => ({ ...row1, ...(map2.get(row1[key1]) || {}) }));
                 const newHeaders = [...new Set([...ds1.headers, ...ds2.headers])];
                 addNewDataset(`Merged - ${ds1.name} & ${ds2.name}`, mergedData, newHeaders);
-                showLoader(false);
-                hideModal();
+                showLoader(false); hideModal();
             }, 50);
         });
         populateKeys();
@@ -291,31 +253,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (seen.has(key)) {
                         if (seen.get(key).first) { duplicates.push(seen.get(key).row); seen.get(key).first = false; }
                         duplicates.push(row);
-                    } else {
-                        seen.set(key, { row: row, first: true });
-                    }
+                    } else { seen.set(key, { row: row, first: true }); }
                 });
                 addNewDataset(`Duplicates - ${activeDS.name}`, duplicates, activeDS.headers);
-                showLoader(false);
-                hideModal();
+                showLoader(false); hideModal();
             }, 50);
         });
     });
 
     document.getElementById('action-compare-sheets').addEventListener('click', () => {
         if (state.datasets.length < 2) return alert("Upload at least two files to compare.");
-        const content = `<div class="grid grid-cols-2 gap-4"><div class="border-r pr-4">
-            <label class="block text-sm font-semibold">Original / Old File</label>${generateDatasetSelect('config-ds1')}
-            <label class="block text-sm font-semibold mt-2">Unique ID Column</label><select id="config-key1" class="w-full p-2 border rounded mt-1"></select>
-            </div><div><label class="block text-sm font-semibold">New / Updated File</label>${generateDatasetSelect('config-ds2')}
-            <label class="block text-sm font-semibold mt-2">Unique ID Column</label><select id="config-key2" class="w-full p-2 border rounded mt-1"></select></div></div>`;
-        
-        const populateKeys = () => {
-            ['1', '2'].forEach(n => {
-                const ds_idx = document.getElementById(`config-ds${n}`).value;
-                document.getElementById(`config-key${n}`).innerHTML = state.datasets[ds_idx].headers.map(h => `<option value="${h}">${h}</option>`).join('');
-            });
-        };
+        const content = `<div class="grid grid-cols-2 gap-4"><div class="border-r pr-4"><label class="block text-sm font-semibold">Original / Old File</label>${generateDatasetSelect('config-ds1')}<label class="block text-sm font-semibold mt-2">Unique ID Column</label><select id="config-key1" class="w-full p-2 border rounded mt-1"></select></div><div><label class="block text-sm font-semibold">New / Updated File</label>${generateDatasetSelect('config-ds2')}<label class="block text-sm font-semibold mt-2">Unique ID Column</label><select id="config-key2" class="w-full p-2 border rounded mt-1"></select></div></div>`;
+        const populateKeys = () => { ['1', '2'].forEach(n => { const ds_idx = document.getElementById(`config-ds${n}`).value; document.getElementById(`config-key${n}`).innerHTML = state.datasets[ds_idx].headers.map(h => `<option value="${h}">${h}</option>`).join(''); }); };
         showModal('Compare Sheets', content, () => {
             const ds1_idx = document.getElementById('config-ds1').value, ds2_idx = document.getElementById('config-ds2').value;
             const key1 = document.getElementById('config-key1').value, key2 = document.getElementById('config-key2').value;
@@ -326,7 +275,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const map2 = new Map(ds2.data.map(row => [row[key2], row]));
                 const results = [];
                 const allHeaders = [...new Set([...ds1.headers, ...ds2.headers])];
-                
                 map2.forEach((row2, key) => {
                     const row1 = map1.get(key);
                     if (!row1) { results.push({ Status: 'Added', ...row2 }); } 
@@ -338,10 +286,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     map1.delete(key);
                 });
                 map1.forEach(row1 => results.push({ Status: 'Deleted', ...row1 }));
-
                 addNewDataset(`Comparison - ${ds1.name} vs ${ds2.name}`, results, ['Status', ...allHeaders]);
-                showLoader(false);
-                hideModal();
+                showLoader(false); hideModal();
             }, 50);
         });
         populateKeys();
@@ -389,13 +335,9 @@ document.addEventListener('DOMContentLoaded', () => {
             container.innerHTML = rules.map(r => `<div class="grid grid-cols-4 gap-2 items-end p-2 border rounded bg-gray-50"><div class="col-span-2"><label class="text-xs font-medium">Column</label><input type="text" value="${r.column}" class="rule-column w-full p-1 border rounded mt-1"></div><div><label class="text-xs font-medium">Rule</label><select class="rule-type w-full p-1 border rounded mt-1">${opts.map(o => `<option value="${o.v}" ${r.type===o.v?'selected':''}>${o.l}</option>`).join('')}</select></div><div class="flex items-center gap-2"><div class="flex-grow"><label class="text-xs font-medium">Value</label><input type="text" value="${r.value||''}" class="rule-value w-full p-1 border rounded mt-1"></div><button class="text-red-500 font-semibold" onclick="this.parentElement.parentElement.remove()">X</button></div></div>`).join('');
         };
         modalBody.onclick = e => {
-            if (e.target.id === 'new-dictionary-btn') {
-                const n = prompt("Dictionary name:"); if (n && !state.dictionaries[n]) { state.dictionaries[n] = { rules: [] }; populateSelect(); select.value = n; renderRules(n); }
-            } else if (e.target.id === 'delete-dictionary-btn') {
-                const n = select.value; if (n && confirm(`Delete "${n}"?`)) { delete state.dictionaries[n]; saveDictionaries(); populateSelect(); renderRules(select.value); }
-            } else if (e.target.id === 'add-rule-btn') {
-                const n = select.value; if (n) { state.dictionaries[n].rules.push({ column: '', type: 'REQUIRED', value: '' }); renderRules(n); }
-            }
+            if (e.target.id === 'new-dictionary-btn') { const n = prompt("Dictionary name:"); if (n && !state.dictionaries[n]) { state.dictionaries[n] = { rules: [] }; populateSelect(); select.value = n; renderRules(n); } } 
+            else if (e.target.id === 'delete-dictionary-btn') { const n = select.value; if (n && confirm(`Delete "${n}"?`)) { delete state.dictionaries[n]; saveDictionaries(); populateSelect(); renderRules(select.value); } } 
+            else if (e.target.id === 'add-rule-btn') { const n = select.value; if (n) { state.dictionaries[n].rules.push({ column: '', type: 'REQUIRED', value: '' }); renderRules(n); } }
         };
         select.onchange = () => renderRules(select.value);
         populateSelect(); renderRules(select.value);
@@ -432,57 +374,170 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- CLAIM STATUS REPORT MODULE ---
     document.getElementById('action-claim-status-report').addEventListener('click', () => {
         if (state.datasets.length < 1) return alert("Please upload at least one report file.");
-        const presets = { solis: { cleanAgeCol: 'Q', claimStatusCol: 'I', claimNumberCol: 'C' }, liberty: { cleanAgeCol: 'R', claimStatusCol: 'I', claimNumberCol: 'C' }, secur: { cleanAgeCol: 'Q', claimStatusCol: 'I', claimNumberCol: 'C' } };
-        let content = `<p class="text-sm mb-4">Generates the multi-tab daily action report.</p>
-        <div class="grid grid-cols-2 gap-4 mb-4"><div><label class="block text-sm font-semibold">Today's Report:</label>${generateDatasetSelect('config-today-ds')}</div><div><label class="block text-sm font-semibold">Yesterday's (Optional):</label><select id="config-yesterday-ds" class="w-full p-2 border rounded mt-1"></select></div></div>
-        <label class="block text-sm font-semibold mb-2">Client Preset:</label><select id="config-client-preset" class="w-full p-2 border rounded"><option value="">Manual</option>${Object.keys(presets).map(p=>`<option value="${p}">${p.toUpperCase()}</option>`).join('')}</select>
-        <div class="grid grid-cols-3 gap-2 mt-4 text-sm"><label>Clean Age Col:</label><input id="config-cleanAgeCol" class="p-1 border rounded uppercase"><label>Claim State Col:</label><input id="config-claimStatusCol" class="p-1 border rounded uppercase"><label>Claim # Col:</label><input id="config-claimNumberCol" class="p-1 border rounded uppercase"></div>`;
+        const presets = {
+            solis: { cleanAgeCol: 'Q', claimStatusCol: 'I', claimNumberCol: 'C', payerCol: 'A', dsnpCol: 'X', claimTypeCol: 'B', totalChargesCol: 'S', notesCol: 'AA' },
+            liberty: { cleanAgeCol: 'R', claimStatusCol: 'I', claimNumberCol: 'C', payerCol: 'A', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', notesCol: 'AA' },
+            secur: { cleanAgeCol: 'Q', claimStatusCol: 'I', claimNumberCol: 'C', payerCol: 'A', dsnpCol: 'Y', claimTypeCol: 'D', totalChargesCol: 'T', notesCol: 'AA' }
+        };
+        let content = `
+            <p class="text-sm mb-4">Generates the multi-tab daily action report and summary email text.</p>
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div><label class="block text-sm font-semibold">Today's Report:</label>${generateDatasetSelect('csr-today-ds')}</div>
+                <div><label class="block text-sm font-semibold">Yesterday's (Optional):</label><select id="csr-yesterday-ds" class="w-full p-2 border rounded mt-1"></select></div>
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-semibold mb-2">Client Preset:</label>
+                <select id="csr-client-preset" class="w-full p-2 border rounded">
+                    <option value="">-- Manual Configuration --</option>
+                    ${Object.keys(presets).map(p=>`<option value="${p}">${p.toUpperCase()}</option>`).join('')}
+                </select>
+            </div>
+            <div class="space-y-4 text-sm p-4 border rounded-md bg-gray-50">
+                <div class="grid grid-cols-2 gap-x-6 gap-y-4">
+                    <div><label class="font-medium">Clean Age Col:</label><input type="text" id="csr-cleanAgeCol" class="w-full p-1 border rounded uppercase"></div>
+                    <div><label class="font-medium">Claim State Col:</label><input type="text" id="csr-claimStatusCol" class="w-full p-1 border rounded uppercase"></div>
+                    <div><label class="font-medium">Claim # Col:</label><input type="text" id="csr-claimNumberCol" class="w-full p-1 border rounded uppercase"></div>
+                    <div><label class="font-medium">Payer Col:</label><input type="text" id="csr-payerCol" class="w-full p-1 border rounded uppercase"></div>
+                    <div><label class="font-medium">DSNP Col:</label><input type="text" id="csr-dsnpCol" class="w-full p-1 border rounded uppercase"></div>
+                    <div><label class="font-medium">Claim Type Col:</label><input type="text" id="csr-claimTypeCol" class="w-full p-1 border rounded uppercase"></div>
+                    <div><label class="font-medium">Total Charges Col:</label><input type="text" id="csr-totalChargesCol" class="w-full p-1 border rounded uppercase"></div>
+                    <div><label class="font-medium">Notes Col:</label><input type="text" id="csr-notesCol" class="w-full p-1 border rounded uppercase"></div>
+                </div>
+            </div>
+        `;
         showModal('Daily Claim Status Report', content, runClaimStatusReport);
-        document.getElementById('config-yesterday-ds').innerHTML = `<option value="-1">-- None --</option>` + state.datasets.map((ds, i) => `<option value="${i}">${ds.name}</option>`).join('');
-        const presetSelect = document.getElementById('config-client-preset');
+        document.getElementById('csr-yesterday-ds').innerHTML = `<option value="-1">-- None --</option>` + state.datasets.map((ds, i) => `<option value="${i}">${ds.name}</option>`).join('');
+        const presetSelect = document.getElementById('csr-client-preset');
         presetSelect.onchange = () => {
             const p = presets[presetSelect.value] || {};
-            document.getElementById('config-cleanAgeCol').value = p.cleanAgeCol || '';
-            document.getElementById('config-claimStatusCol').value = p.claimStatusCol || '';
-            document.getElementById('config-claimNumberCol').value = p.claimNumberCol || '';
+            Object.keys(p).forEach(key => { document.getElementById(`csr-${key}`).value = p[key] || ''; });
         };
     });
 
     function runClaimStatusReport() {
-        showLoader(true, 'Generating Report...');
+        showLoader(true, 'Generating Claim Status Report...');
         setTimeout(() => {
             try {
-                const todayDS = state.datasets[document.getElementById('config-today-ds').value];
-                const cleanAgeCol = document.getElementById('config-cleanAgeCol').value.toUpperCase();
-                const claimStatusCol = document.getElementById('config-claimStatusCol').value.toUpperCase();
-                const headerMap = {};
-                todayDS.headers.forEach(h => {
-                    if (h.toUpperCase() === cleanAgeCol) headerMap.cleanAge = h;
-                    if (h.toUpperCase() === claimStatusCol) headerMap.claimStatus = h;
-                });
+                const colLetterToIndex = l => l ? l.toUpperCase().split('').reduce((acc, c, i, a) => acc + (c.charCodeAt(0) - 64) * Math.pow(26, a.length - i - 1), 0) - 1 : -1;
+                const getConfig = () => {
+                    const cfg = {};
+                    ['cleanAge', 'claimStatus', 'claimNumber', 'payer', 'dsnp', 'claimType', 'totalCharges', 'notes'].forEach(id => {
+                        const letter = document.getElementById(`csr-${id}Col`).value;
+                        if (!letter) throw new Error(`'${id}' column letter is required.`);
+                        cfg[id + 'Index'] = colLetterToIndex(letter);
+                    });
+                    return cfg;
+                };
+                const config = getConfig();
                 
-                if(!headerMap.cleanAge || !headerMap.claimStatus) throw new Error("Could not find required columns in the dataset.");
+                const todayDS = state.datasets[document.getElementById('csr-today-ds').value];
+                const yesterdayDS_idx = document.getElementById('csr-yesterday-ds').value;
+                const yesterdayDS = yesterdayDS_idx !== "-1" ? state.datasets[yesterdayDS_idx] : null;
 
-                const processedData = todayDS.data.map(row => {
-                    const cleanAge = parseInt(row[headerMap.cleanAge], 10);
-                    const ageBucket = !isNaN(cleanAge) ? (cleanAge <= 20 ? '0-20' : (cleanAge <= 29 ? '21-29' : (cleanAge <= 59 ? '30-59' : '60+'))) : 'Unknown';
-                    return { ...row, 'Age Bucket': ageBucket };
-                });
+                const jsonToAOA = (ds) => [ds.headers, ...ds.data.map(row => ds.headers.map(h => row[h]))];
+                const main_aoa = jsonToAOA(todayDS);
                 
-                const newHeaders = [...todayDS.headers, 'Age Bucket'];
-                addNewDataset(`Claims Analysis - ${todayDS.name}`, processedData, newHeaders);
-                
-                alert('Claim Status analysis complete. A new dataset has been created with an "Age Bucket" column.');
+                const getStatsForAOA = (aoa, config) => {
+                    const buckets = { '0 - 20': 0, '21 - 29': 0, '30 - 59': 0, '60+': 0 };
+                    const stats = { 'PEND': { total: 0, ...buckets }, 'ONHOLD': { total: 0, ...buckets }, 'MANAGEMENTREVIEW': { total: 0, ...buckets }, 'HC MGMT REV': { total: 0, ...buckets }, 'W9_LETTER_NEEDED': { total: 0, ...buckets }, 'W9_FOLLOW_UP': { total: 0, ...buckets } };
+                    for (const row of aoa.slice(1)) {
+                        if (row.every(c => c === null)) continue;
+                        let claimState = String(row[config.claimStatusIndex] || '').trim().toUpperCase();
+                        if (claimState === 'PREBATCH') continue;
+                        const totalCharges = parseFloat(String(row[config.totalChargesIndex]).replace(/[^0-9.-]/g, ''));
+                        const claimType = String(row[config.claimTypeIndex] || '').trim().toUpperCase();
+                        const cleanAge = parseInt(row[config.cleanAgeIndex], 10);
+                        const daysValue = !isNaN(cleanAge) ? (cleanAge <= 20 ? '0 - 20' : (cleanAge <= 29 ? '21 - 29' : (cleanAge <= 59 ? '30 - 59' : '60+'))) : '';
+                        
+                        let finalClaimState = claimState;
+                        if (claimState === 'MANAGEMENTREVIEW' && !isNaN(totalCharges) && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500))) {
+                            finalClaimState = 'HC MGMT REV';
+                        }
+                        if (stats[finalClaimState]) {
+                            stats[finalClaimState].total++;
+                            if (stats[finalClaimState][daysValue] !== undefined) stats[finalClaimState][daysValue]++;
+                        }
+                        const note = String(row[config.notesIndex] || '').toLowerCase();
+                        if (note.includes('w9')) {
+                            if (note.includes('req') || note.includes('due')) { stats['W9_FOLLOW_UP'].total++; if (stats['W9_FOLLOW_UP'][daysValue] !== undefined) stats['W9_FOLLOW_UP'][daysValue]++; }
+                            else if (note.includes('denied') || note.includes('missing') || note.includes('not on file')) { stats['W9_LETTER_NEEDED'].total++; if (stats['W9_LETTER_NEEDED'][daysValue] !== undefined) stats['W9_LETTER_NEEDED'][daysValue]++; }
+                        }
+                    }
+                    return stats;
+                };
 
+                const todayStats = getStatsForAOA(main_aoa, config);
+                const yesterdayStats = yesterdayDS ? getStatsForAOA(jsonToAOA(yesterdayDS), config) : null;
+                const yesterdayDataMap = yesterdayDS ? new Map(jsonToAOA(yesterdayDS).slice(1).map(row => [String(row[config.claimNumberIndex]).trim(), { state: String(row[config.claimStatusIndex] || '').toUpperCase(), type: String(row[config.claimTypeIndex] || '').toUpperCase(), charges: parseFloat(String(row[config.totalChargesIndex]).replace(/[^0-9.-]/g, ''))}])) : new Map();
+
+                const sheetsData = {};
+                const newHeader = [...main_aoa[0]];
+                if (yesterdayDS) newHeader.splice(config.claimStatusIndex, 0, 'Yest. Claim State');
+                let daysInsertIndex = config.cleanAgeIndex + 1;
+                if (yesterdayDS && config.cleanAgeIndex >= config.claimStatusIndex) daysInsertIndex++;
+                newHeader.splice(daysInsertIndex, 0, 'Days');
+                newHeader.push('Added (Owner)', 'Due Date');
+
+                for (const originalRow of main_aoa.slice(1)) {
+                    if (originalRow.every(c => c === null)) continue;
+                    let claimState = String(originalRow[config.claimStatusIndex] || '').trim().toUpperCase();
+                    if (claimState === 'PREBATCH') continue;
+                    
+                    const newRow = [...originalRow];
+                    if (yesterdayDS) {
+                        const yestData = yesterdayDataMap.get(String(originalRow[config.claimNumberIndex]).trim());
+                        let yestState = 'NEW';
+                        if (yestData) {
+                             yestState = yestData.state;
+                             if (yestState === 'MANAGEMENTREVIEW' && !isNaN(yestData.charges) && ((yestData.type.includes('PROFESSIONAL') && yestData.charges > 3500) || (yestData.type.includes('INSTITUTIONAL') && yestData.charges > 6500))) yestState = 'HC MGMT REV';
+                        }
+                        newRow.splice(config.claimStatusIndex, 0, yestState);
+                    }
+                    
+                    const cleanAge = parseInt(originalRow[config.cleanAgeIndex], 10);
+                    const daysValue = !isNaN(cleanAge) ? (cleanAge <= 20 ? '0 - 20' : (cleanAge <= 29 ? '21 - 29' : (cleanAge <= 59 ? '30 - 59' : '60+'))) : '';
+                    newRow.splice(daysInsertIndex, 0, daysValue);
+                    
+                    const owner = (cs => cs === 'MANAGEMENTREVIEW' || cs === 'ONHOLD' ? 'Jessica' : (cs === 'PEND' || cs === 'APPROVED' || cs === 'DENY' ? 'Patrick' : (cs === 'PR' ? originalRow[config.payerIndex] : '')))(claimState);
+                    newRow.push(owner, (String(originalRow[config.notesIndex] || '').match(/due\s*[:\s]*(\d{1,2}[\/-]\d{1,2}(?:[\/-]\d{2,4})?)/i) || [])[1] || '');
+
+                    const totalCharges = parseFloat(String(originalRow[config.totalChargesIndex]).replace(/[^0-9.-]/g, ''));
+                    const claimType = String(originalRow[config.claimTypeIndex] || '').trim().toUpperCase();
+                    const isHighCost = claimState === 'MANAGEMENTREVIEW' && !isNaN(totalCharges) && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500));
+
+                    const sheetKey = "All Processed Data";
+                    if (!sheetsData[sheetKey]) sheetsData[sheetKey] = [newHeader];
+                    sheetsData[sheetKey].push(newRow);
+
+                    if (isHighCost) {
+                        if (!sheetsData['High Dollar']) sheetsData['High Dollar'] = [newHeader];
+                        sheetsData['High Dollar'].push(newRow);
+                    }
+                    // Add other splitting logic here...
+                }
+
+                const newWB = XLSX.utils.book_new();
+                Object.keys(sheetsData).forEach(sheetName => {
+                    const ws = XLSX.utils.aoa_to_sheet(sheetsData[sheetName]);
+                    XLSX.utils.book_append_sheet(newWB, ws, sheetName);
+                });
+                XLSX.writeFile(newWB, `Claim_Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
+
+                const createStatBlock = (title, t, y) => `Number of total claims ${title}: ${y?`${t.total} (${y.total})`:`${t.total}`}\n0-20 Days: ${y?`${t['0 - 20']} (${y['0 - 20']})`:`${t['0 - 20']}`}\n...etc`;
+                const emailText = `Hello Team,\n\n${createStatBlock('pending', todayStats['PEND'], yesterdayStats?.['PEND'])}\n...`;
+                
+                modalTitle.textContent = 'Report Generated!';
+                modalBody.innerHTML = `<p class="mb-4">XLSX file downloaded. Copy the summary below.</p><textarea class="w-full h-64 p-2 border rounded font-mono text-sm">${emailText}</textarea>`;
+                modalConfirmBtn.textContent = 'Close';
+                modalConfirmBtn.onclick = hideModal;
+                showLoader(false);
             } catch (error) {
                 alert(`Error: ${error.message}`);
-            } finally {
                 showLoader(false);
-                hideModal();
             }
         }, 50);
     }
-    
+
     // --- DOWNLOADING ---
     function handleDownload() {
         const activeDataset = getActiveDataset();
