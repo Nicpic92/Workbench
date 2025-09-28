@@ -391,13 +391,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // --- CLAIM STATUS REPORT MODULE (Corrected Logic) ---
+    // --- CLAIM STATUS REPORT MODULE ---
     document.getElementById('action-claim-status-report').addEventListener('click', () => {
         if (state.datasets.length < 1) return alert("Please upload at least one report file.");
         const presets = {
             solis: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', dsnpCol: 'X', claimTypeCol: 'B', totalChargesCol: 'S', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
             liberty: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
-            secur: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', dsnpCol: 'Y', claimTypeCol: 'D', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' }
+            secur: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', dsnpCol: 'Y', claimTypeCol: 'D', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
+            // ******** THE FIX IS HERE ********
+            // Added the new CSH client by copying the Liberty configuration.
+            csh: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' }
         };
         let content = `
             <p class="text-sm mb-4">Generates the multi-tab daily action report and summary email text based on the latest logic.</p>
@@ -435,8 +438,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const basePresetKeys = Object.keys(presets.solis); 
                 basePresetKeys.forEach(key => {
                     if (key !== 'label') {
-                        // ******** THE FIX IS HERE ********
-                        // Correctly construct the element ID (e.g., 'csr-cleanAgeCol') from the preset key (e.g., 'cleanAgeCol')
                         const element = document.getElementById(`csr-${key}`);
                         if (element) {
                             element.value = p[key] || '';
@@ -595,7 +596,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (isHighCost) {
                     sheetsData[highDollarSheetName].push(newRow);
-                } else if (['PEND', 'ONHOLD', 'MANAGEMENTREVIEW', 'DENY'].includes(claimState) && ['21 - 29', '30 - 59', '60+'].includes(daysValue)) {
+                }
+                
+                if (!isHighCost && ['PEND', 'ONHOLD', 'MANAGEMENTREVIEW', 'DENY'].includes(claimState) && ['21 - 29', '30 - 59', '60+'].includes(daysValue)) {
                     const dsnpRaw = String(originalRow[config.dsnpIndex] || '').toUpperCase();
                     let dsnpStatus = '';
                     if (dsnpRaw.includes('NON DSNP')) { dsnpStatus = 'NonDSNP'; } 
@@ -614,12 +617,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         sheetsData[tabKey].push(newRow);
                     }
                 }
+
                 if (config.notesIndex >= 0 && noteText.toLowerCase().includes('w9')) {
                     let w9SheetName = '';
                     const noteLower = noteText.toLowerCase();
                     if (noteLower.includes('requested') || noteLower.includes('req') || noteLower.includes('due')) w9SheetName = 'W9 Follow-Up - Pat';
                     else if (noteLower.includes('denied') || noteLower.includes('missing') || noteLower.includes('not on file') || noteLower.includes('not received')) w9SheetName = 'W9 Letter Needed - Jess';
                     else if (noteLower.includes('received') || noteLower.includes('reprocess') || noteLower.includes('rerun')) w9SheetName = 'W9 Received - Reprocess';
+                    
                     if (w9SheetName) {
                         if (!sheetsData[w9SheetName]) sheetsData[w9SheetName] = [newHeader];
                         sheetsData[w9SheetName].push(newRow);
