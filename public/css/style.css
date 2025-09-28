@@ -10,6 +10,7 @@
     background-color: #f3f4f6; /* gray-100 */
     color: #374151; /* gray-700 */
     transition: background-color 0.2s;
+    font-size: 0.9em;
 }
 .action-btn:hover {
     background-color: #e5e7eb; /* gray-200 */
