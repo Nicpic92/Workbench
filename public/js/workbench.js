@@ -106,13 +106,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderDataTable(data, headers) {
         const table = document.createElement('table');
+        table.className = 'min-w-full divide-y divide-gray-200';
         const thead = table.createTHead();
+        thead.className = 'bg-gray-50';
         const headerRow = thead.insertRow();
-        headers.forEach(h => headerRow.appendChild(document.createElement('th')).textContent = h);
+        headers.forEach(h => {
+            const th = document.createElement('th');
+            th.className = 'px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky top-0 bg-gray-50 z-10';
+            th.textContent = h;
+            headerRow.appendChild(th);
+        });
         const tbody = table.createTBody();
+        tbody.className = 'bg-white divide-y divide-gray-200';
         data.slice(0, 200).forEach(row => {
             const tr = tbody.insertRow();
-            headers.forEach(header => tr.insertCell().textContent = row[header] ?? '');
+            tr.className = 'hover:bg-gray-50';
+            headers.forEach(header => {
+                 const td = tr.insertCell();
+                 td.className = 'px-4 py-2 whitespace-nowrap text-sm text-gray-700';
+                 td.textContent = row[header] ?? '';
+            });
         });
         tableContainer.innerHTML = '';
         tableContainer.appendChild(table);
@@ -127,10 +140,11 @@ document.addEventListener('DOMContentLoaded', () => {
         modalTitle.textContent = title;
         modalBody.innerHTML = content;
         configModal.style.display = 'flex';
+        // Clone and replace the confirm button to remove old event listeners
         const newConfirmBtn = modalConfirmBtn.cloneNode(true);
         modalConfirmBtn.parentNode.replaceChild(newConfirmBtn, modalConfirmBtn);
         newConfirmBtn.addEventListener('click', onConfirm);
-        modalConfirmBtn = newConfirmBtn;
+        modalConfirmBtn = newConfirmBtn; // Update reference
     }
 
     function hideModal() { configModal.style.display = 'none'; }
@@ -427,6 +441,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!letter) throw new Error(`Column letter for '${id}' is required.`);
                     config[id + 'Index'] = colLetterToIndex(letter);
                 });
+                 const dateColsRaw = document.getElementById('csr-dateCols').value.toUpperCase();
+                config.dateColIndices = dateColsRaw.split(',').map(l => colLetterToIndex(l.trim())).filter(i => i >= 0);
 
                 const todayDS = state.datasets[document.getElementById('csr-today-ds').value];
                 const yesterdayDS_idx = document.getElementById('csr-yesterday-ds').value;
@@ -435,8 +451,33 @@ document.addEventListener('DOMContentLoaded', () => {
                 const jsonToAOA = ds => [ds.headers, ...ds.data.map(row => ds.headers.map(h => row[h]))];
                 const main_aoa = jsonToAOA(todayDS);
                 
-                // Full getStatsForAOA and processing logic from the original tool
-                const getStatsForAOA = (aoa, cfg) => { /* ... full logic from original file ... */ return stats; }; // Abridged for brevity
+                // ** FULL getStatsForAOA IMPLEMENTATION **
+                const getStatsForAOA = (aoa, cfg) => {
+                    const stats = {
+                        totalClaims: 0,
+                        totalCharges: 0,
+                        byStatus: {},
+                        byDsnp: {},
+                        byType: {}
+                    };
+                    for (let i = 1; i < aoa.length; i++) {
+                        const row = aoa[i];
+                        stats.totalClaims++;
+                        const charges = parseFloat(String(row[cfg.totalChargesIndex] || '0').replace(/[^0-9.-]/g, ''));
+                        if (!isNaN(charges)) stats.totalCharges += charges;
+
+                        const status = String(row[cfg.claimStatusIndex] || 'Unknown').toUpperCase().trim();
+                        stats.byStatus[status] = (stats.byStatus[status] || 0) + 1;
+                        
+                        const dsnp = String(row[cfg.dsnpIndex] || 'Unknown').toUpperCase().trim();
+                        stats.byDsnp[dsnp] = (stats.byDsnp[dsnp] || 0) + 1;
+                        
+                        const type = String(row[cfg.claimTypeIndex] || 'Unknown').toUpperCase().trim();
+                        stats.byType[type] = (stats.byType[type] || 0) + 1;
+                    }
+                    return stats;
+                };
+
                 const todayStats = getStatsForAOA(main_aoa, config);
                 const yesterdayStats = yesterdayDS ? getStatsForAOA(jsonToAOA(yesterdayDS), config) : null;
                 const yesterdayDataMap = yesterdayDS ? new Map(jsonToAOA(yesterdayDS).slice(1).map(r => [String(r[config.claimNumberIndex]), {state: String(r[config.claimStatusIndex]||'').toUpperCase(), type: String(r[config.claimTypeIndex]||'').toUpperCase(), charges: parseFloat(String(r[config.totalChargesIndex]).replace(/[^0-9.-]/g, ''))}])) : new Map();
@@ -448,13 +489,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 newHeader.splice(daysInsertIndex, 0, 'Days');
                 newHeader.push('Added (Owner)', 'Due Date');
 
+                // ** FULL PROCESSING LOGIC **
                 for (const originalRow of main_aoa.slice(1)) {
-                    // This is the entire complex splitting logic from the original tool
-                    // ... (pasting the full loop here) ...
                     let claimState = String(originalRow[config.claimStatusIndex] || '').toUpperCase();
                     if(claimState === 'PREBATCH') continue;
                     
                     const newRow = [...originalRow];
+                    
+                    // Format Date Columns
+                    config.dateColIndices.forEach(idx => {
+                        if (newRow[idx]) {
+                            const d = new Date(newRow[idx]);
+                            if (!isNaN(d.getTime())) {
+                                newRow[idx] = `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
+                            }
+                        }
+                    });
+
                     if (yesterdayDS) {
                         const yestData = yesterdayDataMap.get(String(originalRow[config.claimNumberIndex]));
                         let yestState = 'NEW';
@@ -468,24 +519,97 @@ document.addEventListener('DOMContentLoaded', () => {
                     const cleanAge = parseInt(originalRow[config.cleanAgeIndex], 10);
                     const daysValue = !isNaN(cleanAge) ? (cleanAge <= 20 ? '0 - 20' : cleanAge <= 29 ? '21 - 29' : cleanAge <= 59 ? '30 - 59' : '60+') : '';
                     newRow.splice(daysInsertIndex, 0, daysValue);
+
+                    // Owner & Due Date Logic
+                    let owner = '';
+                    if (claimState === 'W9PENDED') owner = 'Mary';
+                    else if (claimState.startsWith('APPEAL') || claimState.startsWith('CORRESP') || claimState.startsWith('RECONSID')) owner = 'Jane';
+                    else if (claimState.startsWith('CODING') || claimState.startsWith('CHART') || claimState.startsWith('MEDICAL')) owner = 'Sue';
+                    else {
+                        const notes = String(originalRow[config.notesIndex] || '').toLowerCase();
+                        if (notes.includes('add w9') || notes.includes('w9 needed')) owner = 'Mary';
+                        else if (notes.includes('appeal') || notes.includes('corrected claim')) owner = 'Jane';
+                        else if (notes.includes('coding') || notes.includes('medical record')) owner = 'Sue';
+                    }
+                    newRow.push(owner);
                     
-                    // ... and so on for the rest of the logic: owner, due date, high cost, splitting by DSNP/Status/Age, and W9 ...
-                    // For the sake of this response, assume the full logic is here.
+                    let dueDate = '';
+                    const lastDateColIdx = Math.max(...config.dateColIndices);
+                    if (lastDateColIdx > -1) {
+                        const lastDate = new Date(originalRow[lastDateColIdx]);
+                        if (!isNaN(lastDate.getTime())) {
+                            lastDate.setDate(lastDate.getDate() + 14);
+                            dueDate = `${lastDate.getMonth()+1}/${lastDate.getDate()}/${lastDate.getFullYear()}`;
+                        }
+                    }
+                    newRow.push(dueDate);
+
+                    // Splitting Logic
+                    const dsnpStatus = String(originalRow[config.dsnpIndex] || '').toUpperCase();
+                    const charges = parseFloat(String(originalRow[config.totalChargesIndex]).replace(/[^0-9.-]/g, ''));
+                    const claimType = String(originalRow[config.claimTypeIndex] || '').toUpperCase();
+                    let sheetName = null;
+
+                    if (dsnpStatus === 'Y') sheetName = 'DSNP REVIEW';
+                    else if (claimState === 'W9PENDED') sheetName = 'W9 PENDED';
+                    else if ((claimType.includes('PROF') && charges > 3500) || (claimType.includes('INST') && charges > 6500)) sheetName = 'HIGH COST';
+                    else if (claimState === 'MANAGEMENTREVIEW') sheetName = 'MGMT REVIEW';
+                    else if (daysValue === '60+') sheetName = 'AGED 60+';
+                    else if (daysValue === '30 - 59') sheetName = 'AGED 30-59';
+                    else if (daysValue === '21 - 29') sheetName = 'AGED 21-29';
+                    else sheetName = 'AGED 0-20';
+                    
+                    if (sheetName) {
+                        if (!sheetsData[sheetName]) sheetsData[sheetName] = [newHeader];
+                        sheetsData[sheetName].push(newRow);
+                    }
                 }
-
-                const newWB = XLSX.utils.book_new();
-                // ... logic to create and order sheets ...
-                // XLSX.writeFile(newWB, `...`);
-
-                const emailText = `...`; // Full email generation logic
                 
+                const newWB = XLSX.utils.book_new();
+                const sheetOrder = ['DSNP REVIEW', 'W9 PENDED', 'HIGH COST', 'MGMT REVIEW', 'AGED 60+', 'AGED 30-59', 'AGED 21-29', 'AGED 0-20'];
+                sheetOrder.forEach(name => {
+                    if (sheetsData[name]) {
+                        const ws = XLSX.utils.aoa_to_sheet(sheetsData[name]);
+                        XLSX.utils.book_append_sheet(newWB, ws, name);
+                    }
+                });
+                
+                const f = (num) => num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                const f_c = (num) => num.toLocaleString('en-US');
+                let emailText = `Team,\n\nPlease see below for a summary of today's claim activity.\n\n`;
+                emailText += `Today's Total Claims: ${f_c(todayStats.totalClaims)} for $${f(todayStats.totalCharges)}\n`;
+                if (yesterdayStats) emailText += `Yesterday's Total Claims: ${f_c(yesterdayStats.totalClaims)} for $${f(yesterdayStats.totalCharges)}\n`;
+                
+                const formatDiff = (today, yesterday) => {
+                    if (yesterday === undefined) return '';
+                    const diff = today - yesterday;
+                    return ` (${diff >= 0 ? '+' : ''}${f_c(diff)})`;
+                };
+
+                const allStatuses = [...new Set([...Object.keys(todayStats.byStatus), ...(yesterdayStats ? Object.keys(yesterdayStats.byStatus) : [])])].sort();
+                emailText += `\n--- Status Breakdown ---\n`;
+                allStatuses.forEach(s => {
+                    const todayCount = todayStats.byStatus[s] || 0;
+                    const yestCount = yesterdayStats ? yesterdayStats.byStatus[s] || 0 : undefined;
+                    emailText += `${s}: ${f_c(todayCount)}${yesterdayStats ? formatDiff(todayCount, yestCount) : ''}\n`;
+                });
+
                 modalTitle.textContent = 'Report Generated!';
-                modalBody.innerHTML = `<p class="mb-4">XLSX file downloaded. Copy summary below.</p><textarea class="w-full h-64 p-2 border rounded font-mono text-sm">${emailText.trim()}</textarea>`;
-                modalConfirmBtn.textContent = 'Close';
-                modalConfirmBtn.onclick = hideModal;
+                modalBody.innerHTML = `<p class="mb-4">Your file is downloading. You can copy the summary email text below.</p><textarea class="w-full h-64 p-2 border rounded font-mono text-sm">${emailText.trim()}</textarea>`;
+                const newConfirmBtn = modalConfirmBtn.cloneNode(true);
+                newConfirmBtn.textContent = 'Close';
+                modalConfirmBtn.parentNode.replaceChild(newConfirmBtn, modalConfirmBtn);
+                newConfirmBtn.addEventListener('click', hideModal);
+                modalConfirmBtn = newConfirmBtn;
+
+                const today = new Date();
+                const dateStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+                XLSX.writeFile(newWB, `Daily_Action_Report_${dateStr}.xlsx`);
+                
                 showLoader(false);
 
             } catch (error) {
+                console.error("Report generation error:", error);
                 alert(`Error: ${error.message}`);
                 showLoader(false);
             }
