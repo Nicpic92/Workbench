@@ -112,7 +112,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const headerRow = thead.insertRow();
         headers.forEach(h => {
             const th = document.createElement('th');
-            th.className = 'px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky top-0 bg-gray-50 z-10';
+            th.className = 'px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50';
             th.textContent = h;
             headerRow.appendChild(th);
         });
@@ -140,11 +140,10 @@ document.addEventListener('DOMContentLoaded', () => {
         modalTitle.textContent = title;
         modalBody.innerHTML = content;
         configModal.style.display = 'flex';
-        // Clone and replace the confirm button to remove old event listeners
         const newConfirmBtn = modalConfirmBtn.cloneNode(true);
         modalConfirmBtn.parentNode.replaceChild(newConfirmBtn, modalConfirmBtn);
         newConfirmBtn.addEventListener('click', onConfirm);
-        modalConfirmBtn = newConfirmBtn; // Update reference
+        modalConfirmBtn = newConfirmBtn;
     }
 
     function hideModal() { configModal.style.display = 'none'; }
@@ -162,8 +161,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // --- ACTION EVENT LISTENERS ---
     document.getElementById('action-trim-whitespace').addEventListener('click', () => {
-        const headers = getActiveDataset().headers;
-        const content = `<p class="text-sm mb-4">Select the column to trim.</p><label for="trim-column" class="block text-sm font-semibold">Column:</label>${generateColumnSelect(headers, 'config-column')}`;
+        const activeDS = getActiveDataset();
+        if (!activeDS) return alert("Please load a file first.");
+        const content = `<p class="text-sm mb-4">Select the column to trim.</p><label for="trim-column" class="block text-sm font-semibold">Column:</label>${generateColumnSelect(activeDS.headers, 'config-column')}`;
         showModal('Trim Whitespace', content, () => {
             const column = document.getElementById('config-column').value;
             showLoader(true);
@@ -176,16 +176,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('action-anonymize').addEventListener('click', () => {
-        const headers = getActiveDataset().headers;
+        const activeDS = getActiveDataset();
+        if (!activeDS) return alert("Please load a file first.");
         const types = [{ v: 'NONE', l: 'Do Not Anonymize' }, { v: 'FULL_NAME', l: 'Full Name' }, { v: 'FIRST_NAME', l: 'First Name' }, { v: 'LAST_NAME', l: 'Last Name' }, { v: 'EMAIL', l: 'Email' }, { v: 'PHONE', l: 'Phone' }];
-        const content = headers.map(h => `<div class="grid grid-cols-2 gap-4 items-center border-b pb-2 mb-2"><label class="font-semibold truncate" title="${h}">${h}</label><select data-header="${h}" class="column-mapper w-full p-2 border rounded">${types.map(t => `<option value="${t.v}">${t.l}</option>`).join('')}</select></div>`).join('');
+        const content = activeDS.headers.map(h => `<div class="grid grid-cols-2 gap-4 items-center border-b pb-2 mb-2"><label class="font-semibold truncate" title="${h}">${h}</label><select data-header="${h}" class="column-mapper w-full p-2 border rounded">${types.map(t => `<option value="${t.v}">${t.l}</option>`).join('')}</select></div>`).join('');
         showModal('Anonymize Personal Information', content, () => {
             const mappings = Array.from(document.querySelectorAll('.column-mapper')).filter(s => s.value !== 'NONE').map(s => ({ header: s.dataset.header, type: s.value }));
             if (mappings.length === 0) return alert('Please select at least one column to anonymize.');
             showLoader(true);
             setTimeout(() => {
                 const fake = { FIRST: ['Alex', 'Jordan', 'Casey', 'Taylor'], LAST: ['Smith', 'Jones', 'Williams', 'Brown'], FULL: () => `${fake.FIRST[Math.floor(Math.random()*4)]} ${fake.LAST[Math.floor(Math.random()*4)]}`, EMAIL: () => `user${Math.floor(1000+Math.random()*9000)}@example.com`, PHONE: () => `(555) ${Math.floor(100+Math.random()*900)}-${Math.floor(1000+Math.random()*9000)}` };
-                const activeDS = getActiveDataset();
                 const anonData = activeDS.data.map(row => {
                     const newRow = { ...row };
                     mappings.forEach(m => {
@@ -200,14 +200,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('action-extract-columns').addEventListener('click', () => {
-        const headers = getActiveDataset().headers;
-        const content = `<p class="text-sm mb-4">Select columns to keep.</p><div class="space-y-2">${generateColumnCheckboxes(headers)}</div>`;
+        const activeDS = getActiveDataset();
+        if (!activeDS) return alert("Please load a file first.");
+        const content = `<p class="text-sm mb-4">Select columns to keep.</p><div class="space-y-2 max-h-96 overflow-y-auto">${generateColumnCheckboxes(activeDS.headers)}</div>`;
         showModal('Extract Columns', content, () => {
             const selected = Array.from(modalBody.querySelectorAll('input:checked')).map(cb => cb.dataset.columnName);
             if (selected.length === 0) return alert('Please select at least one column.');
             showLoader(true);
             setTimeout(() => {
-                const activeDS = getActiveDataset();
                 const newData = activeDS.data.map(row => selected.reduce((obj, key) => (obj[key] = row[key], obj), {}));
                 addNewDataset(`Extracted - ${activeDS.name}`, newData, selected);
                 showLoader(false); hideModal();
@@ -216,7 +216,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('action-stack-sheets').addEventListener('click', () => {
-        const content = `<p class="text-sm mb-4">This will combine all currently loaded datasets into a single master sheet. Columns will be matched by header name.</p>`;
+        if (state.datasets.length < 2) return alert("Please load at least two files to stack.");
+        const content = `<p class="text-sm mb-4">This will combine all ${state.datasets.length} currently loaded datasets into a single master sheet. Columns will be matched by header name.</p>`;
         showModal('Stack All Sheets', content, () => {
             showLoader(true);
             setTimeout(() => {
@@ -251,14 +252,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('action-find-duplicates').addEventListener('click', () => {
-        const headers = getActiveDataset().headers;
-        const content = `<p class="text-sm mb-4">Select columns to check for duplicates.</p><div class="space-y-2">${generateColumnCheckboxes(headers)}</div>`;
+        const activeDS = getActiveDataset();
+        if (!activeDS) return alert("Please load a file first.");
+        const content = `<p class="text-sm mb-4">Select columns to check for duplicates.</p><div class="space-y-2 max-h-96 overflow-y-auto">${generateColumnCheckboxes(activeDS.headers)}</div>`;
         showModal('Find Duplicates', content, () => {
             const selected = Array.from(modalBody.querySelectorAll('input:checked')).map(cb => cb.dataset.columnName);
             if (selected.length === 0) return alert('Select at least one column.');
             showLoader(true);
             setTimeout(() => {
-                const activeDS = getActiveDataset();
                 const seen = new Map();
                 const duplicates = [];
                 activeDS.data.forEach(row => {
@@ -268,7 +269,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         duplicates.push(row);
                     } else { seen.set(key, { row: row, first: true }); }
                 });
-                addNewDataset(`Duplicates - ${activeDS.name}`, duplicates, activeDS.headers);
+                if(duplicates.length > 0){
+                    addNewDataset(`Duplicates - ${activeDS.name}`, duplicates, activeDS.headers);
+                } else {
+                    alert("No duplicates found based on the selected columns.");
+                }
                 showLoader(false); hideModal();
             }, 50);
         });
@@ -309,13 +314,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('action-split-file').addEventListener('click', () => {
+        const activeDS = getActiveDataset();
+        if (!activeDS) return alert("Please load a file first.");
         const content = `<p class="text-sm mb-4">Split the active dataset into multiple CSV files.</p><label for="config-rows" class="block text-sm font-semibold">Rows Per File</label><input type="number" id="config-rows" value="100000" min="1" class="w-full p-2 border rounded mt-1">`;
         showModal('Split File by Row Count', content, () => {
             const rowsPerFile = parseInt(document.getElementById('config-rows').value, 10);
             if (isNaN(rowsPerFile) || rowsPerFile < 1) return alert("Invalid number.");
             showLoader(true);
             setTimeout(() => {
-                const activeDS = getActiveDataset();
                 const zip = new JSZip();
                 for (let i = 0, f = 1; i < activeDS.data.length; i += rowsPerFile, f++) {
                     const chunk = activeDS.data.slice(i, i + rowsPerFile);
@@ -358,11 +364,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('action-validate-data').addEventListener('click', () => {
         if (Object.keys(state.dictionaries).length === 0) return alert("No dictionaries found. Create one first.");
+        const activeDS = getActiveDataset();
+        if (!activeDS) return alert("Please load a file first.");
         const content = `<p class="text-sm mb-4">Select a dictionary to validate against.</p><label for="validator-dict-select" class="block text-sm font-semibold">Dictionary:</label><select id="validator-dict-select" class="w-full p-2 border rounded mt-1">${Object.keys(state.dictionaries).map(n=>`<option value="${n}">${n}</option>`).join('')}</select>`;
         showModal('Validate Data', content, () => {
             const dictName = document.getElementById('validator-dict-select').value;
             const dictionary = state.dictionaries[dictName];
-            const activeDS = getActiveDataset();
             showLoader(true);
             setTimeout(() => {
                 const errors = [];
@@ -384,7 +391,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // --- CLAIM STATUS REPORT MODULE ---
+    // --- CLAIM STATUS REPORT MODULE (NEW LOGIC) ---
     document.getElementById('action-claim-status-report').addEventListener('click', () => {
         if (state.datasets.length < 1) return alert("Please upload at least one report file.");
         const presets = {
@@ -393,16 +400,16 @@ document.addEventListener('DOMContentLoaded', () => {
             secur: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', dsnpCol: 'Y', claimTypeCol: 'D', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' }
         };
         let content = `
-            <p class="text-sm mb-4">Generates the multi-tab daily action report and summary email text.</p>
+            <p class="text-sm mb-4">Generates the multi-tab daily action report and summary email text based on the latest logic.</p>
             <div class="grid grid-cols-2 gap-4 mb-4">
                 <div><label class="block text-sm font-semibold">Today's Report:</label>${generateDatasetSelect('csr-today-ds')}</div>
                 <div><label class="block text-sm font-semibold">Yesterday's (Optional):</label><select id="csr-yesterday-ds" class="w-full p-2 border rounded mt-1"></select></div>
             </div>
             <div class="mb-4">
                 <label class="block text-sm font-semibold mb-2">Client Preset:</label>
-                <select id="csr-client-preset" class="w-full p-2 border rounded"><option value="">-- Manual --</option>${Object.keys(presets).map(p=>`<option value="${p}">${p.toUpperCase()}</option>`).join('')}</select>
+                <select id="csr-client-preset" class="w-full p-2 border rounded"><option value="">-- Choose a Client --</option>${Object.keys(presets).map(p=>`<option value="${p}">${p.toUpperCase()}</option>`).join('')}</select>
             </div>
-            <div class="space-y-4 text-sm p-4 border rounded-md bg-gray-50">
+            <div id="csr-config-div" class="space-y-4 text-sm p-4 border rounded-md bg-gray-50 hidden">
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4">
                     <div><label id="csr-cleanAgeCol-label" class="font-medium">Clean Age:</label><input type="text" id="csr-cleanAgeCol" class="w-full p-1 border rounded uppercase"></div>
                     <div><label class="font-medium">Claim State:</label><input type="text" id="csr-claimStatusCol" class="w-full p-1 border rounded uppercase"></div>
@@ -411,7 +418,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div><label class="font-medium">DSNP Status:</label><input type="text" id="csr-dsnpCol" class="w-full p-1 border rounded uppercase"></div>
                     <div><label class="font-medium">Claim Type:</label><input type="text" id="csr-claimTypeCol" class="w-full p-1 border rounded uppercase"></div>
                     <div><label class="font-medium">Total Charges:</label><input type="text" id="csr-totalChargesCol" class="w-full p-1 border rounded uppercase"></div>
-                    <div><label class="font-medium">Notes Column:</label><input type="text" id="csr-notesCol" class="w-full p-1 border rounded uppercase"></div>
+                    <div><label class="font-medium">W9/Notes Column:</label><input type="text" id="csr-notesCol" class="w-full p-1 border rounded uppercase"></div>
                     <div class="md:col-span-3"><label class="font-medium">Date Columns (comma-separated):</label><input type="text" id="csr-dateCols" class="w-full p-1 border rounded uppercase"></div>
                 </div>
             </div>
@@ -419,203 +426,256 @@ document.addEventListener('DOMContentLoaded', () => {
         showModal('Daily Claim Status Report', content, runClaimStatusReport);
         document.getElementById('csr-yesterday-ds').innerHTML = `<option value="-1">-- None --</option>` + state.datasets.map((ds, i) => `<option value="${i}">${ds.name}</option>`).join('');
         const presetSelect = document.getElementById('csr-client-preset');
+        const csrConfigDiv = document.getElementById('csr-config-div');
         presetSelect.onchange = () => {
             const client = presetSelect.value;
-            const p = presets[client] || {};
-            if (p.label) document.getElementById('csr-cleanAgeCol-label').textContent = p.label;
-            Object.keys(presets.solis).forEach(key => {
-                 if (key !== 'label') document.getElementById(`csr-${key}`).value = p[key] || '';
-            });
+            if (client) {
+                const p = presets[client];
+                document.getElementById('csr-cleanAgeCol-label').textContent = p.label;
+                const basePreset = presets.solis; 
+                Object.keys(basePreset).forEach(key => {
+                     if (key !== 'label') document.getElementById(`csr-${key}Col`).value = p[key] || '';
+                });
+                csrConfigDiv.classList.remove('hidden');
+            } else {
+                csrConfigDiv.classList.add('hidden');
+            }
         };
-        presetSelect.dispatchEvent(new Event('change'));
     });
 
-    function runClaimStatusReport() {
+    async function runClaimStatusReport() {
         showLoader(true, 'Generating Claim Status Report...');
-        setTimeout(() => {
-            try {
-                const colLetterToIndex = l => l ? l.toUpperCase().split('').reduce((acc, c, i, a) => acc + (c.charCodeAt(0) - 64) * Math.pow(26, a.length - i - 1), 0) - 1 : -1;
-                const config = {};
-                ['cleanAge', 'claimStatus', 'claimNumber', 'payer', 'dsnp', 'claimType', 'totalCharges', 'notes'].forEach(id => {
-                    const letter = document.getElementById(`csr-${id}Col`).value;
-                    if (!letter) throw new Error(`Column letter for '${id}' is required.`);
-                    config[id + 'Index'] = colLetterToIndex(letter);
-                });
-                 const dateColsRaw = document.getElementById('csr-dateCols').value.toUpperCase();
-                config.dateColIndices = dateColsRaw.split(',').map(l => colLetterToIndex(l.trim())).filter(i => i >= 0);
+        
+        // --- HELPER FUNCTIONS from ClaimStatusReportTool.html ---
+        const colLetterToIndex = (letter) => {
+            if (!letter || typeof letter !== 'string' || !/^[A-Z]+$/i.test(letter)) return -1;
+            let col = 0; letter = letter.toUpperCase();
+            for (let i = 0; i < letter.length; i++) col += (letter.charCodeAt(i) - 64) * Math.pow(26, letter.length - i - 1);
+            return col - 1;
+        };
+        const parseCurrency = (value) => (value === null || value === undefined) ? NaN : parseFloat(String(value).replace(/[^0-9.-]/g, '')) || NaN;
+        const truncateSheetName = (name) => name.replace(/[\\\/\?\*\[\]]/g, '').substring(0, 31);
+        const getFormattedDate = () => {
+            const d=new Date(), day=d.getDate(), month=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()], year=d.getFullYear();
+            const s = (day%10===1&&day!==11)?'st':((day%10===2&&day!==12)?'nd':((day%10===3&&day!==13)?'rd':'th'));
+            return `${day}${s} ${month} ${year}`;
+        }
+        const extractDueDateFromNote = (noteText) => {
+            const match = (noteText || '').match(/due\s*(by)?[:\s]*(\d{1,2}[\/-]\d{1,2}(?:[\/-]\d{2,4})?)/i);
+            return match ? match[2] : '';
+        }
 
-                const todayDS = state.datasets[document.getElementById('csr-today-ds').value];
-                const yesterdayDS_idx = document.getElementById('csr-yesterday-ds').value;
-                const yesterdayDS = yesterdayDS_idx !== "-1" ? state.datasets[yesterdayDS_idx] : null;
+        // Delay processing to allow UI to update
+        await new Promise(resolve => setTimeout(resolve, 50));
 
-                const jsonToAOA = ds => [ds.headers, ...ds.data.map(row => ds.headers.map(h => row[h]))];
-                const main_aoa = jsonToAOA(todayDS);
-                
-                // ** FULL getStatsForAOA IMPLEMENTATION **
-                const getStatsForAOA = (aoa, cfg) => {
-                    const stats = {
-                        totalClaims: 0,
-                        totalCharges: 0,
-                        byStatus: {},
-                        byDsnp: {},
-                        byType: {}
-                    };
-                    for (let i = 1; i < aoa.length; i++) {
-                        const row = aoa[i];
-                        stats.totalClaims++;
-                        const charges = parseFloat(String(row[cfg.totalChargesIndex] || '0').replace(/[^0-9.-]/g, ''));
-                        if (!isNaN(charges)) stats.totalCharges += charges;
+        try {
+            // 1. GATHER CONFIGURATION
+            if (!document.getElementById('csr-client-preset').value) throw new Error("Please choose a client preset.");
+            const config = {};
+            const ids = ['cleanAge', 'claimStatus', 'claimNumber', 'payer', 'dsnp', 'claimType', 'totalCharges', 'notes'];
+            ids.forEach(id => config[`${id}Index`] = colLetterToIndex(document.getElementById(`csr-${id}Col`).value));
+            config.dateIndices = document.getElementById('csr-dateCols').value.toUpperCase().trim().split(',').filter(c => c).map(c => colLetterToIndex(c.trim()));
+            if (Object.values(config).some(val => val === -1 || (Array.isArray(val) && val.includes(-1)))) throw new Error("Invalid column letter entered.");
+            const clientText = document.getElementById('csr-client-preset').options[document.getElementById('csr-client-preset').selectedIndex].text;
+            
+            // 2. READ & PREPARE DATA
+            const todayDS_idx = document.getElementById('csr-today-ds').value;
+            const yesterdayDS_idx = document.getElementById('csr-yesterday-ds').value;
+            const mainFile = state.datasets[todayDS_idx];
+            const yesterdayFile = yesterdayDS_idx !== "-1" ? state.datasets[yesterdayDS_idx] : null;
+            const hasYesterdayReport = !!yesterdayFile;
 
-                        const status = String(row[cfg.claimStatusIndex] || 'Unknown').toUpperCase().trim();
-                        stats.byStatus[status] = (stats.byStatus[status] || 0) + 1;
-                        
-                        const dsnp = String(row[cfg.dsnpIndex] || 'Unknown').toUpperCase().trim();
-                        stats.byDsnp[dsnp] = (stats.byDsnp[dsnp] || 0) + 1;
-                        
-                        const type = String(row[cfg.claimTypeIndex] || 'Unknown').toUpperCase().trim();
-                        stats.byType[type] = (stats.byType[type] || 0) + 1;
+            const jsonToAOA = (ds) => [ds.headers, ...ds.data.map(row => ds.headers.map(h => row[h]))];
+            const main_aoa = jsonToAOA(mainFile);
+            if (main_aoa.length < 2) throw new Error("Main report is empty or has no data.");
+
+            // 3. DEFINE STATISTICS FUNCTION
+            const getStatsForAOA = (aoa, config) => {
+                const dayBuckets = { '0 - 20': 0, '21 - 29': 0, '30 - 59': 0, '60+': 0 };
+                const stats = { 'PEND': { total: 0, ...dayBuckets }, 'ONHOLD': { total: 0, ...dayBuckets }, 'MANAGEMENTREVIEW': { total: 0, ...dayBuckets }, 'HC MGMT REV': { total: 0, ...dayBuckets }, 'W9_LETTER_NEEDED': { total: 0, ...dayBuckets }, 'W9_FOLLOW_UP': { total: 0, ...dayBuckets } };
+                for(const row of aoa.slice(1)) {
+                    if (row.every(cell => cell === null)) continue;
+                    let claimState = String(row[config.claimStatusIndex] || '').trim().toUpperCase();
+                    if (claimState === 'PREBATCH') continue;
+                    const totalCharges = parseCurrency(row[config.totalChargesIndex]);
+                    const claimType = String(row[config.claimTypeIndex] || '').trim().toUpperCase();
+                    const cleanAge = parseInt(row[config.cleanAgeIndex], 10);
+                    const daysValue = !isNaN(cleanAge) ? (cleanAge <= 20 ? '0 - 20' : (cleanAge <= 29 ? '21 - 29' : (cleanAge <= 59 ? '30 - 59' : '60+'))) : '';
+                    let finalClaimState = claimState;
+                    if (claimState === 'MANAGEMENTREVIEW' && !isNaN(totalCharges) && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500))) {
+                        finalClaimState = 'HC MGMT REV';
                     }
-                    return stats;
-                };
-
-                const todayStats = getStatsForAOA(main_aoa, config);
-                const yesterdayStats = yesterdayDS ? getStatsForAOA(jsonToAOA(yesterdayDS), config) : null;
-                const yesterdayDataMap = yesterdayDS ? new Map(jsonToAOA(yesterdayDS).slice(1).map(r => [String(r[config.claimNumberIndex]), {state: String(r[config.claimStatusIndex]||'').toUpperCase(), type: String(r[config.claimTypeIndex]||'').toUpperCase(), charges: parseFloat(String(r[config.totalChargesIndex]).replace(/[^0-9.-]/g, ''))}])) : new Map();
-                
-                const sheetsData = {};
-                const newHeader = [...main_aoa[0]];
-                if (yesterdayDS) newHeader.splice(config.claimStatusIndex, 0, 'Yest. Claim State');
-                let daysInsertIndex = config.cleanAgeIndex + 1 + (yesterdayDS && config.cleanAgeIndex >= config.claimStatusIndex ? 1 : 0);
-                newHeader.splice(daysInsertIndex, 0, 'Days');
-                newHeader.push('Added (Owner)', 'Due Date');
-
-                // ** FULL PROCESSING LOGIC **
-                for (const originalRow of main_aoa.slice(1)) {
-                    let claimState = String(originalRow[config.claimStatusIndex] || '').toUpperCase();
-                    if(claimState === 'PREBATCH') continue;
-                    
-                    const newRow = [...originalRow];
-                    
-                    // Format Date Columns
-                    config.dateColIndices.forEach(idx => {
-                        if (newRow[idx]) {
-                            const d = new Date(newRow[idx]);
-                            if (!isNaN(d.getTime())) {
-                                newRow[idx] = `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
-                            }
+                    if (stats[finalClaimState]) {
+                        stats[finalClaimState].total++;
+                        if (stats[finalClaimState][daysValue] !== undefined) stats[finalClaimState][daysValue]++;
+                    }
+                    const noteTextLower = String(row[config.notesIndex] || '').toLowerCase();
+                    if (noteTextLower.includes('w9')) {
+                        if (noteTextLower.includes('requested') || noteTextLower.includes('req') || noteTextLower.includes('due')) {
+                           if (stats['W9_FOLLOW_UP'][daysValue] !== undefined) stats['W9_FOLLOW_UP'][daysValue]++;
+                           stats['W9_FOLLOW_UP'].total++;
+                        } else if (noteTextLower.includes('denied') || noteTextLower.includes('missing') || noteTextLower.includes('not on file') || noteTextLower.includes('not received')) {
+                           if (stats['W9_LETTER_NEEDED'][daysValue] !== undefined) stats['W9_LETTER_NEEDED'][daysValue]++;
+                           stats['W9_LETTER_NEEDED'].total++;
                         }
-                    });
-
-                    if (yesterdayDS) {
-                        const yestData = yesterdayDataMap.get(String(originalRow[config.claimNumberIndex]));
-                        let yestState = 'NEW';
-                        if(yestData) {
-                            yestState = yestData.state;
-                            if(yestData.state === 'MANAGEMENTREVIEW' && !isNaN(yestData.charges) && ((yestData.type.includes('PROF') && yestData.charges > 3500) || (yestData.type.includes('INST') && yestData.charges > 6500))) yestState = 'HC MGMT REV';
-                        }
-                        newRow.splice(config.claimStatusIndex, 0, yestState);
-                    }
-
-                    const cleanAge = parseInt(originalRow[config.cleanAgeIndex], 10);
-                    const daysValue = !isNaN(cleanAge) ? (cleanAge <= 20 ? '0 - 20' : cleanAge <= 29 ? '21 - 29' : cleanAge <= 59 ? '30 - 59' : '60+') : '';
-                    newRow.splice(daysInsertIndex, 0, daysValue);
-
-                    // Owner & Due Date Logic
-                    let owner = '';
-                    if (claimState === 'W9PENDED') owner = 'Mary';
-                    else if (claimState.startsWith('APPEAL') || claimState.startsWith('CORRESP') || claimState.startsWith('RECONSID')) owner = 'Jane';
-                    else if (claimState.startsWith('CODING') || claimState.startsWith('CHART') || claimState.startsWith('MEDICAL')) owner = 'Sue';
-                    else {
-                        const notes = String(originalRow[config.notesIndex] || '').toLowerCase();
-                        if (notes.includes('add w9') || notes.includes('w9 needed')) owner = 'Mary';
-                        else if (notes.includes('appeal') || notes.includes('corrected claim')) owner = 'Jane';
-                        else if (notes.includes('coding') || notes.includes('medical record')) owner = 'Sue';
-                    }
-                    newRow.push(owner);
-                    
-                    let dueDate = '';
-                    const lastDateColIdx = Math.max(...config.dateColIndices);
-                    if (lastDateColIdx > -1) {
-                        const lastDate = new Date(originalRow[lastDateColIdx]);
-                        if (!isNaN(lastDate.getTime())) {
-                            lastDate.setDate(lastDate.getDate() + 14);
-                            dueDate = `${lastDate.getMonth()+1}/${lastDate.getDate()}/${lastDate.getFullYear()}`;
-                        }
-                    }
-                    newRow.push(dueDate);
-
-                    // Splitting Logic
-                    const dsnpStatus = String(originalRow[config.dsnpIndex] || '').toUpperCase();
-                    const charges = parseFloat(String(originalRow[config.totalChargesIndex]).replace(/[^0-9.-]/g, ''));
-                    const claimType = String(originalRow[config.claimTypeIndex] || '').toUpperCase();
-                    let sheetName = null;
-
-                    if (dsnpStatus === 'Y') sheetName = 'DSNP REVIEW';
-                    else if (claimState === 'W9PENDED') sheetName = 'W9 PENDED';
-                    else if ((claimType.includes('PROF') && charges > 3500) || (claimType.includes('INST') && charges > 6500)) sheetName = 'HIGH COST';
-                    else if (claimState === 'MANAGEMENTREVIEW') sheetName = 'MGMT REVIEW';
-                    else if (daysValue === '60+') sheetName = 'AGED 60+';
-                    else if (daysValue === '30 - 59') sheetName = 'AGED 30-59';
-                    else if (daysValue === '21 - 29') sheetName = 'AGED 21-29';
-                    else sheetName = 'AGED 0-20';
-                    
-                    if (sheetName) {
-                        if (!sheetsData[sheetName]) sheetsData[sheetName] = [newHeader];
-                        sheetsData[sheetName].push(newRow);
                     }
                 }
-                
-                const newWB = XLSX.utils.book_new();
-                const sheetOrder = ['DSNP REVIEW', 'W9 PENDED', 'HIGH COST', 'MGMT REVIEW', 'AGED 60+', 'AGED 30-59', 'AGED 21-29', 'AGED 0-20'];
-                sheetOrder.forEach(name => {
-                    if (sheetsData[name]) {
-                        const ws = XLSX.utils.aoa_to_sheet(sheetsData[name]);
-                        XLSX.utils.book_append_sheet(newWB, ws, name);
+                return stats;
+            };
+
+            // 4. PROCESS DATA
+            const todayStats = getStatsForAOA(main_aoa, config);
+            let yesterdayStats = null, yesterdayDataMap = new Map();
+
+            if (hasYesterdayReport) {
+                const yesterday_aoa = jsonToAOA(yesterdayFile);
+                yesterdayStats = getStatsForAOA(yesterday_aoa, config);
+                yesterday_aoa.slice(1).forEach(row => {
+                    const claimNumber = row[config.claimNumberIndex];
+                    if (claimNumber != null) {
+                        yesterdayDataMap.set(String(claimNumber).trim(), {
+                            state: String(row[config.claimStatusIndex] || '').trim().toUpperCase(),
+                            type: String(row[config.claimTypeIndex] || '').trim().toUpperCase(),
+                            charges: parseCurrency(row[config.totalChargesIndex])
+                        });
                     }
                 });
-                
-                const f = (num) => num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                const f_c = (num) => num.toLocaleString('en-US');
-                let emailText = `Team,\n\nPlease see below for a summary of today's claim activity.\n\n`;
-                emailText += `Today's Total Claims: ${f_c(todayStats.totalClaims)} for $${f(todayStats.totalCharges)}\n`;
-                if (yesterdayStats) emailText += `Yesterday's Total Claims: ${f_c(yesterdayStats.totalClaims)} for $${f(yesterdayStats.totalCharges)}\n`;
-                
-                const formatDiff = (today, yesterday) => {
-                    if (yesterday === undefined) return '';
-                    const diff = today - yesterday;
-                    return ` (${diff >= 0 ? '+' : ''}${f_c(diff)})`;
-                };
-
-                const allStatuses = [...new Set([...Object.keys(todayStats.byStatus), ...(yesterdayStats ? Object.keys(yesterdayStats.byStatus) : [])])].sort();
-                emailText += `\n--- Status Breakdown ---\n`;
-                allStatuses.forEach(s => {
-                    const todayCount = todayStats.byStatus[s] || 0;
-                    const yestCount = yesterdayStats ? yesterdayStats.byStatus[s] || 0 : undefined;
-                    emailText += `${s}: ${f_c(todayCount)}${yesterdayStats ? formatDiff(todayCount, yestCount) : ''}\n`;
-                });
-
-                modalTitle.textContent = 'Report Generated!';
-                modalBody.innerHTML = `<p class="mb-4">Your file is downloading. You can copy the summary email text below.</p><textarea class="w-full h-64 p-2 border rounded font-mono text-sm">${emailText.trim()}</textarea>`;
-                const newConfirmBtn = modalConfirmBtn.cloneNode(true);
-                newConfirmBtn.textContent = 'Close';
-                modalConfirmBtn.parentNode.replaceChild(newConfirmBtn, modalConfirmBtn);
-                newConfirmBtn.addEventListener('click', hideModal);
-                modalConfirmBtn = newConfirmBtn;
-
-                const today = new Date();
-                const dateStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-                XLSX.writeFile(newWB, `Daily_Action_Report_${dateStr}.xlsx`);
-                
-                showLoader(false);
-
-            } catch (error) {
-                console.error("Report generation error:", error);
-                alert(`Error: ${error.message}`);
-                showLoader(false);
             }
-        }, 50);
-    }
 
+            const masterSheetName = "All Processed Data", highDollarSheetName = "High Dollar - Pat & Shelley";
+            const sheetsData = { [masterSheetName]: [], [highDollarSheetName]: [] };
+            
+            const headerRow = main_aoa[0], newHeader = [...headerRow];
+            if (hasYesterdayReport) newHeader.splice(config.claimStatusIndex, 0, 'Yest. Claim State');
+            let daysInsertIndex = config.cleanAgeIndex + 1;
+            if (hasYesterdayReport && config.cleanAgeIndex >= config.claimStatusIndex) daysInsertIndex++; 
+            newHeader.splice(daysInsertIndex, 0, 'Days');
+            newHeader.push('Added (Owner)', 'Due Date');
+            sheetsData[masterSheetName].push(newHeader);
+            sheetsData[highDollarSheetName].push(newHeader);
+
+            for (const originalRow of main_aoa.slice(1)) {
+                if (originalRow.every(cell => cell === null)) continue;
+                let claimState = String(originalRow[config.claimStatusIndex] || '').trim().toUpperCase();
+                if (claimState === 'PREBATCH') continue;
+                const newRow = [...originalRow];
+                
+                if (hasYesterdayReport) {
+                    const claimNumber = String(originalRow[config.claimNumberIndex] || '').trim();
+                    const yestData = yesterdayDataMap.get(claimNumber);
+                    let yestStateForColumn = 'NEW';
+                    if (yestData) {
+                        yestStateForColumn = yestData.state;
+                        if (yestData.state === 'MANAGEMENTREVIEW' && !isNaN(yestData.charges) && ((yestData.type.includes('PROFESSIONAL') && yestData.charges > 3500) || (yestData.type.includes('INSTITUTIONAL') && yestData.charges > 6500))) {
+                            yestStateForColumn = 'HC MGMT REV';
+                        }
+                    }
+                    newRow.splice(config.claimStatusIndex, 0, yestStateForColumn);
+                }
+                
+                const claimType = String(originalRow[config.claimTypeIndex] || '').trim().toUpperCase();
+                const totalCharges = parseCurrency(originalRow[config.totalChargesIndex]);
+                const isHighCost = claimState === 'MANAGEMENTREVIEW' && !isNaN(totalCharges) && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500));
+                const cleanAge = parseInt(originalRow[config.cleanAgeIndex], 10);
+                const daysValue = !isNaN(cleanAge) ? (cleanAge <= 20 ? '0 - 20' : (cleanAge <= 29 ? '21 - 29' : (cleanAge <= 59 ? '30 - 59' : '60+'))) : '';
+                let ownerValue = '';
+
+                if (isHighCost) { 
+                    ownerValue = 'Pat and Shelley';
+                } 
+                else if (['MANAGEMENTREVIEW', 'ONHOLD'].includes(claimState)) { ownerValue = 'Jessica'; } 
+                else if (['PEND', 'APPROVED', 'DENY'].includes(claimState)) { ownerValue = 'Patrick'; } 
+                else if (claimState === 'PR') { ownerValue = originalRow[config.payerIndex] || ''; }
+
+                newRow.splice(daysInsertIndex, 0, daysValue);
+                const noteText = String(originalRow[config.notesIndex] || '');
+                newRow.push(ownerValue, extractDueDateFromNote(noteText));
+                sheetsData[masterSheetName].push(newRow);
+
+                if (isHighCost) {
+                    sheetsData[highDollarSheetName].push(newRow);
+                } else if (['PEND', 'ONHOLD', 'MANAGEMENTREVIEW', 'DENY'].includes(claimState) && ['21 - 29', '30 - 59', '60+'].includes(daysValue)) {
+                    const dsnpRaw = String(originalRow[config.dsnpIndex] || '').toUpperCase();
+                    let dsnpStatus = '';
+                    if (dsnpRaw.includes('NON DSNP')) { dsnpStatus = 'NonDSNP'; } 
+                    else if (dsnpRaw.includes('DSNP') || dsnpRaw === 'Y') { dsnpStatus = 'DSNP'; }
+
+                    let statusTab = '', tabOwner = '';
+                    if (claimState === 'MANAGEMENTREVIEW') { statusTab = 'MgmtRev'; tabOwner = 'Jessica'; }
+                    else if (claimState === 'ONHOLD') { statusTab = 'OnHold'; tabOwner = 'Jessica'; }
+                    else if (claimState === 'PEND') { statusTab = 'Pend'; tabOwner = 'Patrick'; }
+                    else if (claimState === 'DENY') { statusTab = 'Deny'; tabOwner = 'Patrick'; }
+
+                    if (dsnpStatus && tabOwner) {
+                        const ageTab = { '21 - 29': '21-29d', '30 - 59': '30-59d', '60+': '60+d' }[daysValue];
+                        const tabKey = truncateSheetName(`${dsnpStatus} ${statusTab} ${ageTab} - ${tabOwner}`);
+                        if (!sheetsData[tabKey]) sheetsData[tabKey] = [newHeader];
+                        sheetsData[tabKey].push(newRow);
+                    }
+                }
+                if (config.notesIndex >= 0 && noteText.toLowerCase().includes('w9')) {
+                    let w9SheetName = '';
+                    const noteLower = noteText.toLowerCase();
+                    if (noteLower.includes('requested') || noteLower.includes('req') || noteLower.includes('due')) w9SheetName = 'W9 Follow-Up - Pat';
+                    else if (noteLower.includes('denied') || noteLower.includes('missing') || noteLower.includes('not on file') || noteLower.includes('not received')) w9SheetName = 'W9 Letter Needed - Jess';
+                    else if (noteLower.includes('received') || noteLower.includes('reprocess') || noteLower.includes('rerun')) w9SheetName = 'W9 Received - Reprocess';
+                    if (w9SheetName) {
+                        if (!sheetsData[w9SheetName]) sheetsData[w9SheetName] = [newHeader];
+                        sheetsData[w9SheetName].push(newRow);
+                    }
+                }
+            }
+            
+            // 5. CREATE EXCEL FILE
+            const newWorkbook = XLSX.utils.book_new();
+            const sheetOrder = [masterSheetName, highDollarSheetName, ...Object.keys(sheetsData).filter(n => n.startsWith('W9 ')).sort(), ...Object.keys(sheetsData).filter(n => ![masterSheetName, highDollarSheetName].includes(n) && !n.startsWith('W9 ')).sort()];
+            sheetOrder.forEach(sheetName => {
+                if (sheetsData[sheetName] && sheetsData[sheetName].length > 1) { 
+                    const ws = XLSX.utils.aoa_to_sheet(sheetsData[sheetName]);
+                    ws['!autofilter'] = { ref: XLSX.utils.encode_range(XLSX.utils.decode_range(ws['!ref'])) };
+                    XLSX.utils.book_append_sheet(newWorkbook, ws, sheetName);
+                }
+            });
+            
+            // 6. GENERATE EMAIL TEXT
+            const ageBasisText = document.getElementById('csr-cleanAgeCol-label').textContent.replace(':', '');
+            const combinedMgmtRevToday = { ...todayStats['MANAGEMENTREVIEW'] };
+            const hcToday = todayStats['HC MGMT REV'];
+            Object.keys(hcToday).forEach(key => combinedMgmtRevToday[key] = (combinedMgmtRevToday[key] || 0) + hcToday[key]);
+            let combinedMgmtRevYesterday = null;
+            if (yesterdayStats) {
+                combinedMgmtRevYesterday = { ...yesterdayStats['MANAGEMENTREVIEW'] };
+                const hcYesterday = yesterdayStats['HC MGMT REV'] || { total: 0, '0 - 20': 0, '21 - 29': 0, '30 - 59': 0, '60+': 0 };
+                Object.keys(hcYesterday).forEach(key => combinedMgmtRevYesterday[key] = (combinedMgmtRevYesterday[key] || 0) + hcYesterday[key]);
+            }
+            const formatStatLine = (t, y) => yesterdayStats ? `${t} (${y})` : `${t}`;
+            const createStatBlock = (title, today, yest) => {
+                const y = yesterdayStats ? yest : null;
+                return `Number of total claims ${title}: ${formatStatLine(today.total, y?.total ?? 0)}\n0 - 20 Days: ${formatStatLine(today['0 - 20'], y?.['0 - 20'] ?? 0)}\n21 - 29 Days: ${formatStatLine(today['21 - 29'], y?.['21 - 29'] ?? 0)}\n30 - 59 Days: ${formatStatLine(today['30 - 59'], y?.['30 - 59'] ?? 0)}\n60+ Days: ${formatStatLine(today['60+'], y?.['60+'] ?? 0)}`;
+            };
+            const yestCombined = yesterdayStats ? combinedMgmtRevYesterday : null;
+            const yestHc = yesterdayStats ? yesterdayStats['HC MGMT REV'] : null;
+            const mgmtReviewBlock = `Number of total claims Management Review: ${formatStatLine(combinedMgmtRevToday.total, yestCombined?.total ?? 0)}\nOf these, High Dollar Claims: ${formatStatLine(todayStats['HC MGMT REV'].total, yestHc?.total ?? 0)}\n0 - 20 Days: ${formatStatLine(combinedMgmtRevToday['0 - 20'], yestCombined?.['0 - 20'] ?? 0)}\n21 - 29 Days: ${formatStatLine(combinedMgmtRevToday['21 - 29'], yestCombined?.['21 - 29'] ?? 0)}\n30 - 59 Days: ${formatStatLine(combinedMgmtRevToday['30 - 59'], yestCombined?.['30 - 59'] ?? 0)}\n60+ Days: ${formatStatLine(combinedMgmtRevToday['60+'], yestCombined?.['60+'] ?? 0)}`;
+            const intro = yesterdayStats ? `I have attached today's report for ${clientText}. Below are the highlights from this report, previous days are in (parenthesis):` : `I have attached today's report for ${clientText}. Below are the highlights from this report:`;
+            const emailBody = `Hello Shelley, Jessica, and Pat,\n\n${intro}\n\n${createStatBlock('pending', todayStats['PEND'], yesterdayStats?.['PEND'])}\n\n${createStatBlock('On Hold', todayStats['ONHOLD'], yesterdayStats?.['ONHOLD'])}\n\n${mgmtReviewBlock}\n\n${createStatBlock('needing W9 Letter', todayStats['W9_LETTER_NEEDED'], yesterdayStats?.['W9_LETTER_NEEDED'])}\n\n${createStatBlock('for W9 Follow-Up', todayStats['W9_FOLLOW_UP'], yesterdayStats?.['W9_FOLLOW_UP'])}\n\nPlease let me know if you have any questions regarding this information.\n\nThis ${clientText} report is based on ${ageBasisText}.\n`;
+
+            // 7. DISPLAY RESULTS
+            modalTitle.textContent = 'Report Generated!';
+            modalBody.innerHTML = `<p class="mb-4">Your file is downloading automatically. You can copy the summary email text below.</p><textarea class="w-full h-64 p-2 border rounded font-mono text-sm">${emailBody.trim()}</textarea>`;
+            modalConfirmBtn.textContent = 'Close';
+            modalConfirmBtn.onclick = hideModal;
+            
+            XLSX.writeFile(newWorkbook, `${clientText} Daily Action Report for ${getFormattedDate()}.xlsx`);
+            showLoader(false);
+
+        } catch (error) {
+            console.error("Report generation error:", error);
+            alert(`Error: ${error.message}`);
+            showLoader(false);
+            if (configModal.style.display === 'flex') hideModal();
+        }
+    }
+    
     // --- DOWNLOADING ---
     function handleDownload() {
         const activeDataset = getActiveDataset();
