@@ -391,7 +391,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // --- CLAIM STATUS REPORT MODULE (NEW LOGIC) ---
+    // --- CLAIM STATUS REPORT MODULE (Corrected Logic) ---
     document.getElementById('action-claim-status-report').addEventListener('click', () => {
         if (state.datasets.length < 1) return alert("Please upload at least one report file.");
         const presets = {
@@ -432,9 +432,16 @@ document.addEventListener('DOMContentLoaded', () => {
             if (client) {
                 const p = presets[client];
                 document.getElementById('csr-cleanAgeCol-label').textContent = p.label;
-                const basePreset = presets.solis; 
-                Object.keys(basePreset).forEach(key => {
-                     if (key !== 'label') document.getElementById(`csr-${key}Col`).value = p[key] || '';
+                const basePresetKeys = Object.keys(presets.solis); 
+                basePresetKeys.forEach(key => {
+                    if (key !== 'label') {
+                        // ******** THE FIX IS HERE ********
+                        // Correctly construct the element ID (e.g., 'csr-cleanAgeCol') from the preset key (e.g., 'cleanAgeCol')
+                        const element = document.getElementById(`csr-${key}`);
+                        if (element) {
+                            element.value = p[key] || '';
+                        }
+                    }
                 });
                 csrConfigDiv.classList.remove('hidden');
             } else {
@@ -446,7 +453,6 @@ document.addEventListener('DOMContentLoaded', () => {
     async function runClaimStatusReport() {
         showLoader(true, 'Generating Claim Status Report...');
         
-        // --- HELPER FUNCTIONS from ClaimStatusReportTool.html ---
         const colLetterToIndex = (letter) => {
             if (!letter || typeof letter !== 'string' || !/^[A-Z]+$/i.test(letter)) return -1;
             let col = 0; letter = letter.toUpperCase();
@@ -465,11 +471,9 @@ document.addEventListener('DOMContentLoaded', () => {
             return match ? match[2] : '';
         }
 
-        // Delay processing to allow UI to update
         await new Promise(resolve => setTimeout(resolve, 50));
 
         try {
-            // 1. GATHER CONFIGURATION
             if (!document.getElementById('csr-client-preset').value) throw new Error("Please choose a client preset.");
             const config = {};
             const ids = ['cleanAge', 'claimStatus', 'claimNumber', 'payer', 'dsnp', 'claimType', 'totalCharges', 'notes'];
@@ -478,18 +482,16 @@ document.addEventListener('DOMContentLoaded', () => {
             if (Object.values(config).some(val => val === -1 || (Array.isArray(val) && val.includes(-1)))) throw new Error("Invalid column letter entered.");
             const clientText = document.getElementById('csr-client-preset').options[document.getElementById('csr-client-preset').selectedIndex].text;
             
-            // 2. READ & PREPARE DATA
             const todayDS_idx = document.getElementById('csr-today-ds').value;
             const yesterdayDS_idx = document.getElementById('csr-yesterday-ds').value;
             const mainFile = state.datasets[todayDS_idx];
             const yesterdayFile = yesterdayDS_idx !== "-1" ? state.datasets[yesterdayDS_idx] : null;
             const hasYesterdayReport = !!yesterdayFile;
 
-            const jsonToAOA = (ds) => [ds.headers, ...ds.data.map(row => ds.headers.map(h => row[h]))];
+            const jsonToAOA = (ds) => [ds.headers, ...ds.data.map(row => ds.headers.map(h => row[h] ?? null))];
             const main_aoa = jsonToAOA(mainFile);
             if (main_aoa.length < 2) throw new Error("Main report is empty or has no data.");
 
-            // 3. DEFINE STATISTICS FUNCTION
             const getStatsForAOA = (aoa, config) => {
                 const dayBuckets = { '0 - 20': 0, '21 - 29': 0, '30 - 59': 0, '60+': 0 };
                 const stats = { 'PEND': { total: 0, ...dayBuckets }, 'ONHOLD': { total: 0, ...dayBuckets }, 'MANAGEMENTREVIEW': { total: 0, ...dayBuckets }, 'HC MGMT REV': { total: 0, ...dayBuckets }, 'W9_LETTER_NEEDED': { total: 0, ...dayBuckets }, 'W9_FOLLOW_UP': { total: 0, ...dayBuckets } };
@@ -523,7 +525,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 return stats;
             };
 
-            // 4. PROCESS DATA
             const todayStats = getStatsForAOA(main_aoa, config);
             let yesterdayStats = null, yesterdayDataMap = new Map();
 
@@ -626,7 +627,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             
-            // 5. CREATE EXCEL FILE
             const newWorkbook = XLSX.utils.book_new();
             const sheetOrder = [masterSheetName, highDollarSheetName, ...Object.keys(sheetsData).filter(n => n.startsWith('W9 ')).sort(), ...Object.keys(sheetsData).filter(n => ![masterSheetName, highDollarSheetName].includes(n) && !n.startsWith('W9 ')).sort()];
             sheetOrder.forEach(sheetName => {
@@ -637,7 +637,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
             
-            // 6. GENERATE EMAIL TEXT
             const ageBasisText = document.getElementById('csr-cleanAgeCol-label').textContent.replace(':', '');
             const combinedMgmtRevToday = { ...todayStats['MANAGEMENTREVIEW'] };
             const hcToday = todayStats['HC MGMT REV'];
@@ -659,7 +658,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const intro = yesterdayStats ? `I have attached today's report for ${clientText}. Below are the highlights from this report, previous days are in (parenthesis):` : `I have attached today's report for ${clientText}. Below are the highlights from this report:`;
             const emailBody = `Hello Shelley, Jessica, and Pat,\n\n${intro}\n\n${createStatBlock('pending', todayStats['PEND'], yesterdayStats?.['PEND'])}\n\n${createStatBlock('On Hold', todayStats['ONHOLD'], yesterdayStats?.['ONHOLD'])}\n\n${mgmtReviewBlock}\n\n${createStatBlock('needing W9 Letter', todayStats['W9_LETTER_NEEDED'], yesterdayStats?.['W9_LETTER_NEEDED'])}\n\n${createStatBlock('for W9 Follow-Up', todayStats['W9_FOLLOW_UP'], yesterdayStats?.['W9_FOLLOW_UP'])}\n\nPlease let me know if you have any questions regarding this information.\n\nThis ${clientText} report is based on ${ageBasisText}.\n`;
 
-            // 7. DISPLAY RESULTS
             modalTitle.textContent = 'Report Generated!';
             modalBody.innerHTML = `<p class="mb-4">Your file is downloading automatically. You can copy the summary email text below.</p><textarea class="w-full h-64 p-2 border rounded font-mono text-sm">${emailBody.trim()}</textarea>`;
             modalConfirmBtn.textContent = 'Close';
