@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Operations Workbench - Spreadsheet Simplicity</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- SheetJS for reading Excel files -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="flex flex-col h-screen bg-gray-100 text-gray-800">
+
+    <header class="bg-white shadow-sm flex-shrink-0">
+        <div class="container mx-auto px-6 py-4 flex justify-between items-center">
+            <a href="/" class="flex items-center space-x-2">
+                <!-- <img src="/assets/logo.png" alt="Logo" class="h-8 w-8"> -->
+                <span class="text-2xl font-bold text-gray-900">Spreadsheet Simplicity</span>
+            </a>
+            <nav class="flex items-center space-x-8">
+                <a href="/" class="text-gray-600 hover:text-indigo-600 font-medium">Home</a>
+                <a href="/workbench.html" class="text-indigo-600 font-bold">The Workbench</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="flex-grow flex overflow-hidden">
+        <!-- Sidebar for Actions -->
+        <aside id="sidebar" class="w-64 bg-white p-4 border-r flex flex-col flex-shrink-0 overflow-y-auto">
+            <h2 class="text-xl font-bold mb-4">Operations</h2>
+            
+            <div id="file-manager" class="mb-4">
+                <h3 class="font-semibold text-gray-700 mb-2">1. Load Data</h3>
+                <label for="file-upload" class="w-full text-center bg-indigo-50 text-indigo-700 font-semibold py-2 px-4 rounded-md hover:bg-indigo-100 cursor-pointer">
+                    Upload File(s)
+                </label>
+                <input type="file" id="file-upload" accept=".xlsx, .xls, .csv" multiple class="hidden">
+            </div>
+            
+            <div id="actions-container" class="hidden">
+                <h3 class="font-semibold text-gray-700 mb-2 border-t pt-4">2. Choose Action</h3>
+                <!-- Cleaning Actions -->
+                <details class="mb-2">
+                    <summary class="font-semibold cursor-pointer">Clean & Transform</summary>
+                    <div class="pl-4 mt-2 space-y-2">
+                        <button id="action-trim-whitespace" class="action-btn">Trim Whitespace</button>
+                        <button id="action-anonymize" class="action-btn">Anonymize PII</button>
+                        <button id="action-extract-columns" class="action-btn">Extract Columns</button>
+                    </div>
+                </details>
+                <!-- Combining Actions -->
+                <details class="mb-2">
+                    <summary class="font-semibold cursor-pointer">Combine & Merge</summary>
+                    <div class="pl-4 mt-2 space-y-2">
+                        <button id="action-stack-sheets" class="action-btn">Stack All Sheets</button>
+                        <button id="action-merge-files" class="action-btn">Merge Files (Join)</button>
+                    </div>
+                </details>
+                <!-- Analysis Actions -->
+                <details class="mb-2">
+                    <summary class="font-semibold cursor-pointer">Analyze & Compare</summary>
+                    <div class="pl-4 mt-2 space-y-2">
+                        <button id="action-find-duplicates" class="action-btn">Find Duplicates</button>
+                        <button id="action-compare-sheets" class="action-btn">Compare Sheets</button>
+                    </div>
+                </details>
+                 <!-- Restructure Actions -->
+                 <details>
+                    <summary class="font-semibold cursor-pointer">Restructure</summary>
+                    <div class="pl-4 mt-2 space-y-2">
+                        <button id="action-split-file" class="action-btn">Split File by Rows</button>
+                    </div>
+                </details>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <section class="flex-grow flex flex-col p-6 overflow-hidden">
+            <!-- Welcome / File Upload View -->
+            <div id="welcome-view" class="flex-grow flex items-center justify-center text-center">
+                <div>
+                    <h1 class="text-4xl font-bold text-gray-800">Data Operations Workbench</h1>
+                    <p class="text-lg text-gray-600 mt-2">Upload an Excel or CSV file to begin.</p>
+                </div>
+            </div>
+
+            <!-- Data View (hidden initially) -->
+            <div id="data-view" class="hidden flex-grow flex flex-col overflow-hidden">
+                <div class="flex justify-between items-center mb-4 flex-shrink-0">
+                    <h2 id="table-title" class="text-2xl font-bold">Your Data</h2>
+                    <button id="download-btn" class="bg-green-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-700">Download Result</button>
+                </div>
+                <div id="data-table-container" class="flex-grow border rounded-lg overflow-auto bg-white">
+                    <!-- Table will be rendered here by JavaScript -->
+                </div>
+                <div id="status-bar" class="text-sm text-gray-600 mt-2 flex-shrink-0"></div>
+            </div>
+        </section>
+
+        <!-- Configuration Panel -->
+        <aside id="config-panel" class="w-80 bg-white p-4 border-l flex-shrink-0 overflow-y-auto">
+            <h2 class="text-xl font-bold mb-4">Configuration</h2>
+            <div id="config-panel-content">
+                <p class="text-gray-500">Select an action from the sidebar to see its options here.</p>
+            </div>
+        </aside>
+
+    </main>
+
+    <div id="loader-overlay" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50">
+        <div class="loader"></div>
+    </div>
+    
+    <script src="/js/workbench.js"></script>
+
+</body>
+</html>
