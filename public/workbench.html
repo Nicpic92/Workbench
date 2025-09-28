@@ -10,14 +10,50 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        /* A simple CSS loader for the overlay */
+        .loader {
+            border: 8px solid #f3f3f3; /* Light grey */
+            border-top: 8px solid #3498db; /* Blue */
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 2s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .action-btn {
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: 8px 12px;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+            color: #334155;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+        .action-btn:hover {
+            background-color: #e2e8f0;
+        }
+        /* Ensure table header is sticky */
+        #data-table-container {
+            position: relative;
+        }
+        #data-table-container th {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+    </style>
 </head>
-<body class="flex flex-col h-screen bg-gray-100 text-gray-800">
+<body class="flex flex-col h-screen bg-gray-100 text-gray-800 font-sans">
 
     <header class="bg-white shadow-sm flex-shrink-0">
         <div class="container mx-auto px-6 py-4 flex justify-between items-center">
             <a href="/" class="flex items-center space-x-2">
-                <!-- <img src="/assets/logo.png" alt="Logo" class="h-8 w-8"> -->
                 <span class="text-2xl font-bold text-gray-900">Spreadsheet Simplicity</span>
             </a>
             <nav class="flex items-center space-x-8">
@@ -29,7 +65,7 @@
 
     <main class="flex-grow flex overflow-hidden">
         <!-- Sidebar for Actions -->
-        <aside id="sidebar" class="w-64 bg-white p-4 border-r flex flex-col flex-shrink-0 overflow-y-auto">
+        <aside id="sidebar" class="w-72 bg-white p-4 border-r flex flex-col flex-shrink-0 overflow-y-auto">
             <h2 class="text-xl font-bold mb-4">Operations</h2>
             <button id="manage-dictionaries-btn" class="w-full text-sm text-center mb-4 bg-gray-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-gray-700">Manage Dictionaries</button>
             
@@ -46,7 +82,7 @@
                 <h3 class="font-semibold text-gray-700 mb-2 border-t pt-4">2. Choose Action</h3>
                 <!-- Cleaning Actions -->
                 <details class="mb-2" open>
-                    <summary class="font-semibold cursor-pointer">Clean & Transform</summary>
+                    <summary class="font-semibold cursor-pointer py-1">Clean & Transform</summary>
                     <div class="pl-4 mt-2 space-y-2">
                         <button id="action-trim-whitespace" class="action-btn">Trim Whitespace</button>
                         <button id="action-anonymize" class="action-btn">Anonymize PII</button>
@@ -55,7 +91,7 @@
                 </details>
                 <!-- Combining Actions -->
                 <details class="mb-2">
-                    <summary class="font-semibold cursor-pointer">Combine & Merge</summary>
+                    <summary class="font-semibold cursor-pointer py-1">Combine & Merge</summary>
                     <div class="pl-4 mt-2 space-y-2">
                         <button id="action-stack-sheets" class="action-btn">Stack All Sheets</button>
                         <button id="action-merge-files" class="action-btn">Merge Files (Join)</button>
@@ -63,7 +99,7 @@
                 </details>
                 <!-- Analysis Actions -->
                 <details class="mb-2">
-                    <summary class="font-semibold cursor-pointer">Analyze & Compare</summary>
+                    <summary class="font-semibold cursor-pointer py-1">Analyze & Compare</summary>
                     <div class="pl-4 mt-2 space-y-2">
                         <button id="action-find-duplicates" class="action-btn">Find Duplicates</button>
                         <button id="action-compare-sheets" class="action-btn">Compare Sheets</button>
@@ -72,14 +108,14 @@
                 </details>
                  <!-- Restructure Actions -->
                  <details class="mb-2">
-                    <summary class="font-semibold cursor-pointer">Restructure</summary>
+                    <summary class="font-semibold cursor-pointer py-1">Restructure</summary>
                     <div class="pl-4 mt-2 space-y-2">
                         <button id="action-split-file" class="action-btn">Split File by Rows</button>
                     </div>
                 </details>
                 <!-- Business Templates -->
                 <details class="mb-2" open>
-                    <summary class="font-semibold cursor-pointer">Business Templates</summary>
+                    <summary class="font-semibold cursor-pointer py-1">Business Templates</summary>
                     <div class="pl-4 mt-2 space-y-2">
                         <button id="action-claim-status-report" class="action-btn">Daily Claim Status Report</button>
                     </div>
@@ -113,7 +149,7 @@
 
     <!-- Generic Modal for Configurations -->
     <div id="config-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50 p-4">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
             <div class="flex justify-between items-center p-4 border-b">
                 <h2 id="modal-title" class="text-xl font-bold">Configuration</h2>
                 <button id="modal-close-btn" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
