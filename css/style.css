@@ -1,0 +1,56 @@
+/* Custom styles for the workbench */
+
+/* Action buttons in the sidebar */
+.action-btn {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 8px;
+    border-radius: 4px;
+    background-color: #f3f4f6; /* gray-100 */
+    color: #374151; /* gray-700 */
+    transition: background-color 0.2s;
+}
+.action-btn:hover {
+    background-color: #e5e7eb; /* gray-200 */
+}
+
+/* Data Table Styling */
+#data-table-container table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+#data-table-container th,
+#data-table-container td {
+    padding: 10px 12px;
+    border: 1px solid #e5e7eb; /* gray-200 */
+    white-space: nowrap;
+    text-align: left;
+}
+
+#data-table-container th {
+    background-color: #f9fafb; /* gray-50 */
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+}
+
+#data-table-container tr:nth-child(even) {
+    background-color: #f9fafb; /* gray-50 */
+}
+
+/* Loader Animation */
+.loader {
+    border: 8px solid #f3f3f3; /* Light grey */
+    border-top: 8px solid #4f46e5; /* Indigo */
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
