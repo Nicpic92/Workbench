@@ -1,5 +1,3 @@
-// js/actions/trimWhitespace.js
-
 import { getActiveDataset } from '../state.js';
 import { showConfigModal, closeModal, showLoader, generateColumnSelect, updateUI } from '../ui.js';
 
