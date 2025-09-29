@@ -5,21 +5,9 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
-.icon {
-    width: 20px;
-    height: 20px;
-    flex-shrink: 0;
-}
-
 /* --- Buttons --- */
-.btn-primary { @apply py-2 px-5 bg-blue-600 text-white font-semibold rounded-lg shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all; }
+.btn-primary { @apply py-2 px-5 bg-indigo-600 text-white font-semibold rounded-lg shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all; }
 .btn-secondary { @apply py-2 px-5 bg-slate-200 text-slate-800 font-semibold rounded-lg hover:bg-slate-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-400 transition-all; }
-.btn-danger { @apply py-2 px-4 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-md; }
-
-/* --- Forms --- */
-.label { @apply block text-sm font-medium text-slate-700; }
-.input { @apply mt-1 block w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 transition; }
-.input-file { @apply mt-1 block w-full text-sm text-slate-500 border border-slate-300 rounded-lg cursor-pointer bg-slate-50 file:mr-4 file:py-2 file:px-4 file:rounded-l-lg file:border-0 file:bg-slate-200 hover:file:bg-slate-300; }
 
 /* --- Sidebar Styling --- */
 #sidebar {
@@ -108,24 +96,12 @@ body {
 
 /* --- Modals --- */
 .full-screen-overlay { @apply fixed inset-0 bg-slate-900 bg-opacity-60 flex items-center justify-center z-50 p-4; }
-.modal-content { @apply bg-white rounded-lg shadow-xl w-full max-h-[90vh] flex flex-col; }
+.modal-content { @apply bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col; }
 .modal-header { @apply flex justify-between items-center p-4 border-b border-slate-200; }
 .modal-body { @apply p-6 overflow-y-auto; }
 .modal-footer { @apply p-4 border-t border-slate-200 bg-slate-50 flex justify-end space-x-3; }
 .modal-close-btn { @apply text-slate-400 hover:text-slate-600 text-2xl transition-colors; }
 
-/* --- Validator Specific --- */
-.issue-ignored { text-decoration: line-through; color: #9ca3af; }
-#rulesTableContainer, #ruleCategoryEditorContainer { flex-grow: 1; overflow: auto; border: 1px solid #e2e8f0; border-radius: 0.5rem; }
-#rulesTable th { background-color: #f8fafc; font-weight: 600; position: sticky; top: 0; z-index: 5; }
-#rulesTable th, #rulesTable td, .duplicate-glimpse-table th, .duplicate-glimpse-table td { padding: 8px 12px; border-bottom: 1px solid #ddd; text-align: left; vertical-align: top; }
-.delete-btn { background-color: #ef4444; color: white; border: none; padding: 2px 6px; font-size: 0.75em; border-radius: 4px; cursor: pointer; }
-.rule-pill { display: inline-flex; align-items: center; background-color: #e0e7ff; color: #4338ca; padding: 2px 8px; border-radius: 9999px; font-size: 0.8em; margin: 2px; }
-.category-list-item { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #e2e8f0; font-medium; }
-.category-list-item:hover { background-color: #f1f5f9; }
-.category-list-item.selected { background-color: #4f46e5; color: white; font-weight: 600; }
-.error-details { max-height: 400px; overflow-y: auto; background-color: #f8fafc; border: 1px solid #e2e8f0; margin-top: 4px; padding: 8px; border-radius: 4px; }
-textarea.description-input { resize: vertical; min-height: 38px; overflow-y: hidden; }
 
 /* --- Loader Animation --- */
 .loader { border: 5px solid #e2e8f0; border-top: 5px solid #4f46e5; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
