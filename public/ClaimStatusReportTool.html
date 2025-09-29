@@ -22,25 +22,17 @@
 
     <header class="bg-white shadow-sm sticky top-0 z-50">
         <div class="container mx-auto px-6 py-4 flex justify-between items-center">
-            <a href="/"><img src="/assets/logo.png" alt="Spreadsheet Simplicity Logo" class="h-12"></a>
+             <a href="#" class="flex items-center space-x-2">
+                <span class="text-2xl font-bold text-gray-900">Spreadsheet Simplicity</span>
+            </a>
             <nav id="main-nav" class="hidden md:flex items-center space-x-8">
-                <a href="/index.html" class="text-gray-600 hover:text-indigo-600 font-medium">Tools</a>
-                <a href="/about.html" class="text-gray-600 hover:text-indigo-600 font-medium">Our Security Promise</a>
-                <a href="/blog.html" class="text-gray-600 hover:text-indigo-600 font-medium">Blog</a>
-                <div id="nav-auth-section" class="pl-4"></div>
+                <a href="#" class="text-indigo-600 font-bold">Claim Status Report Tool</a>
             </nav>
         </div>
     </header>
 
-    <div id="access-denied" class="container mx-auto text-center py-20" style="display:none;">
-        <div class="bg-white p-12 rounded-lg shadow-lg max-w-2xl mx-auto">
-            <h2 class="text-3xl font-bold text-red-600">Access Denied</h2>
-            <p class="mt-4 text-lg text-gray-700">This is a Custom Tool. Please contact support to request access.</p>
-            <a href="/dashboard.html" class="mt-8 inline-block bg-indigo-600 text-white font-bold text-lg rounded-full py-4 px-10 hover:bg-indigo-700">Go to Dashboard</a>
-        </div>
-    </div>
-
-    <main id="tool-content" class="container mx-auto px-6 py-12" style="display: none;">
+    <!-- The "tool-content" main tag is now visible by default -->
+    <main id="tool-content" class="container mx-auto px-6 py-12">
         <div class="max-w-4xl mx-auto">
             <div class="text-center mb-12">
                 <h1 class="text-4xl md:text-5xl font-extrabold text-gray-900">Unified Claim Status Report Tool</h1>
@@ -57,6 +49,7 @@
                         <option value="solis">SOLIS</option>
                         <option value="liberty">LIBERTY</option>
                         <option value="secur">SECUR</option>
+                        <option value="csh">CSH</option>
                     </select>
                 </div>
 
@@ -121,7 +114,8 @@
             const clientPresets = {
                 solis: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', dsnpCol: 'X', claimTypeCol: 'B', totalChargesCol: 'S', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
                 liberty: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
-                secur: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', dsnpCol: 'Y', claimTypeCol: 'D', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' }
+                secur: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', dsnpCol: 'Y', claimTypeCol: 'D', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
+                csh: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' }
             };
 
             clientSelect.addEventListener('change', () => {
@@ -293,27 +287,25 @@
                     const isHighCost = claimState === 'MANAGEMENTREVIEW' && !isNaN(totalCharges) && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500));
                     const cleanAge = parseInt(originalRow[config.cleanAgeIndex], 10);
                     const daysValue = !isNaN(cleanAge) ? (cleanAge <= 20 ? '0 - 20' : (cleanAge <= 29 ? '21 - 29' : (cleanAge <= 59 ? '30 - 59' : '60+'))) : '';
-                    let ownerValue = '', finalClaimState = claimState;
+                    let ownerValue = '';
 
                     if (isHighCost) { 
                         ownerValue = 'Pat and Shelley';
-                        // Per request, the claim state in the output file remains the original state.
-                        // We do not change `finalClaimState`.
                     } 
                     else if (['MANAGEMENTREVIEW', 'ONHOLD'].includes(claimState)) { ownerValue = 'Jessica'; } 
                     else if (['PEND', 'APPROVED', 'DENY'].includes(claimState)) { ownerValue = 'Patrick'; } 
                     else if (claimState === 'PR') { ownerValue = originalRow[config.payerIndex] || ''; }
 
-                    newRow[config.claimStatusIndex + (hasYesterdayReport ? 1 : 0)] = finalClaimState;
                     newRow.splice(daysInsertIndex, 0, daysValue);
                     const noteText = String(originalRow[config.notesIndex] || '');
                     newRow.push(ownerValue, extractDueDateFromNote(noteText));
                     sheetsData[masterSheetName].push(newRow);
 
                     if (isHighCost) {
-                        // High Dollar claims are still added to their own sheet, but with the original state in the state column.
                         sheetsData[highDollarSheetName].push(newRow);
-                    } else if (['PEND', 'ONHOLD', 'MANAGEMENTREVIEW', 'DENY'].includes(claimState) && ['21 - 29', '30 - 59', '60+'].includes(daysValue)) {
+                    }
+                    
+                    if (!isHighCost && ['PEND', 'ONHOLD', 'MANAGEMENTREVIEW', 'DENY'].includes(claimState) && ['21 - 29', '30 - 59', '60+'].includes(daysValue)) {
                         const dsnpRaw = String(originalRow[config.dsnpIndex] || '').toUpperCase();
                         let dsnpStatus = '';
                         if (dsnpRaw.includes('NON DSNP')) { dsnpStatus = 'NonDSNP'; } 
@@ -332,6 +324,7 @@
                             sheetsData[tabKey].push(newRow);
                         }
                     }
+
                     if (config.notesIndex >= 0 && noteText.toLowerCase().includes('w9')) {
                         let w9SheetName = '';
                         const noteLower = noteText.toLowerCase();
@@ -383,7 +376,6 @@
             const ageBasisText = document.getElementById('cleanAgeCol-label').textContent.replace(':', '');
             const { today, yesterday } = processedReportData;
 
-            // Combine Management Review and High Dollar stats for the email summary
             const combinedMgmtRevToday = { ...today['MANAGEMENTREVIEW'] };
             const hcToday = today['HC MGMT REV'];
             Object.keys(hcToday).forEach(key => {
@@ -406,7 +398,6 @@
                 return `Number of total claims ${title}: ${formatStatLine(todayStats.total, y?.total ?? 0)}\n0 - 20 Days: ${formatStatLine(todayStats['0 - 20'], y?.['0 - 20'] ?? 0)}\n21 - 29 Days: ${formatStatLine(todayStats['21 - 29'], y?.['21 - 29'] ?? 0)}\n30 - 59 Days: ${formatStatLine(todayStats['30 - 59'], y?.['30 - 59'] ?? 0)}\n60+ Days: ${formatStatLine(todayStats['60+'], y?.['60+'] ?? 0)}`;
             };
             
-            // Create the Management Review block manually to include High Dollar details
             const yestCombined = yesterday ? combinedMgmtRevYesterday : null;
             const yestHc = yesterday ? yesterday['HC MGMT REV'] : null;
             const mgmtReviewBlock = `Number of total claims Management Review: ${formatStatLine(combinedMgmtRevToday.total, yestCombined?.total ?? 0)}\nOf these, High Dollar Claims: ${formatStatLine(today['HC MGMT REV'].total, yestHc?.total ?? 0)}\n0 - 20 Days: ${formatStatLine(combinedMgmtRevToday['0 - 20'], yestCombined?.['0 - 20'] ?? 0)}\n21 - 29 Days: ${formatStatLine(combinedMgmtRevToday['21 - 29'], yestCombined?.['21 - 29'] ?? 0)}\n30 - 59 Days: ${formatStatLine(combinedMgmtRevToday['30 - 59'], yestCombined?.['30 - 59'] ?? 0)}\n60+ Days: ${formatStatLine(combinedMgmtRevToday['60+'], yestCombined?.['60+'] ?? 0)}`;
@@ -435,26 +426,14 @@
         const truncateSheetName = (name) => name.replace(/[\\\/\?\*\[\]]/g, '').substring(0, 31);
     </script>
     
-    <script src="/auth.js"></script>
     <script>
+        // --- START OF FIX ---
+        // This script now runs when the page loads. It no longer checks for access.
+        // It simply finds the main tool content and initializes the javascript functions.
         document.addEventListener('DOMContentLoaded', () => {
-            const toolContent = document.getElementById('tool-content');
-            const accessDenied = document.getElementById('access-denied');
-            
-            apiRequest('dashboard').then(data => {
-                const toolUrl = '/ClaimStatusReportTool.html'; 
-                const hasAccess = data.tools.some(tool => tool.url === toolUrl && tool.has_access);
-
-                if (hasAccess) {
-                    toolContent.style.display = 'block';
-                    initializeTool();
-                } else {
-                    accessDenied.style.display = 'block';
-                }
-            }).catch(() => {
-                accessDenied.style.display = 'block';
-            });
+            initializeTool();
         });
+        // --- END OF FIX ---
     </script>
 </body>
 </html>
