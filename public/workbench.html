@@ -10,7 +10,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-    <!-- Link to the new stylesheet -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    <!-- Link to the stylesheet -->
     <link rel="stylesheet" href="/css/workbench.css">
 </head>
 <body class="flex flex-col h-screen bg-slate-100 text-slate-800 font-sans">
@@ -18,7 +20,6 @@
     <header class="bg-white border-b border-slate-200 flex-shrink-0">
         <div class="container mx-auto px-6 py-4 flex justify-between items-center">
             <a href="/" class="flex items-center space-x-3">
-                <!-- You can add a logo SVG here -->
                 <span class="text-2xl font-bold text-slate-900">Spreadsheet Simplicity</span>
             </a>
             <nav class="flex items-center space-x-8">
@@ -31,9 +32,6 @@
     <main class="flex-grow flex overflow-hidden">
         <!-- Sidebar for Actions -->
         <aside id="sidebar" class="w-72 bg-slate-800 p-4 flex flex-col flex-shrink-0 overflow-y-auto">
-            <h2 class="text-lg font-bold text-white mb-4 px-2">Operations</h2>
-            <button id="manage-dictionaries-btn" class="w-full text-sm text-center mb-4 bg-slate-700 text-white font-semibold py-2 px-4 rounded-lg hover:bg-slate-600 transition-colors">Manage Dictionaries</button>
-            
             <div id="file-manager" class="mb-4">
                 <h3 class="font-semibold text-slate-300 mb-2 text-sm px-2">1. LOAD DATA</h3>
                 <label for="file-upload" class="w-full text-center bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-500 cursor-pointer block transition-colors">
@@ -45,7 +43,27 @@
             
             <div id="actions-container" class="hidden">
                 <h3 class="font-semibold text-slate-300 mb-2 border-t border-slate-700 pt-4 text-sm px-2">2. CHOOSE ACTION</h3>
-                <!-- Action Groups -->
+                
+                <!-- Data Quality Hub -->
+                <div class="action-group mb-2">
+                    <div class="px-2 mb-2">
+                         <h4 class="font-bold text-white">Data Quality Hub</h4>
+                         <p class="text-xs text-slate-400 mt-1">Define rules and validate your active dataset for errors.</p>
+                    </div>
+                    <div class="action-list px-0">
+                         <button id="validator-run-btn" class="action-btn !justify-center !text-base !font-bold !bg-green-600 !text-white hover:!bg-green-500">Validate Active Sheet</button>
+                         <button id="validator-manage-dict-btn" class="action-btn">
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
+                              Manage Dictionary
+                         </button>
+                         <button id="validator-manage-cat-btn" class="action-btn">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2.5 3A1.5 1.5 0 001 4.5v11A1.5 1.5 0 002.5 17h15a1.5 1.5 0 001.5-1.5v-11A1.5 1.5 0 0017.5 3h-15zm4.512 4.012a.75.75 0 01.75-.75h5.476a.75.75 0 01.529 1.28L9.81 11.25H14.5a.75.75 0 010 1.5h-5a.75.75 0 01-.529-.22L5.262 8.53a.75.75 0 01-.004-1.038l1.754-1.48z" clip-rule="evenodd" /></svg>
+                            Manage Categories
+                         </button>
+                    </div>
+                </div>
+
+                <!-- Standard Action Groups -->
                 <details class="action-group" open>
                     <summary>Clean & Transform</summary>
                     <div class="action-list">
@@ -66,7 +84,6 @@
                      <div class="action-list">
                         <button id="action-find-duplicates" class="action-btn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M7 3.5A1.5 1.5 0 018.5 2h5.5a1.5 1.5 0 011.5 1.5v1a.5.5 0 001 0v-1A2.5 2.5 0 0014 1h-5.5A2.5 2.5 0 006 3.5v11A2.5 2.5 0 008.5 17h5.5a2.5 2.5 0 002.5-2.5v-1a.5.5 0 00-1 0v1a1.5 1.5 0 01-1.5 1.5h-5.5A1.5 1.5 0 017 14.5v-11z"></path><path d="M4.5 5A1.5 1.5 0 003 6.5v9A1.5 1.5 0 004.5 17h5a1.5 1.5 0 001.5-1.5v-9A1.5 1.5 0 009.5 5h-5z"></path></svg>Find Duplicates</button>
                         <button id="action-compare-sheets" class="action-btn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 2a.75.75 0 01.75.75v12.59l3.22-3.22a.75.75 0 111.06 1.06l-4.5 4.5a.75.75 0 01-1.06 0l-4.5-4.5a.75.75 0 111.06-1.06l3.22 3.22V2.75A.75.75 0 0110 2z" clip-rule="evenodd"></path></svg>Compare Sheets</button>
-                        <button id="action-validate-data" class="action-btn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd"></path></svg>Validate with Dictionary</button>
                     </div>
                 </details>
                  <details class="action-group">
@@ -88,33 +105,72 @@
                 </div>
             </div>
 
-            <!-- Data View -->
+            <!-- Data Table View -->
             <div id="data-view" class="hidden flex-grow flex flex-col overflow-hidden">
                 <div class="flex justify-between items-center mb-4 flex-shrink-0">
                     <h2 id="table-title" class="text-2xl font-bold text-slate-900 truncate"></h2>
-                    <button id="download-btn" class="bg-green-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-700 transition-colors shadow-sm">Download Result</button>
+                    <button id="download-btn" class="bg-green-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-700 transition-colors shadow-sm">Download Active Sheet</button>
                 </div>
                 <div id="data-table-container" class="flex-grow rounded-lg overflow-auto bg-white shadow-md">
-                    <!-- Table will be rendered here by JavaScript -->
+                    <!-- Standard data table will be rendered here -->
                 </div>
                 <div id="status-bar" class="text-sm text-slate-600 mt-2 flex-shrink-0 p-1"></div>
             </div>
+            
+            <!-- Validation Results View -->
+            <section id="validation-results-view" class="hidden flex-grow flex flex-col overflow-hidden"></section>
         </section>
     </main>
 
     <!-- Generic Modal for Configurations -->
     <div id="config-modal" class="hidden fixed inset-0 bg-slate-900 bg-opacity-60 flex items-center justify-center z-50 p-4">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-xl max-h-[90vh] flex flex-col">
             <div class="flex justify-between items-center p-4 border-b border-slate-200">
                 <h2 id="modal-title" class="text-xl font-bold">Configuration</h2>
                 <button id="modal-close-btn" class="text-slate-500 hover:text-slate-800 text-2xl transition-colors">&times;</button>
             </div>
-            <div id="modal-body" class="p-6 overflow-y-auto">
-                <!-- Modal content goes here -->
-            </div>
+            <div id="modal-body" class="p-6 overflow-y-auto"></div>
             <div class="p-4 border-t border-slate-200 bg-slate-50 flex justify-end space-x-3">
                 <button id="modal-cancel-btn" class="bg-slate-200 text-slate-800 font-semibold py-2 px-4 rounded-md hover:bg-slate-300 transition-colors">Cancel</button>
                 <button id="modal-confirm-btn" class="bg-indigo-600 text-white font-bold py-2 px-6 rounded-md hover:bg-indigo-700 transition-colors">Confirm</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Validator: Dictionary Editor Modal -->
+    <div id="dictionaryModal" class="full-screen-overlay hidden">
+        <div class="modal-content-area">
+            <div class="flex justify-between items-center mb-4"><h3 class="text-2xl font-bold text-gray-800">Define Data Dictionary Rules</h3><button onclick="closeModal('dictionaryModal')" class="text-gray-500 hover:text-gray-700 text-3xl font-bold">×</button></div>
+            <div class="mb-4 grid grid-cols-2 gap-4">
+                <div>
+                    <label for="builder_dictionaryName" class="block text-sm font-medium">Data Dictionary Name</label>
+                    <input type="text" id="builder_dictionaryName" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                </div>
+                <div>
+                    <label for="restore-input" class="block text-sm font-medium">Restore from Backup</label>
+                    <input type="file" id="restore-input" accept=".json" class="mt-1 w-full text-sm text-gray-500 border rounded-lg cursor-pointer bg-gray-50 file:mr-4 file:py-2 file:px-4 file:rounded-l-lg file:border-0 file:bg-gray-200 hover:file:bg-gray-300">
+                </div>
+            </div>
+            <div id="rulesTableContainer"><table id="rulesTable" class="w-full text-sm"><thead><tr><th>Column</th><th>Rule Category</th><th>Description</th><th>Defined Rules</th><th>Add New Rule</th></tr></thead><tbody></tbody></table></div>
+            <div class="text-right mt-6 space-x-3">
+                <button onclick="downloadFullPdfDictionary()" class="py-3 px-6 rounded-lg text-lg font-medium text-white bg-gray-600 hover:bg-gray-700">Download PDF</button>
+                <button id="builder_saveAndCloseBtn" class="py-3 px-6 rounded-lg text-lg font-medium text-white bg-green-600 hover:bg-green-700">Save and Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Validator: Category Editor Modal -->
+    <div id="ruleCategoryModal" class="full-screen-overlay hidden">
+        <div class="modal-content-area">
+            <div class="flex justify-between items-center mb-4"><h3 class="text-2xl font-bold text-gray-800">Manage Rule Categories</h3><button id="categoryEditorCloseBtn" class="text-gray-500 hover:text-gray-700 text-3xl font-bold">×</button></div>
+            <div class="flex gap-6 flex-grow min-h-0">
+                <div class="w-1/3 flex flex-col border rounded-lg"><div class="p-2 border-b"><button class="w-full py-2 px-4 bg-indigo-600 text-white font-semibold rounded-md" onclick="addNewRuleCategory()">+ Add New Category</button></div><div id="ruleCategoryList" class="flex-grow overflow-y-auto"></div></div>
+                <div id="ruleCategoryEditorContainer" class="w-2/3 p-4 bg-gray-50 rounded-lg hidden">
+                    <h4 class="text-xl font-bold mb-4" id="categoryEditorTitle"></h4>
+                    <div class="mb-4"><h5 class="font-semibold mb-2">Defined Rules</h5><div id="categoryRulesDisplay" class="flex flex-wrap gap-2 p-2 min-h-[40px] border rounded-md bg-white"></div></div>
+                    <div><h5 class="font-semibold mb-2">Add New Rule</h5><div class="flex gap-2 items-center"><select id="categoryRuleType" class="p-1 border rounded-md bg-white w-1/3"><option value="REQUIRED">REQUIRED</option> <option value="NOT REQUIRED">NOT REQUIRED</option> <option value="ALLOWED_VALUES">ALLOWED_VALUES</option> <option value="REGEX">REGEX</option> <option value="VALID_DATE">VALID_DATE</option> <option value="NO_FUTURE_DATE">NO_FUTURE_DATE</option></select><input id="categoryRuleValue" type="text" placeholder="Value (if needed)..." class="p-1 border rounded-md w-1/3"><button class="py-1 px-3 bg-indigo-500 text-white rounded-md text-sm" onclick="addRuleToCategory()">+</button></div></div>
+                    <div class="mt-auto pt-4 text-right"><button class="py-2 px-4 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-md mr-2" onclick="deleteRuleCategory()">Delete Category</button></div>
+                </div>
             </div>
         </div>
     </div>
