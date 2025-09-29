@@ -31,7 +31,6 @@
         </div>
     </header>
 
-    <!-- The "tool-content" main tag is now visible by default -->
     <main id="tool-content" class="container mx-auto px-6 py-12">
         <div class="max-w-4xl mx-auto">
             <div class="text-center mb-12">
@@ -60,6 +59,7 @@
                         <div><label for="claimStatusCol">Claim State:</label><input type="text" id="claimStatusCol" class="mt-1 w-full p-2 border rounded-md uppercase"></div>
                         <div><label for="claimNumberCol">Claim Number:</label><input type="text" id="claimNumberCol" class="mt-1 w-full p-2 border rounded-md uppercase"></div>
                         <div><label for="payerCol">Payer:</label><input type="text" id="payerCol" class="mt-1 w-full p-2 border rounded-md uppercase"></div>
+                        <div><label for="networkStatusCol">Network Status (Par/Non-Par):</label><input type="text" id="networkStatusCol" class="mt-1 w-full p-2 border rounded-md uppercase"></div>
                         <div><label for="dsnpCol">DSNP Status:</label><input type="text" id="dsnpCol" class="mt-1 w-full p-2 border rounded-md uppercase"></div>
                         <div><label for="claimTypeCol">Claim Type:</label><input type="text" id="claimTypeCol" class="mt-1 w-full p-2 border rounded-md uppercase"></div>
                         <div><label for="totalChargesCol">Total Charges:</label><input type="text" id="totalChargesCol" class="mt-1 w-full p-2 border rounded-md uppercase"></div>
@@ -112,10 +112,10 @@
             const processBtn = document.getElementById('processBtn');
 
             const clientPresets = {
-                solis: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', dsnpCol: 'X', claimTypeCol: 'B', totalChargesCol: 'S', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
-                liberty: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
-                secur: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', dsnpCol: 'Y', claimTypeCol: 'D', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
-                csh: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' }
+                solis: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'F', dsnpCol: 'X', claimTypeCol: 'B', totalChargesCol: 'S', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
+                liberty: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'F', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
+                secur: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'F', dsnpCol: 'Y', claimTypeCol: 'D', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
+                csh: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'F', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' }
             };
 
             clientSelect.addEventListener('change', () => {
@@ -165,7 +165,7 @@
                     return col - 1;
                 };
                 const config = {};
-                const ids = ['cleanAge', 'claimStatus', 'claimNumber', 'payer', 'dsnp', 'claimType', 'totalCharges', 'notes'];
+                const ids = ['cleanAge', 'claimStatus', 'claimNumber', 'payer', 'networkStatus', 'dsnp', 'claimType', 'totalCharges', 'notes'];
                 ids.forEach(id => config[`${id}Index`] = colLetterToIndex(document.getElementById(`${id}Col`).value));
                 config.dateIndices = document.getElementById('dateCols').value.toUpperCase().trim().split(',').filter(c => c).map(c => colLetterToIndex(c.trim()));
                 if (Object.values(config).some(val => val === -1 || (Array.isArray(val) && val.includes(-1)))) throw new Error("Invalid column letter entered.");
@@ -195,7 +195,7 @@
             });
 
             const getStatsForAOA = (aoa, config) => {
-                const dayBuckets = { '0 - 20': 0, '21 - 29': 0, '30 - 59': 0, '60+': 0 };
+                const dayBuckets = { '0 - 10': 0, '11 - 20': 0, '21 - 29': 0, '30 - 59': 0, '60+': 0 };
                 const stats = { 'PEND': { total: 0, ...dayBuckets }, 'ONHOLD': { total: 0, ...dayBuckets }, 'MANAGEMENTREVIEW': { total: 0, ...dayBuckets }, 'HC MGMT REV': { total: 0, ...dayBuckets }, 'W9_LETTER_NEEDED': { total: 0, ...dayBuckets }, 'W9_FOLLOW_UP': { total: 0, ...dayBuckets } };
                 
                 for(const row of aoa.slice(1)) {
@@ -205,7 +205,7 @@
                     const totalCharges = parseCurrency(row[config.totalChargesIndex]);
                     const claimType = String(row[config.claimTypeIndex] || '').trim().toUpperCase();
                     const cleanAge = parseInt(row[config.cleanAgeIndex], 10);
-                    const daysValue = !isNaN(cleanAge) ? (cleanAge <= 20 ? '0 - 20' : (cleanAge <= 29 ? '21 - 29' : (cleanAge <= 59 ? '30 - 59' : '60+'))) : '';
+                    const daysValue = !isNaN(cleanAge) ? (cleanAge <= 10 ? '0 - 10' : (cleanAge <= 20 ? '11 - 20' : (cleanAge <= 29 ? '21 - 29' : (cleanAge <= 59 ? '30 - 59' : '60+')))) : '';
                     let finalClaimState = claimState;
                     if (claimState === 'MANAGEMENTREVIEW' && !isNaN(totalCharges) && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500))) {
                         finalClaimState = 'HC MGMT REV';
@@ -286,7 +286,7 @@
                     const totalCharges = parseCurrency(originalRow[config.totalChargesIndex]);
                     const isHighCost = claimState === 'MANAGEMENTREVIEW' && !isNaN(totalCharges) && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500));
                     const cleanAge = parseInt(originalRow[config.cleanAgeIndex], 10);
-                    const daysValue = !isNaN(cleanAge) ? (cleanAge <= 20 ? '0 - 20' : (cleanAge <= 29 ? '21 - 29' : (cleanAge <= 59 ? '30 - 59' : '60+'))) : '';
+                    const daysValue = !isNaN(cleanAge) ? (cleanAge <= 10 ? '0 - 10' : (cleanAge <= 20 ? '11 - 20' : (cleanAge <= 29 ? '21 - 29' : (cleanAge <= 59 ? '30 - 59' : '60+')))) : '';
                     let ownerValue = '';
 
                     if (isHighCost) { 
@@ -305,7 +305,10 @@
                         sheetsData[highDollarSheetName].push(newRow);
                     }
                     
-                    if (!isHighCost && ['PEND', 'ONHOLD', 'MANAGEMENTREVIEW', 'DENY'].includes(claimState) && ['21 - 29', '30 - 59', '60+'].includes(daysValue)) {
+                    if (!isHighCost && ['PEND', 'ONHOLD', 'MANAGEMENTREVIEW', 'DENY'].includes(claimState)) {
+                        const networkStatusRaw = String(originalRow[config.networkStatusIndex] || '').toUpperCase();
+                        let networkStatus = networkStatusRaw.includes('NON') ? 'NonPar' : (networkStatusRaw.includes('PAR') ? 'Par' : '');
+
                         const dsnpRaw = String(originalRow[config.dsnpIndex] || '').toUpperCase();
                         let dsnpStatus = '';
                         if (dsnpRaw.includes('NON DSNP')) { dsnpStatus = 'NonDSNP'; } 
@@ -317,11 +320,25 @@
                         else if (claimState === 'PEND') { statusTab = 'Pend'; tabOwner = 'Patrick'; }
                         else if (claimState === 'DENY') { statusTab = 'Deny'; tabOwner = 'Patrick'; }
 
-                        if (dsnpStatus && tabOwner) {
-                            const ageTab = { '21 - 29': '21-29d', '30 - 59': '30-59d', '60+': '60+d' }[daysValue];
-                            const tabKey = truncateSheetName(`${dsnpStatus} ${statusTab} ${ageTab} - ${tabOwner}`);
-                            if (!sheetsData[tabKey]) sheetsData[tabKey] = [newHeader];
-                            sheetsData[tabKey].push(newRow);
+                        if (dsnpStatus && tabOwner && networkStatus) {
+                            let tabKey = '';
+                            
+                            if (daysValue === '21 - 29') {
+                                tabKey = truncateSheetName(`PRIORITY ${networkStatus} ${dsnpStatus} ${statusTab} - ${tabOwner}`);
+                            } 
+                            else if (['0 - 10', '11 - 20'].includes(daysValue)) {
+                                const ageTab = (daysValue === '0 - 10') ? '0-10d' : '11-20d';
+                                tabKey = truncateSheetName(`Queue ${ageTab} ${networkStatus} ${dsnpStatus} ${statusTab} - ${tabOwner}`);
+                            }
+                            else if (['30 - 59', '60+'].includes(daysValue)) {
+                                const ageTab = (daysValue === '30 - 59') ? '30-59d' : '60+d';
+                                tabKey = truncateSheetName(`Aged ${ageTab} ${networkStatus} ${dsnpStatus} ${statusTab} - ${tabOwner}`);
+                            }
+
+                            if (tabKey) {
+                                if (!sheetsData[tabKey]) sheetsData[tabKey] = [newHeader];
+                                sheetsData[tabKey].push(newRow);
+                            }
                         }
                     }
 
@@ -385,7 +402,7 @@
             let combinedMgmtRevYesterday = null;
             if (yesterday) {
                 combinedMgmtRevYesterday = { ...yesterday['MANAGEMENTREVIEW'] };
-                const hcYesterday = yesterday['HC MGMT REV'] || { total: 0, '0 - 20': 0, '21 - 29': 0, '30 - 59': 0, '60+': 0 };
+                const hcYesterday = yesterday['HC MGMT REV'] || { total: 0, '0 - 10': 0, '11 - 20': 0, '21 - 29': 0, '30 - 59': 0, '60+': 0 };
                 Object.keys(hcYesterday).forEach(key => {
                     combinedMgmtRevYesterday[key] = (combinedMgmtRevYesterday[key] || 0) + hcYesterday[key];
                 });
@@ -395,12 +412,12 @@
             
             const createStatBlock = (title, todayStats, yestStats) => {
                 const y = yesterday ? yestStats : null;
-                return `Number of total claims ${title}: ${formatStatLine(todayStats.total, y?.total ?? 0)}\n0 - 20 Days: ${formatStatLine(todayStats['0 - 20'], y?.['0 - 20'] ?? 0)}\n21 - 29 Days: ${formatStatLine(todayStats['21 - 29'], y?.['21 - 29'] ?? 0)}\n30 - 59 Days: ${formatStatLine(todayStats['30 - 59'], y?.['30 - 59'] ?? 0)}\n60+ Days: ${formatStatLine(todayStats['60+'], y?.['60+'] ?? 0)}`;
+                return `Number of total claims ${title}: ${formatStatLine(todayStats.total, y?.total ?? 0)}\n0 - 10 Days: ${formatStatLine(todayStats['0 - 10'], y?.['0 - 10'] ?? 0)}\n11 - 20 Days: ${formatStatLine(todayStats['11 - 20'], y?.['11 - 20'] ?? 0)}\n21 - 29 Days: ${formatStatLine(todayStats['21 - 29'], y?.['21 - 29'] ?? 0)}\n30 - 59 Days: ${formatStatLine(todayStats['30 - 59'], y?.['30 - 59'] ?? 0)}\n60+ Days: ${formatStatLine(todayStats['60+'], y?.['60+'] ?? 0)}`;
             };
             
             const yestCombined = yesterday ? combinedMgmtRevYesterday : null;
             const yestHc = yesterday ? yesterday['HC MGMT REV'] : null;
-            const mgmtReviewBlock = `Number of total claims Management Review: ${formatStatLine(combinedMgmtRevToday.total, yestCombined?.total ?? 0)}\nOf these, High Dollar Claims: ${formatStatLine(today['HC MGMT REV'].total, yestHc?.total ?? 0)}\n0 - 20 Days: ${formatStatLine(combinedMgmtRevToday['0 - 20'], yestCombined?.['0 - 20'] ?? 0)}\n21 - 29 Days: ${formatStatLine(combinedMgmtRevToday['21 - 29'], yestCombined?.['21 - 29'] ?? 0)}\n30 - 59 Days: ${formatStatLine(combinedMgmtRevToday['30 - 59'], yestCombined?.['30 - 59'] ?? 0)}\n60+ Days: ${formatStatLine(combinedMgmtRevToday['60+'], yestCombined?.['60+'] ?? 0)}`;
+            const mgmtReviewBlock = `Number of total claims Management Review: ${formatStatLine(combinedMgmtRevToday.total, yestCombined?.total ?? 0)}\nOf these, High Dollar Claims: ${formatStatLine(today['HC MGMT REV'].total, yestHc?.total ?? 0)}\n0 - 10 Days: ${formatStatLine(combinedMgmtRevToday['0 - 10'], yestCombined?.['0 - 10'] ?? 0)}\n11 - 20 Days: ${formatStatLine(combinedMgmtRevToday['11 - 20'], yestCombined?.['11 - 20'] ?? 0)}\n21 - 29 Days: ${formatStatLine(combinedMgmtRevToday['21 - 29'], yestCombined?.['21 - 29'] ?? 0)}\n30 - 59 Days: ${formatStatLine(combinedMgmtRevToday['30 - 59'], yestCombined?.['30 - 59'] ?? 0)}\n60+ Days: ${formatStatLine(combinedMgmtRevToday['60+'], yestCombined?.['60+'] ?? 0)}`;
 
             const intro = yesterday ? `I have attached today's report for ${clientName}. Below are the highlights from this report, previous days are in (parenthesis):` : `I have attached today's report for ${clientName}. Below are the highlights from this report:`;
             
@@ -427,13 +444,9 @@
     </script>
     
     <script>
-        // --- START OF FIX ---
-        // This script now runs when the page loads. It no longer checks for access.
-        // It simply finds the main tool content and initializes the javascript functions.
         document.addEventListener('DOMContentLoaded', () => {
             initializeTool();
         });
-        // --- END OF FIX ---
     </script>
 </body>
 </html>
