@@ -1,0 +1,31 @@
+// js/ui.js
+
+import { state, getActiveDataset } from './state.js';
+
+// Get all DOM elements once
+const welcomeView = document.getElementById('welcome-view');
+const dataView = document.getElementById('data-view');
+// ... (get all other DOM elements)
+
+export function updateUI() {
+    if (state.datasets.length === 0) {
+        // ... logic to show welcome screen
+    } else {
+        // ... logic to show data view
+        renderLoadedFilesList();
+        renderActiveDataset();
+    }
+}
+
+export function renderActiveDataset() {
+    const activeDataset = getActiveDataset();
+    if (!activeDataset) return;
+    // ... logic to render the table title and status bar
+    renderDataTable(activeDataset.data, activeDataset.headers);
+}
+
+export function renderDataTable(data, headers) {
+    // ... your existing renderDataTable function
+}
+
+// ... (all your other UI functions like showLoader, showConfigModal, etc.)
