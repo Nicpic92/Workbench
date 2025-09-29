@@ -1,6 +1,4 @@
-// js/actions/mergeFiles.js
-
-import { state, getActiveDataset, addNewDataset } from '../state.js';
+import { state, addNewDataset } from '../state.js';
 import { showConfigModal, closeModal, showLoader, updateUI, generateDatasetSelect } from '../ui.js';
 
 function mergeFilesAction() {
