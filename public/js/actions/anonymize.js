@@ -1,5 +1,3 @@
-// js/actions/anonymize.js
-
 import { getActiveDataset, addNewDataset } from '../state.js';
 import { showConfigModal, closeModal, showLoader, updateUI } from '../ui.js';
 
