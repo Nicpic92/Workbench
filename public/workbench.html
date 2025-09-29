@@ -10,8 +10,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
     <!-- Link to the stylesheet -->
     <link rel="stylesheet" href="/css/workbench.css">
 </head>
@@ -44,25 +42,6 @@
             <div id="actions-container" class="hidden">
                 <h3 class="font-semibold text-slate-300 mb-2 border-t border-slate-700 pt-4 text-sm px-2">2. CHOOSE ACTION</h3>
                 
-                <!-- Data Quality Hub -->
-                <div class="action-group mb-2">
-                    <div class="px-2 mb-2">
-                         <h4 class="font-bold text-white">Data Quality Hub</h4>
-                         <p class="text-xs text-slate-400 mt-1">Define rules and validate your active dataset for errors.</p>
-                    </div>
-                    <div class="action-list px-0">
-                         <button id="validator-run-btn" class="action-btn !justify-center !text-base !font-bold !bg-green-600 !text-white hover:!bg-green-500">Validate Active Sheet</button>
-                         <button id="validator-manage-dict-btn" class="action-btn">
-                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
-                              Manage Dictionary
-                         </button>
-                         <button id="validator-manage-cat-btn" class="action-btn">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2.5 3A1.5 1.5 0 001 4.5v11A1.5 1.5 0 002.5 17h15a1.5 1.5 0 001.5-1.5v-11A1.5 1.5 0 0017.5 3h-15zm4.512 4.012a.75.75 0 01.75-.75h5.476a.75.75 0 01.529 1.28L9.81 11.25H14.5a.75.75 0 010 1.5h-5a.75.75 0 01-.529-.22L5.262 8.53a.75.75 0 01-.004-1.038l1.754-1.48z" clip-rule="evenodd" /></svg>
-                            Manage Categories
-                         </button>
-                    </div>
-                </div>
-
                 <!-- Standard Action Groups -->
                 <details class="action-group" open>
                     <summary>Clean & Transform</summary>
@@ -116,9 +95,6 @@
                 </div>
                 <div id="status-bar" class="text-sm text-slate-600 mt-2 flex-shrink-0 p-1"></div>
             </div>
-            
-            <!-- Validation Results View -->
-            <section id="validation-results-view" class="hidden flex-grow flex flex-col overflow-hidden"></section>
         </section>
     </main>
 
@@ -127,60 +103,12 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h2 id="modal-title" class="text-xl font-bold">Configuration</h2>
-                <button data-action="close-modal" data-target="config-modal" class="modal-close-btn">&times;</button>
+                <button id="modal-close-btn" class="modal-close-btn">&times;</button>
             </div>
             <div id="modal-body" class="modal-body"></div>
             <div class="modal-footer">
-                <button data-action="close-modal" data-target="config-modal" class="btn-secondary">Cancel</button>
+                <button id="modal-cancel-btn" class="btn-secondary">Cancel</button>
                 <button id="modal-confirm-btn" class="btn-primary">Confirm</button>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Validator: Dictionary Editor Modal -->
-    <div id="dictionaryModal" class="full-screen-overlay hidden">
-        <div class="modal-content !max-w-7xl">
-            <div class="modal-header">
-                <h3 class="text-2xl font-bold text-gray-800">Define Data Dictionary Rules</h3>
-                <button data-action="close-modal" data-target="dictionaryModal" class="modal-close-btn">×</button>
-            </div>
-            <div class="modal-body">
-                <div class="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label for="builder_dictionaryName" class="label">Data Dictionary Name</label>
-                        <input type="text" id="builder_dictionaryName" class="input">
-                    </div>
-                    <div>
-                        <label for="restore-input" class="label">Restore from Backup</label>
-                        <input type="file" id="restore-input" accept=".json" class="input-file">
-                    </div>
-                </div>
-                <div id="rulesTableContainer"><table id="rulesTable" class="w-full text-sm"><thead><tr><th>Column</th><th>Rule Category</th><th>Description</th><th>Defined Rules</th><th>Add New Rule</th></tr></thead><tbody></tbody></table></div>
-            </div>
-            <div class="modal-footer">
-                <button data-action="download-pdf-dictionary" class="btn-secondary">Download PDF</button>
-                <button id="builder_saveAndCloseBtn" class="btn-primary">Save and Close</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Validator: Category Editor Modal -->
-    <div id="ruleCategoryModal" class="full-screen-overlay hidden">
-        <div class="modal-content !max-w-4xl">
-             <div class="modal-header">
-                <h3 class="text-2xl font-bold text-gray-800">Manage Rule Categories</h3>
-                <button id="categoryEditorCloseBtn" class="modal-close-btn">×</button>
-            </div>
-            <div class="modal-body">
-                <div class="flex gap-6 flex-grow min-h-0">
-                    <div class="w-1/3 flex flex-col border rounded-lg"><div class="p-2 border-b"><button data-action="add-new-category" class="w-full btn-primary text-sm !py-2">+ Add New Category</button></div><div id="ruleCategoryList" class="flex-grow overflow-y-auto"></div></div>
-                    <div id="ruleCategoryEditorContainer" class="w-2/3 p-4 bg-slate-50 rounded-lg hidden">
-                        <h4 class="text-xl font-bold mb-4" id="categoryEditorTitle"></h4>
-                        <div class="mb-4"><h5 class="font-semibold mb-2">Defined Rules</h5><div id="categoryRulesDisplay" class="flex flex-wrap gap-2 p-2 min-h-[40px] border rounded-md bg-white"></div></div>
-                        <div><h5 class="font-semibold mb-2">Add New Rule</h5><div class="flex gap-2 items-center"><select id="categoryRuleType" class="input !p-1 w-1/3"><option value="REQUIRED">REQUIRED</option> <option value="NOT REQUIRED">NOT REQUIRED</option> <option value="ALLOWED_VALUES">ALLOWED_VALUES</option> <option value="REGEX">REGEX</option> <option value="VALID_DATE">VALID_DATE</option> <option value="NO_FUTURE_DATE">NO_FUTURE_DATE</option></select><input id="categoryRuleValue" type="text" placeholder="Value (if needed)..." class="input !p-1 w-1/3"><button data-action="add-rule-to-category" class="btn-primary text-sm !px-3 !py-1">+</button></div></div>
-                        <div class="mt-auto pt-4 text-right"><button data-action="delete-category" class="btn-danger">Delete Category</button></div>
-                    </div>
-                </div>
             </div>
         </div>
     </div>
