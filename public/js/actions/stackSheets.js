@@ -1,5 +1,3 @@
-// js/actions/stackSheets.js
-
 import { state, addNewDataset } from '../state.js';
 import { showConfigModal, closeModal, showLoader, updateUI } from '../ui.js';
 
