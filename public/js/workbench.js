@@ -126,7 +126,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function showLoader(show, message = '') {
-        // In a real app, you might display the message. For now, it just controls the overlay.
         loaderOverlay.style.display = show ? 'flex' : 'none';
     }
 
@@ -135,11 +134,10 @@ document.addEventListener('DOMContentLoaded', () => {
         modalTitle.textContent = title;
         modalBody.innerHTML = content;
         configModal.style.display = 'flex';
-        // Clone and replace the confirm button to remove old event listeners
         const newConfirmBtn = modalConfirmBtn.cloneNode(true);
         modalConfirmBtn.parentNode.replaceChild(newConfirmBtn, modalConfirmBtn);
         newConfirmBtn.addEventListener('click', onConfirm);
-        modalConfirmBtn = newConfirmBtn; // Update the reference
+        modalConfirmBtn = newConfirmBtn;
     }
 
     function hideModal() { configModal.style.display = 'none'; }
@@ -428,15 +426,23 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const presetSelect = document.getElementById('csr-client-preset');
         const csrConfigDiv = document.getElementById('csr-config-div');
+        
+        // --- START OF FIX ---
         presetSelect.onchange = () => {
             const client = presetSelect.value;
             if (client) {
                 const p = presets[client];
                 document.getElementById('csr-cleanAgeCol-label').textContent = p.label;
+                
+                // Correctly loop through the preset keys and populate the input fields
                 Object.keys(p).forEach(key => {
+                    // key is 'cleanAgeCol', 'claimStatusCol', etc.
+                    // The element ID is 'csr-cleanAgeCol', 'csr-claimStatusCol', etc.
                     if (key !== 'label') {
-                        const element = document.getElementById(`csr-${key}Col`);
-                        if (element) element.value = p[key] || '';
+                        const element = document.getElementById(`csr-${key}`);
+                        if (element) {
+                            element.value = p[key] || '';
+                        }
                     }
                 });
                 csrConfigDiv.classList.remove('hidden');
@@ -444,12 +450,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 csrConfigDiv.classList.add('hidden');
             }
         };
+        // --- END OF FIX ---
     });
 
     async function runClaimStatusReport() {
         showLoader(true, 'Generating Claim Status Report...');
         
-        // Helper functions scoped to this action
         const colLetterToIndex = (letter) => {
             if (!letter || typeof letter !== 'string' || !/^[A-Z]+$/i.test(letter)) return -1;
             let col = 0; letter = letter.toUpperCase();
@@ -468,56 +474,32 @@ document.addEventListener('DOMContentLoaded', () => {
             return match ? match[2] : '';
         }
 
-        // Allow UI to update before heavy processing
         await new Promise(resolve => setTimeout(resolve, 50));
 
         try {
-            // 1. GATHER CONFIGURATION
             if (!document.getElementById('csr-client-preset').value) throw new Error("Please choose a client preset.");
             const config = {};
             const ids = ['cleanAge', 'claimStatus', 'claimNumber', 'payer', 'dsnp', 'claimType', 'totalCharges', 'notes'];
-            const columnHeaders = {};
+            
+            // Get column indexes from user input
             ids.forEach(id => {
-                const colLetter = document.getElementById(`csr-${id}Col`).value;
-                config[`${id}Index`] = colLetterToIndex(colLetter);
-                columnHeaders[id] = colLetter;
+                config[`${id}Index`] = colLetterToIndex(document.getElementById(`csr-${id}Col`).value);
             });
+
             config.dateIndices = document.getElementById('csr-dateCols').value.toUpperCase().trim().split(',').filter(c => c).map(c => colLetterToIndex(c.trim()));
             if (Object.values(config).some(val => val === -1 || (Array.isArray(val) && val.includes(-1)))) throw new Error("Invalid column letter entered.");
             const clientText = document.getElementById('csr-client-preset').options[document.getElementById('csr-client-preset').selectedIndex].text;
             
-            // 2. GET DATASETS
             const todayDS_idx = document.getElementById('csr-today-ds').value;
             const yesterdayDS_idx = document.getElementById('csr-yesterday-ds').value;
             const mainFile = state.datasets[todayDS_idx];
             const yesterdayFile = yesterdayDS_idx !== "-1" ? state.datasets[yesterdayDS_idx] : null;
             const hasYesterdayReport = !!yesterdayFile;
 
-            // Convert workbench JSON data to Array of Arrays, which the logic expects
-            const jsonToAOA = (ds) => {
-                // To get the correct column order, we must find the header for each index
-                const headerMap = {};
-                Object.keys(columnHeaders).forEach(key => {
-                    const header = ds.headers[config[`${key}Index`]];
-                    if (header) headerMap[config[`${key}Index`]] = header;
-                });
-                
-                // Construct a full header array in the original order
-                const fullHeaderRow = [...ds.headers];
-
-                const aoa = ds.data.map(row => {
-                    const rowArray = [];
-                    for (let i = 0; i < ds.headers.length; i++) {
-                       rowArray[i] = row[ds.headers[i]] ?? null;
-                    }
-                    return rowArray;
-                });
-                return [fullHeaderRow, ...aoa];
-            };
+            const jsonToAOA = (ds) => [ds.headers, ...ds.data.map(row => ds.headers.map(h => row[h] ?? null))];
             const main_aoa = jsonToAOA(mainFile);
             if (main_aoa.length < 2) throw new Error("Main report is empty or has no data.");
 
-            // 3. CALCULATE STATS
             const getStatsForAOA = (aoa, config) => {
                 const dayBuckets = { '0 - 20': 0, '21 - 29': 0, '30 - 59': 0, '60+': 0 };
                 const stats = { 'PEND': { total: 0, ...dayBuckets }, 'ONHOLD': { total: 0, ...dayBuckets }, 'MANAGEMENTREVIEW': { total: 0, ...dayBuckets }, 'HC MGMT REV': { total: 0, ...dayBuckets }, 'W9_LETTER_NEEDED': { total: 0, ...dayBuckets }, 'W9_FOLLOW_UP': { total: 0, ...dayBuckets } };
@@ -569,7 +551,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
-            // 4. PROCESS ROWS AND CREATE SHEETS
             const masterSheetName = "All Processed Data", highDollarSheetName = "High Dollar - Pat & Shelley";
             const sheetsData = { [masterSheetName]: [], [highDollarSheetName]: [] };
             
@@ -622,8 +603,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 newRow.push(ownerValue, extractDueDateFromNote(noteText));
                 sheetsData[masterSheetName].push(newRow);
 
-                // --- START OF CORRECTED LOGIC ---
-                // Independent checks to ensure claims are sorted into ALL applicable tabs.
                 if (isHighCost) {
                     sheetsData[highDollarSheetName].push(newRow);
                 }
@@ -660,10 +639,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         sheetsData[w9SheetName].push(newRow);
                     }
                 }
-                // --- END OF CORRECTED LOGIC ---
             }
             
-            // 5. BUILD AND DOWNLOAD WORKBOOK
             const newWorkbook = XLSX.utils.book_new();
             const sheetOrder = [masterSheetName, highDollarSheetName, ...Object.keys(sheetsData).filter(n => n.startsWith('W9 ')).sort(), ...Object.keys(sheetsData).filter(n => ![masterSheetName, highDollarSheetName].includes(n) && !n.startsWith('W9 ')).sort()];
             sheetOrder.forEach(sheetName => {
@@ -674,7 +651,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
             
-            // 6. GENERATE EMAIL SUMMARY AND SHOW IN MODAL
             const ageBasisText = document.getElementById('csr-cleanAgeCol-label').textContent.replace(':', '');
             const combinedMgmtRevToday = { ...todayStats['MANAGEMENTREVIEW'] };
             const hcToday = todayStats['HC MGMT REV'];
