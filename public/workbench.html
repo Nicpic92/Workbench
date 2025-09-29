@@ -10,17 +10,19 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <!-- Link to the new stylesheet -->
     <link rel="stylesheet" href="/css/workbench.css">
 </head>
-<body class="flex flex-col h-screen bg-gray-100 text-gray-800 font-sans">
+<body class="flex flex-col h-screen bg-slate-100 text-slate-800 font-sans">
 
-    <header class="bg-white shadow-sm flex-shrink-0">
+    <header class="bg-white border-b border-slate-200 flex-shrink-0">
         <div class="container mx-auto px-6 py-4 flex justify-between items-center">
-            <a href="/" class="flex items-center space-x-2">
-                <span class="text-2xl font-bold text-gray-900">Spreadsheet Simplicity</span>
+            <a href="/" class="flex items-center space-x-3">
+                <!-- You can add a logo SVG here -->
+                <span class="text-2xl font-bold text-slate-900">Spreadsheet Simplicity</span>
             </a>
             <nav class="flex items-center space-x-8">
-                <a href="/" class="text-gray-600 hover:text-indigo-600 font-medium">Home</a>
+                <a href="/" class="text-slate-600 hover:text-indigo-600 font-medium transition-colors">Home</a>
                 <a href="/workbench.html" class="text-indigo-600 font-bold">The Workbench</a>
             </nav>
         </div>
@@ -28,52 +30,49 @@
 
     <main class="flex-grow flex overflow-hidden">
         <!-- Sidebar for Actions -->
-        <aside id="sidebar" class="w-72 bg-white p-4 border-r flex flex-col flex-shrink-0 overflow-y-auto">
-            <h2 class="text-xl font-bold mb-4">Operations</h2>
-            <button id="manage-dictionaries-btn" class="w-full text-sm text-center mb-4 bg-gray-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-gray-700">Manage Dictionaries</button>
+        <aside id="sidebar" class="w-72 bg-slate-800 p-4 flex flex-col flex-shrink-0 overflow-y-auto">
+            <h2 class="text-lg font-bold text-white mb-4 px-2">Operations</h2>
+            <button id="manage-dictionaries-btn" class="w-full text-sm text-center mb-4 bg-slate-700 text-white font-semibold py-2 px-4 rounded-lg hover:bg-slate-600 transition-colors">Manage Dictionaries</button>
             
             <div id="file-manager" class="mb-4">
-                <h3 class="font-semibold text-gray-700 mb-2">1. Load Data</h3>
-                <label for="file-upload" class="w-full text-center bg-indigo-50 text-indigo-700 font-semibold py-2 px-4 rounded-md hover:bg-indigo-100 cursor-pointer block">
+                <h3 class="font-semibold text-slate-300 mb-2 text-sm px-2">1. LOAD DATA</h3>
+                <label for="file-upload" class="w-full text-center bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-500 cursor-pointer block transition-colors">
                     Upload File(s)
                 </label>
                 <input type="file" id="file-upload" accept=".xlsx, .xls, .csv" multiple class="hidden">
-                <div id="loaded-files-list" class="mt-2 text-sm space-y-1"></div>
+                <div id="loaded-files-list" class="mt-3 text-sm space-y-1"></div>
             </div>
             
             <div id="actions-container" class="hidden">
-                <h3 class="font-semibold text-gray-700 mb-2 border-t pt-4">2. Choose Action</h3>
-                <!-- Cleaning Actions -->
-                <details class="mb-2" open>
-                    <summary class="font-semibold cursor-pointer py-1">Clean & Transform</summary>
-                    <div class="pl-4 mt-2 space-y-2">
-                        <button id="action-trim-whitespace" class="action-btn">Trim Whitespace</button>
-                        <button id="action-anonymize" class="action-btn">Anonymize PII</button>
-                        <button id="action-extract-columns" class="action-btn">Extract Columns</button>
+                <h3 class="font-semibold text-slate-300 mb-2 border-t border-slate-700 pt-4 text-sm px-2">2. CHOOSE ACTION</h3>
+                <!-- Action Groups -->
+                <details class="action-group" open>
+                    <summary>Clean & Transform</summary>
+                    <div class="action-list">
+                        <button id="action-trim-whitespace" class="action-btn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M6.12 3.22a.75.75 0 010 1.06L3.94 6.5h12.12a.75.75 0 010 1.5H3.94l2.18 2.22a.75.75 0 11-1.06 1.06l-3.5-3.5a.75.75 0 010-1.06l3.5-3.5a.75.75 0 011.06 0zm7.76 13.56a.75.75 0 01-1.06 0l-3.5-3.5a.75.75 0 010-1.06l3.5-3.5a.75.75 0 111.06 1.06L11.88 12h2.18a.75.75 0 010 1.5h-2.18l2.22 2.22a.75.75 0 010 1.06z"></path></svg>Trim Whitespace</button>
+                        <button id="action-anonymize" class="action-btn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 2a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 0110 2zM10 15a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 0110 15zM10 7a3 3 0 100 6 3 3 0 000-6zM4.33 6.045a.75.75 0 01.03 1.06l-1.5 1.5a.75.75 0 01-1.06-1.06l1.5-1.5a.75.75 0 011.03-.03zm12.38-1.06a.75.75 0 011.06 0l1.5 1.5a.75.75 0 11-1.06 1.06l-1.5-1.5a.75.75 0 010-1.06zM17.715 14.33a.75.75 0 01-1.06-.03l-1.5-1.5a.75.75 0 011.06-1.06l1.5 1.5c.3.29.3.77-.03 1.06zM2.285 14.33a.75.75 0 01-.03-1.06l1.5-1.5a.75.75 0 011.06 1.06l-1.5 1.5a.75.75 0 01-1.03.03z"></path></svg>Anonymize PII</button>
+                        <button id="action-extract-columns" class="action-btn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 3.5A1.5 1.5 0 013.5 2h2.75a.75.75 0 010 1.5H3.5a.5.5 0 00-.5.5v12.5a.5.5 0 00.5.5h2.75a.75.75 0 010 1.5H3.5A1.5 1.5 0 012 16.5v-13z" clip-rule="evenodd"></path><path d="M13 2.75a.75.75 0 00-1.5 0V16a.75.75 0 001.5 0V2.75z"></path><path fill-rule="evenodd" d="M16.5 2a1.5 1.5 0 011.5 1.5v13a1.5 1.5 0 01-1.5 1.5h-2.75a.75.75 0 010-1.5h2.75a.5.5 0 00.5-.5V3.5a.5.5 0 00-.5-.5h-2.75a.75.75 0 010-1.5h2.75z" clip-rule="evenodd"></path></svg>Extract Columns</button>
                     </div>
                 </details>
-                <!-- Combining Actions -->
-                <details class="mb-2">
-                    <summary class="font-semibold cursor-pointer py-1">Combine & Merge</summary>
-                    <div class="pl-4 mt-2 space-y-2">
-                        <button id="action-stack-sheets" class="action-btn">Stack All Sheets</button>
-                        <button id="action-merge-files" class="action-btn">Merge Files (Join)</button>
+                <details class="action-group">
+                    <summary>Combine & Merge</summary>
+                     <div class="action-list">
+                        <button id="action-stack-sheets" class="action-btn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M3.5 4.5a.5.5 0 00-1 0V15a.5.5 0 00.5.5h12.5a.5.5 0 000-1H3V4.5z"></path><path d="M6 6.5A.5.5 0 016.5 6h11a.5.5 0 01.5.5v11a.5.5 0 01-.5.5h-11a.5.5 0 01-.5-.5v-11zM7 7v10h10V7H7z"></path></svg>Stack All Sheets</button>
+                        <button id="action-merge-files" class="action-btn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.5 5.25a.75.75 0 01.75-.75h2.5a.75.75 0 01.75.75v2.5a.75.75 0 01-1.5 0V6.56l-3.22 3.22a.75.75 0 11-1.06-1.06l3.22-3.22H13.25a.75.75 0 01-.75-.75z" clip-rule="evenodd"></path><path fill-rule="evenodd" d="M5.636 14.364a.75.75 0 010-1.06l4.243-4.243a.75.75 0 011.06 1.06l-4.243 4.243a.75.75 0 01-1.06 0zm-1.06-1.06a.75.75 0 01-1.06 0l-2.25-2.25a.75.75 0 010-1.061l2.25-2.25a.75.75 0 011.06 1.06L3.81 9.25l1.724 1.724a.75.75 0 010 1.06z" clip-rule="evenodd"></path></svg>Merge Files (Join)</button>
                     </div>
                 </details>
-                <!-- Analysis Actions -->
-                <details class="mb-2">
-                    <summary class="font-semibold cursor-pointer py-1">Analyze & Compare</summary>
-                    <div class="pl-4 mt-2 space-y-2">
-                        <button id="action-find-duplicates" class="action-btn">Find Duplicates</button>
-                        <button id="action-compare-sheets" class="action-btn">Compare Sheets</button>
-                        <button id="action-validate-data" class="action-btn">Validate with Dictionary</button>
+                <details class="action-group">
+                    <summary>Analyze & Compare</summary>
+                     <div class="action-list">
+                        <button id="action-find-duplicates" class="action-btn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M7 3.5A1.5 1.5 0 018.5 2h5.5a1.5 1.5 0 011.5 1.5v1a.5.5 0 001 0v-1A2.5 2.5 0 0014 1h-5.5A2.5 2.5 0 006 3.5v11A2.5 2.5 0 008.5 17h5.5a2.5 2.5 0 002.5-2.5v-1a.5.5 0 00-1 0v1a1.5 1.5 0 01-1.5 1.5h-5.5A1.5 1.5 0 017 14.5v-11z"></path><path d="M4.5 5A1.5 1.5 0 003 6.5v9A1.5 1.5 0 004.5 17h5a1.5 1.5 0 001.5-1.5v-9A1.5 1.5 0 009.5 5h-5z"></path></svg>Find Duplicates</button>
+                        <button id="action-compare-sheets" class="action-btn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 2a.75.75 0 01.75.75v12.59l3.22-3.22a.75.75 0 111.06 1.06l-4.5 4.5a.75.75 0 01-1.06 0l-4.5-4.5a.75.75 0 111.06-1.06l3.22 3.22V2.75A.75.75 0 0110 2z" clip-rule="evenodd"></path></svg>Compare Sheets</button>
+                        <button id="action-validate-data" class="action-btn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd"></path></svg>Validate with Dictionary</button>
                     </div>
                 </details>
-                 <!-- Restructure Actions -->
-                 <details class="mb-2">
-                    <summary class="font-semibold cursor-pointer py-1">Restructure</summary>
-                    <div class="pl-4 mt-2 space-y-2">
-                        <button id="action-split-file" class="action-btn">Split File by Rows</button>
+                 <details class="action-group">
+                    <summary>Restructure</summary>
+                     <div class="action-list">
+                        <button id="action-split-file" class="action-btn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"></path><path fill-rule="evenodd" d="M1.5 10a8.5 8.5 0 1117 0 8.5 8.5 0 01-17 0zM10 2.5a7.5 7.5 0 100 15 7.5 7.5 0 000-15z" clip-rule="evenodd"></path></svg>Split File by Rows</button>
                     </div>
                 </details>
             </div>
@@ -81,46 +80,46 @@
 
         <!-- Main Content Area -->
         <section class="flex-grow flex flex-col p-6 overflow-hidden">
-            <!-- Welcome / File Upload View -->
+            <!-- Welcome View -->
             <div id="welcome-view" class="flex-grow flex items-center justify-center text-center">
-                <div>
-                    <h1 class="text-4xl font-bold text-gray-800">Data Operations Workbench</h1>
-                    <p class="text-lg text-gray-600 mt-2">Upload an Excel or CSV file to begin.</p>
+                <div class="p-8">
+                    <h1 class="text-4xl font-bold text-slate-800">Data Operations Workbench</h1>
+                    <p class="text-lg text-slate-600 mt-2">Upload an Excel or CSV file using the sidebar to begin.</p>
                 </div>
             </div>
 
-            <!-- Data View (hidden initially) -->
+            <!-- Data View -->
             <div id="data-view" class="hidden flex-grow flex flex-col overflow-hidden">
                 <div class="flex justify-between items-center mb-4 flex-shrink-0">
-                    <h2 id="table-title" class="text-2xl font-bold">Your Data</h2>
-                    <button id="download-btn" class="bg-green-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-700">Download Result</button>
+                    <h2 id="table-title" class="text-2xl font-bold text-slate-900 truncate"></h2>
+                    <button id="download-btn" class="bg-green-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-700 transition-colors shadow-sm">Download Result</button>
                 </div>
-                <div id="data-table-container" class="flex-grow border rounded-lg overflow-auto bg-white">
+                <div id="data-table-container" class="flex-grow rounded-lg overflow-auto bg-white shadow-md">
                     <!-- Table will be rendered here by JavaScript -->
                 </div>
-                <div id="status-bar" class="text-sm text-gray-600 mt-2 flex-shrink-0"></div>
+                <div id="status-bar" class="text-sm text-slate-600 mt-2 flex-shrink-0 p-1"></div>
             </div>
         </section>
     </main>
 
     <!-- Generic Modal for Configurations -->
-    <div id="config-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50 p-4">
+    <div id="config-modal" class="hidden fixed inset-0 bg-slate-900 bg-opacity-60 flex items-center justify-center z-50 p-4">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
-            <div class="flex justify-between items-center p-4 border-b">
+            <div class="flex justify-between items-center p-4 border-b border-slate-200">
                 <h2 id="modal-title" class="text-xl font-bold">Configuration</h2>
-                <button id="modal-close-btn" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+                <button id="modal-close-btn" class="text-slate-500 hover:text-slate-800 text-2xl transition-colors">&times;</button>
             </div>
             <div id="modal-body" class="p-6 overflow-y-auto">
                 <!-- Modal content goes here -->
             </div>
-            <div class="p-4 border-t bg-gray-50 flex justify-end space-x-3">
-                <button id="modal-cancel-btn" class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-md hover:bg-gray-300">Cancel</button>
-                <button id="modal-confirm-btn" class="bg-indigo-600 text-white font-bold py-2 px-6 rounded-md hover:bg-indigo-700">Confirm</button>
+            <div class="p-4 border-t border-slate-200 bg-slate-50 flex justify-end space-x-3">
+                <button id="modal-cancel-btn" class="bg-slate-200 text-slate-800 font-semibold py-2 px-4 rounded-md hover:bg-slate-300 transition-colors">Cancel</button>
+                <button id="modal-confirm-btn" class="bg-indigo-600 text-white font-bold py-2 px-6 rounded-md hover:bg-indigo-700 transition-colors">Confirm</button>
             </div>
         </div>
     </div>
     
-    <div id="loader-overlay" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50">
+    <div id="loader-overlay" class="hidden fixed inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50">
         <div class="loader"></div>
     </div>
     
