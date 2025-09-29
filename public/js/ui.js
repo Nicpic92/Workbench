@@ -1,6 +1,6 @@
 // js/ui.js
 
-import { state, getActiveDataset, addNewDataset } from './state.js';
+import { state, getActiveDataset } from './state.js';
 
 // Get all DOM elements once
 const welcomeView = document.getElementById('welcome-view');
