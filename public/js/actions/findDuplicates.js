@@ -1,5 +1,3 @@
-// js/actions/findDuplicates.js
-
 import { getActiveDataset, addNewDataset } from '../state.js';
 import { showConfigModal, closeModal, showLoader, updateUI, generateColumnCheckboxes } from '../ui.js';
 
