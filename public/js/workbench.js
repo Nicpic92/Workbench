@@ -106,24 +106,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderDataTable(data, headers) {
         const table = document.createElement('table');
-        table.className = 'min-w-full divide-y divide-gray-200';
         const thead = table.createTHead();
-        thead.className = 'bg-gray-50';
         const headerRow = thead.insertRow();
         headers.forEach(h => {
             const th = document.createElement('th');
-            th.className = 'px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50';
             th.textContent = h;
             headerRow.appendChild(th);
         });
         const tbody = table.createTBody();
-        tbody.className = 'bg-white divide-y divide-gray-200';
         data.slice(0, 200).forEach(row => {
             const tr = tbody.insertRow();
-            tr.className = 'hover:bg-gray-50';
             headers.forEach(header => {
                  const td = tr.insertCell();
-                 td.className = 'px-4 py-2 whitespace-nowrap text-sm text-gray-700';
                  td.textContent = row[header] ?? '';
             });
         });
@@ -132,6 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function showLoader(show, message = '') {
+        // In a real app, you might display the message. For now, it just controls the overlay.
         loaderOverlay.style.display = show ? 'flex' : 'none';
     }
 
@@ -140,10 +135,11 @@ document.addEventListener('DOMContentLoaded', () => {
         modalTitle.textContent = title;
         modalBody.innerHTML = content;
         configModal.style.display = 'flex';
+        // Clone and replace the confirm button to remove old event listeners
         const newConfirmBtn = modalConfirmBtn.cloneNode(true);
         modalConfirmBtn.parentNode.replaceChild(newConfirmBtn, modalConfirmBtn);
         newConfirmBtn.addEventListener('click', onConfirm);
-        modalConfirmBtn = newConfirmBtn;
+        modalConfirmBtn = newConfirmBtn; // Update the reference
     }
 
     function hideModal() { configModal.style.display = 'none'; }
@@ -391,17 +387,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // --- CLAIM STATUS REPORT MODULE ---
+    // --- CLAIM STATUS REPORT MODULE (START) ---
     document.getElementById('action-claim-status-report').addEventListener('click', () => {
         if (state.datasets.length < 1) return alert("Please upload at least one report file.");
+        
         const presets = {
             solis: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', dsnpCol: 'X', claimTypeCol: 'B', totalChargesCol: 'S', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
             liberty: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
             secur: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', dsnpCol: 'Y', claimTypeCol: 'D', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
-            // ******** THE FIX IS HERE ********
-            // Added the new CSH client by copying the Liberty configuration.
             csh: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' }
         };
+
         let content = `
             <p class="text-sm mb-4">Generates the multi-tab daily action report and summary email text based on the latest logic.</p>
             <div class="grid grid-cols-2 gap-4 mb-4">
@@ -427,7 +423,9 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         `;
         showModal('Daily Claim Status Report', content, runClaimStatusReport);
+        
         document.getElementById('csr-yesterday-ds').innerHTML = `<option value="-1">-- None --</option>` + state.datasets.map((ds, i) => `<option value="${i}">${ds.name}</option>`).join('');
+        
         const presetSelect = document.getElementById('csr-client-preset');
         const csrConfigDiv = document.getElementById('csr-config-div');
         presetSelect.onchange = () => {
@@ -435,13 +433,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (client) {
                 const p = presets[client];
                 document.getElementById('csr-cleanAgeCol-label').textContent = p.label;
-                const basePresetKeys = Object.keys(presets.solis); 
-                basePresetKeys.forEach(key => {
+                Object.keys(p).forEach(key => {
                     if (key !== 'label') {
-                        const element = document.getElementById(`csr-${key}`);
-                        if (element) {
-                            element.value = p[key] || '';
-                        }
+                        const element = document.getElementById(`csr-${key}Col`);
+                        if (element) element.value = p[key] || '';
                     }
                 });
                 csrConfigDiv.classList.remove('hidden');
@@ -454,6 +449,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function runClaimStatusReport() {
         showLoader(true, 'Generating Claim Status Report...');
         
+        // Helper functions scoped to this action
         const colLetterToIndex = (letter) => {
             if (!letter || typeof letter !== 'string' || !/^[A-Z]+$/i.test(letter)) return -1;
             let col = 0; letter = letter.toUpperCase();
@@ -472,27 +468,56 @@ document.addEventListener('DOMContentLoaded', () => {
             return match ? match[2] : '';
         }
 
+        // Allow UI to update before heavy processing
         await new Promise(resolve => setTimeout(resolve, 50));
 
         try {
+            // 1. GATHER CONFIGURATION
             if (!document.getElementById('csr-client-preset').value) throw new Error("Please choose a client preset.");
             const config = {};
             const ids = ['cleanAge', 'claimStatus', 'claimNumber', 'payer', 'dsnp', 'claimType', 'totalCharges', 'notes'];
-            ids.forEach(id => config[`${id}Index`] = colLetterToIndex(document.getElementById(`csr-${id}Col`).value));
+            const columnHeaders = {};
+            ids.forEach(id => {
+                const colLetter = document.getElementById(`csr-${id}Col`).value;
+                config[`${id}Index`] = colLetterToIndex(colLetter);
+                columnHeaders[id] = colLetter;
+            });
             config.dateIndices = document.getElementById('csr-dateCols').value.toUpperCase().trim().split(',').filter(c => c).map(c => colLetterToIndex(c.trim()));
             if (Object.values(config).some(val => val === -1 || (Array.isArray(val) && val.includes(-1)))) throw new Error("Invalid column letter entered.");
             const clientText = document.getElementById('csr-client-preset').options[document.getElementById('csr-client-preset').selectedIndex].text;
             
+            // 2. GET DATASETS
             const todayDS_idx = document.getElementById('csr-today-ds').value;
             const yesterdayDS_idx = document.getElementById('csr-yesterday-ds').value;
             const mainFile = state.datasets[todayDS_idx];
             const yesterdayFile = yesterdayDS_idx !== "-1" ? state.datasets[yesterdayDS_idx] : null;
             const hasYesterdayReport = !!yesterdayFile;
 
-            const jsonToAOA = (ds) => [ds.headers, ...ds.data.map(row => ds.headers.map(h => row[h] ?? null))];
+            // Convert workbench JSON data to Array of Arrays, which the logic expects
+            const jsonToAOA = (ds) => {
+                // To get the correct column order, we must find the header for each index
+                const headerMap = {};
+                Object.keys(columnHeaders).forEach(key => {
+                    const header = ds.headers[config[`${key}Index`]];
+                    if (header) headerMap[config[`${key}Index`]] = header;
+                });
+                
+                // Construct a full header array in the original order
+                const fullHeaderRow = [...ds.headers];
+
+                const aoa = ds.data.map(row => {
+                    const rowArray = [];
+                    for (let i = 0; i < ds.headers.length; i++) {
+                       rowArray[i] = row[ds.headers[i]] ?? null;
+                    }
+                    return rowArray;
+                });
+                return [fullHeaderRow, ...aoa];
+            };
             const main_aoa = jsonToAOA(mainFile);
             if (main_aoa.length < 2) throw new Error("Main report is empty or has no data.");
 
+            // 3. CALCULATE STATS
             const getStatsForAOA = (aoa, config) => {
                 const dayBuckets = { '0 - 20': 0, '21 - 29': 0, '30 - 59': 0, '60+': 0 };
                 const stats = { 'PEND': { total: 0, ...dayBuckets }, 'ONHOLD': { total: 0, ...dayBuckets }, 'MANAGEMENTREVIEW': { total: 0, ...dayBuckets }, 'HC MGMT REV': { total: 0, ...dayBuckets }, 'W9_LETTER_NEEDED': { total: 0, ...dayBuckets }, 'W9_FOLLOW_UP': { total: 0, ...dayBuckets } };
@@ -544,10 +569,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
+            // 4. PROCESS ROWS AND CREATE SHEETS
             const masterSheetName = "All Processed Data", highDollarSheetName = "High Dollar - Pat & Shelley";
             const sheetsData = { [masterSheetName]: [], [highDollarSheetName]: [] };
             
-            const headerRow = main_aoa[0], newHeader = [...headerRow];
+            const headerRow = main_aoa[0];
+            const newHeader = [...headerRow];
             if (hasYesterdayReport) newHeader.splice(config.claimStatusIndex, 0, 'Yest. Claim State');
             let daysInsertIndex = config.cleanAgeIndex + 1;
             if (hasYesterdayReport && config.cleanAgeIndex >= config.claimStatusIndex) daysInsertIndex++; 
@@ -560,6 +587,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (originalRow.every(cell => cell === null)) continue;
                 let claimState = String(originalRow[config.claimStatusIndex] || '').trim().toUpperCase();
                 if (claimState === 'PREBATCH') continue;
+
                 const newRow = [...originalRow];
                 
                 if (hasYesterdayReport) {
@@ -594,6 +622,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 newRow.push(ownerValue, extractDueDateFromNote(noteText));
                 sheetsData[masterSheetName].push(newRow);
 
+                // --- START OF CORRECTED LOGIC ---
+                // Independent checks to ensure claims are sorted into ALL applicable tabs.
                 if (isHighCost) {
                     sheetsData[highDollarSheetName].push(newRow);
                 }
@@ -630,8 +660,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         sheetsData[w9SheetName].push(newRow);
                     }
                 }
+                // --- END OF CORRECTED LOGIC ---
             }
             
+            // 5. BUILD AND DOWNLOAD WORKBOOK
             const newWorkbook = XLSX.utils.book_new();
             const sheetOrder = [masterSheetName, highDollarSheetName, ...Object.keys(sheetsData).filter(n => n.startsWith('W9 ')).sort(), ...Object.keys(sheetsData).filter(n => ![masterSheetName, highDollarSheetName].includes(n) && !n.startsWith('W9 ')).sort()];
             sheetOrder.forEach(sheetName => {
@@ -642,6 +674,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
             
+            // 6. GENERATE EMAIL SUMMARY AND SHOW IN MODAL
             const ageBasisText = document.getElementById('csr-cleanAgeCol-label').textContent.replace(':', '');
             const combinedMgmtRevToday = { ...todayStats['MANAGEMENTREVIEW'] };
             const hcToday = todayStats['HC MGMT REV'];
@@ -666,7 +699,10 @@ document.addEventListener('DOMContentLoaded', () => {
             modalTitle.textContent = 'Report Generated!';
             modalBody.innerHTML = `<p class="mb-4">Your file is downloading automatically. You can copy the summary email text below.</p><textarea class="w-full h-64 p-2 border rounded font-mono text-sm">${emailBody.trim()}</textarea>`;
             modalConfirmBtn.textContent = 'Close';
-            modalConfirmBtn.onclick = hideModal;
+            const newConfirmBtn = modalConfirmBtn.cloneNode(true);
+            modalConfirmBtn.parentNode.replaceChild(newConfirmBtn, modalConfirmBtn);
+            newConfirmBtn.onclick = hideModal;
+            modalConfirmBtn = newConfirmBtn;
             
             XLSX.writeFile(newWorkbook, `${clientText} Daily Action Report for ${getFormattedDate()}.xlsx`);
             showLoader(false);
@@ -678,6 +714,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (configModal.style.display === 'flex') hideModal();
         }
     }
+    // --- CLAIM STATUS REPORT MODULE (END) ---
     
     // --- DOWNLOADING ---
     function handleDownload() {
