@@ -3,6 +3,8 @@
 import { state } from './state.js';
 import { showLoader } from './ui.js';
 
+// --- START OF FIX ---
+// The main function now correctly uses Promise.all to wait for all files to finish processing.
 export async function handleFileUpload(event) {
     const files = Array.from(event.target.files);
     if (files.length === 0) return;
@@ -10,37 +12,45 @@ export async function handleFileUpload(event) {
     showLoader(true);
     state.datasets = []; // Clear previous datasets
     
-    for (const file of files) {
-        try {
-            const data = await readFile(file);
-            const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+    try {
+        const allFileContents = await Promise.all(files.map(file => readFile(file)));
 
-            if (workbook.SheetNames.length === 1) {
-                const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-                state.datasets.push({ 
-                    name: file.name, 
-                    data: jsonData, 
-                    headers: Object.keys(jsonData[0] || {}) 
-                });
-            } else {
-                 workbook.SheetNames.forEach(sheetName => {
-                    const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+        allFileContents.forEach((fileContent, index) => {
+            const file = files[index];
+            try {
+                const workbook = XLSX.read(fileContent, { type: 'array', cellDates: true });
+
+                if (workbook.SheetNames.length === 1) {
+                    const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
                     state.datasets.push({ 
-                        name: `${file.name} - ${sheetName}`, 
+                        name: file.name, 
                         data: jsonData, 
                         headers: Object.keys(jsonData[0] || {}) 
                     });
-                });
+                } else {
+                     workbook.SheetNames.forEach(sheetName => {
+                        const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+                        state.datasets.push({ 
+                            name: `${file.name} - ${sheetName}`, 
+                            data: jsonData, 
+                            headers: Object.keys(jsonData[0] || {}) 
+                        });
+                    });
+                }
+            } catch (error) {
+                console.error("Error parsing workbook:", file.name, error);
+                alert(`Could not parse the Excel file: ${file.name}`);
             }
-        } catch (error) {
-            console.error("Error processing file:", file.name, error);
-            alert(`Could not process file: ${file.name}`);
-        }
+        });
+    } catch (error) {
+        console.error("Error reading one or more files:", error);
+        alert("There was an error reading one of the files. Please ensure it is not corrupted.");
     }
     
     state.activeDatasetIndex = 0;
     showLoader(false);
 }
+// --- END OF FIX ---
 
 function readFile(file) {
     return new Promise((resolve, reject) => {
