@@ -114,43 +114,20 @@ document.addEventListener('DOMContentLoaded', () => {
         dataView.classList.remove('hidden');
     }
 
-    // --- START OF FIX: New function to format cell values ---
     function formatCellValue(value) {
         if (value === null || value === undefined) {
             return '';
         }
-
-        // 1. Check if the value is already a JavaScript Date object.
-        // This happens when 'cellDates: true' successfully parses a date.
         if (value instanceof Date) {
-            if (isNaN(value.getTime())) {
-                return String(value); // Return invalid date string as is
-            }
-            // Format to MM/DD/YYYY
-            const month = String(value.getMonth() + 1).padStart(2, '0');
-            const day = String(value.getDate()).padStart(2, '0');
-            const year = value.getFullYear();
+            if (isNaN(value.getTime())) return String(value);
+            // Format to MM/DD/YYYY, using UTC methods to prevent timezone shifts
+            const month = String(value.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(value.getUTCDate()).padStart(2, '0');
+            const year = value.getUTCFullYear();
             return `${month}/${day}/${year}`;
         }
-
-        // 2. Fallback: Check if it's a number that looks like an Excel serial date.
-        // This catches cases where the library might fail to parse the date.
-        // Excel serial for 1/1/1970 is 25569. We check for numbers in a reasonable range.
-        if (typeof value === 'number' && value > 25569 && value < 100000) {
-            // Formula to convert Excel serial date to a JS Date object
-            const date = new Date((value - 25569) * 86400 * 1000);
-            if (date instanceof Date && !isNaN(date.getTime())) {
-                const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-                const day = String(date.getUTCDate()).padStart(2, '0');
-                const year = date.getUTCFullYear();
-                return `${month}/${day}/${year}`;
-            }
-        }
-
-        // 3. If it's not a date, return the value as a string.
         return String(value);
     }
-    // --- END OF FIX ---
 
     function renderDataTable(data, headers) {
         const table = document.createElement('table');
@@ -166,10 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const tr = tbody.insertRow();
             headers.forEach(header => {
                  const td = tr.insertCell();
-                 // --- MODIFIED LINE ---
-                 // Use the new formatting function for every cell
                  td.textContent = formatCellValue(row[header]);
-                 // --- END MODIFIED LINE ---
             });
         });
         tableContainer.innerHTML = '';
@@ -221,7 +195,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const types = [{ v: 'NONE', l: 'Do Not Anonymize' }, { v: 'FULL_NAME', l: 'Full Name' }, { v: 'FIRST_NAME', l: 'First Name' }, { v: 'LAST_NAME', l: 'Last Name' }, { v: 'EMAIL', l: 'Email' }, { v: 'PHONE', l: 'Phone' }];
             const content = activeDS.headers.map(h => `<div class="grid grid-cols-2 gap-4 items-center border-b pb-2 mb-2"><label class="font-semibold truncate" title="${h}">${h}</label><select data-header="${h}" class="column-mapper w-full p-2 border rounded">${types.map(t => `<option value="${t.v}">${t.l}</option>`).join('')}</select></div>`).join('');
             showConfigModal('Anonymize Personal Information', content, () => {
-                const mappings = Array.from(document.querySelectorAll('.column-mapper')).filter(s => s.value !== 'NONE').map(s => ({ header: s.dataset.header, type: s.value }));
+                const mappings = Array.from(configModal.querySelectorAll('.column-mapper')).filter(s => s.value !== 'NONE').map(s => ({ header: s.dataset.header, type: s.value }));
                 if (mappings.length === 0) return alert('Please select at least one column to anonymize.');
                 showLoader(true);
                 setTimeout(() => {
@@ -244,11 +218,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!activeDS) return alert("Please load a file first.");
             const content = `<p class="text-sm mb-4">Select columns to keep.</p><div class="space-y-2 max-h-96 overflow-y-auto">${generateColumnCheckboxes(activeDS.headers)}</div>`;
             showConfigModal('Extract Columns', content, () => {
-                const selected = Array.from(document.querySelectorAll('#modal-body input:checked')).map(cb => cb.dataset.columnName);
+                const selected = Array.from(configModal.querySelectorAll('input:checked')).map(cb => cb.dataset.columnName);
                 if (selected.length === 0) return alert('Please select at least one column.');
                 showLoader(true);
                 setTimeout(() => {
-                    const newData = activeDS.data.map(row => selected.reduce((obj, key) => (obj[key] = row[key], obj), {}));
+                    const newData = activeDS.data.map(row => selected.reduce((obj, key) => { if(row.hasOwnProperty(key)) obj[key] = row[key]; return obj; }, {}));
                     addNewDataset(`Extracted - ${activeDS.name}`, newData, selected);
                     showLoader(false); closeModal('config-modal');
                 }, 50);
@@ -290,8 +264,8 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             const populateKeys = () => { ['1', '2'].forEach(n => { const ds_idx = document.getElementById(`config-ds${n}`).value; document.getElementById(`config-key${n}`).innerHTML = state.datasets[ds_idx].headers.map(h => `<option value="${h}">${h}</option>`).join(''); }); };
             populateKeys();
-            document.getElementById('config-ds1').onchange = populateKeys;
-            document.getElementById('config-ds2').onchange = populateKeys;
+            configModal.querySelector('#config-ds1').onchange = populateKeys;
+            configModal.querySelector('#config-ds2').onchange = populateKeys;
         });
 
         document.getElementById('action-find-duplicates').addEventListener('click', () => {
@@ -299,7 +273,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!activeDS) return alert("Please load a file first.");
             const content = `<p class="text-sm mb-4">Select columns to check for duplicates.</p><div class="space-y-2 max-h-96 overflow-y-auto">${generateColumnCheckboxes(activeDS.headers)}</div>`;
             showConfigModal('Find Duplicates', content, () => {
-                const selected = Array.from(document.querySelectorAll('#modal-body input:checked')).map(cb => cb.dataset.columnName);
+                const selected = Array.from(configModal.querySelectorAll('input:checked')).map(cb => cb.dataset.columnName);
                 if (selected.length === 0) return alert('Select at least one column.');
                 showLoader(true);
                 setTimeout(() => {
@@ -352,8 +326,8 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             const populateKeys = () => { ['1', '2'].forEach(n => { const ds_idx = document.getElementById(`config-ds${n}`).value; document.getElementById(`config-key${n}`).innerHTML = state.datasets[ds_idx].headers.map(h => `<option value="${h}">${h}</option>`).join(''); }); };
             populateKeys();
-            document.getElementById('config-ds1').onchange = populateKeys;
-            document.getElementById('config-ds2').onchange = populateKeys;
+            configModal.querySelector('#config-ds1').onchange = populateKeys;
+            configModal.querySelector('#config-ds2').onchange = populateKeys;
         });
 
         document.getElementById('action-split-file').addEventListener('click', () => {
@@ -382,21 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!activeDataset) return;
         showLoader(true);
         setTimeout(() => {
-            // Create a temporary copy of the data to format dates for export
-            const exportData = activeDataset.data.map(row => {
-                const newRow = {};
-                for (const key in row) {
-                    const value = row[key];
-                    if (value instanceof Date) {
-                        // Format dates specifically for Excel readability
-                        newRow[key] = new Date(Date.UTC(value.getFullYear(), value.getMonth(), value.getDate()));
-                    } else {
-                        newRow[key] = value;
-                    }
-                }
-                return newRow;
-            });
-            const ws = XLSX.utils.json_to_sheet(exportData);
+            const ws = XLSX.utils.json_to_sheet(activeDataset.data);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Result");
             XLSX.writeFile(wb, `Processed_${activeDataset.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.xlsx`);
