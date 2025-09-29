@@ -22,29 +22,51 @@ body {
 .input-file { @apply mt-1 block w-full text-sm text-slate-500 border border-slate-300 rounded-lg cursor-pointer bg-slate-50 file:mr-4 file:py-2 file:px-4 file:rounded-l-lg file:border-0 file:bg-slate-200 hover:file:bg-slate-300; }
 
 /* --- Sidebar Styling --- */
-#sidebar { -ms-overflow-style: none; scrollbar-width: none; }
-#sidebar::-webkit-scrollbar { display: none; }
+#sidebar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+}
+#sidebar::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, and Opera */
+}
 
-/* Custom Accordion */
+/* Custom Accordion Styling */
 .action-group summary {
     display: flex;
     align-items: center;
     padding: 8px;
     border-radius: 6px;
     font-weight: 600;
-    color: #475569; /* slate-600 */
+    color: #cbd5e1; /* slate-300 */
     cursor: pointer;
     transition: background-color 0.2s;
-    list-style: none;
+    list-style: none; /* Remove default marker */
 }
-.action-group summary:hover { background-color: #f1f5f9; /* slate-100 */ }
-.action-group summary::-webkit-details-marker { display: none; }
-.action-group summary::before { content: '►'; font-size: 0.6em; margin-right: 10px; color: #94a3b8; transition: transform 0.2s; }
-.action-group[open] > summary::before { transform: rotate(90deg); }
+.action-group summary:hover {
+    background-color: #334155; /* slate-700 */
+}
+.action-group summary::-webkit-details-marker {
+    display: none; /* Hide Safari arrow */
+}
+.action-group summary::before {
+    content: '►';
+    font-size: 0.6em;
+    margin-right: 10px;
+    transition: transform 0.2s;
+}
+.action-group[open] > summary::before {
+    transform: rotate(90deg);
+}
 
-.action-list { padding-left: 16px; margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.action-list {
+    padding-left: 16px;
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
 
-/* Action buttons in sidebar */
+/* Action buttons in the sidebar */
 .action-btn {
     display: flex;
     align-items: center;
@@ -54,22 +76,28 @@ body {
     padding: 8px 12px;
     border-radius: 6px;
     background-color: transparent;
-    color: #475569; /* slate-600 */
+    color: #94a3b8; /* slate-400 */
     transition: background-color 0.2s, color 0.2s;
     font-size: 0.9em;
-    font-weight: 500;
 }
-.action-btn:hover { background-color: #f1f5f9; /* slate-100 */ color: #1e293b; /* slate-800 */ }
-.action-btn .icon { color: #94a3b8; /* slate-400 */ }
-.action-btn:hover .icon { color: #475569; /* slate-600 */ }
+.action-btn:hover {
+    background-color: #334155; /* slate-700 */
+    color: #f1f5f9; /* slate-100 */
+}
+.action-btn svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
 
 /* Loaded file list items */
 #loaded-files-list .loaded-file-item {
-    @apply p-2 rounded-md cursor-pointer text-sm transition-colors text-slate-700 hover:bg-slate-200;
+    @apply p-2 rounded-md cursor-pointer text-sm transition-colors text-slate-300 hover:bg-slate-700;
 }
 #loaded-files-list .loaded-file-item.active {
-    @apply bg-blue-600 text-white font-bold hover:bg-blue-600;
+    @apply bg-indigo-600 text-white font-bold hover:bg-indigo-600;
 }
+
 
 /* --- Data Table Styling --- */
 #data-table-container table { width: 100%; border-collapse: collapse; }
@@ -101,4 +129,4 @@ textarea.description-input { resize: vertical; min-height: 38px; overflow-y: hid
 
 /* --- Loader Animation --- */
 .loader { border: 5px solid #e2e8f0; border-top: 5px solid #4f46e5; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
-@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }```
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
