@@ -1,25 +1,36 @@
 // js/main.js
 
 import { state } from './state.js';
-import { updateUI } from './ui.js';
+import { updateUI, handleDownload } from './ui.js';
 import { handleFileUpload } from './fileHandler.js';
 
 // Import initializers from every action
 import { initializeAnonymizeAction } from './actions/anonymize.js';
 import { initializeTrimWhitespaceAction } from './actions/trimWhitespace.js';
-// ... import all other action initializers
+import { initializeExtractColumnsAction } from './actions/extractColumns.js';
+import { initializeStackSheetsAction } from './actions/stackSheets.js';
+import { initializeMergeFilesAction } from './actions/mergeFiles.js';
+import { initializeFindDuplicatesAction } from './actions/findDuplicates.js';
+import { initializeCompareSheetsAction } from './actions/compareSheets.js';
+import { initializeSplitFileAction } from './actions/splitFile.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize core functionality
     document.getElementById('file-upload').addEventListener('change', async (event) => {
-        await handleFileUpload(event, state); // Pass state to the handler
+        await handleFileUpload(event); // state is imported directly in fileHandler
         updateUI(); // Update UI after files are loaded
     });
+    document.getElementById('download-btn').addEventListener('click', handleDownload);
 
     // Initialize all the individual actions
-    initializeAnonymizeAction();
     initializeTrimWhitespaceAction();
-    // ... initialize all other actions
+    initializeAnonymizeAction();
+    initializeExtractColumnsAction();
+    initializeStackSheetsAction();
+    initializeMergeFilesAction();
+    initializeFindDuplicatesAction();
+    initializeCompareSheetsAction();
+    initializeSplitFileAction();
 
     // Initial UI render
     updateUI();
