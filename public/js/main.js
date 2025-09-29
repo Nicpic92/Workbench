@@ -1,6 +1,5 @@
 // js/main.js
 
-import { state } from './state.js';
 import { updateUI, handleDownload } from './ui.js';
 import { handleFileUpload } from './fileHandler.js';
 
@@ -17,7 +16,7 @@ import { initializeSplitFileAction } from './actions/splitFile.js';
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize core functionality
     document.getElementById('file-upload').addEventListener('change', async (event) => {
-        await handleFileUpload(event); // state is imported directly in fileHandler
+        await handleFileUpload(event);
         updateUI(); // Update UI after files are loaded
     });
     document.getElementById('download-btn').addEventListener('click', handleDownload);
