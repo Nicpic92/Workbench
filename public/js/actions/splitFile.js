@@ -1,5 +1,3 @@
-// js/actions/splitFile.js
-
 import { getActiveDataset } from '../state.js';
 import { showConfigModal, closeModal, showLoader } from '../ui.js';
 
