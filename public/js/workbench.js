@@ -40,7 +40,6 @@ document.addEventListener('DOMContentLoaded', () => {
         for (const file of files) {
             try {
                 const data = await readFile(file);
-                // The 'cellDates: true' option is crucial for telling the library to parse dates
                 const workbook = XLSX.read(data, { type: 'array', cellDates: true });
                 if (workbook.SheetNames.length === 1) {
                     const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
@@ -115,12 +114,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function formatCellValue(value) {
-        if (value === null || value === undefined) {
-            return '';
-        }
+        if (value === null || value === undefined) return '';
         if (value instanceof Date) {
             if (isNaN(value.getTime())) return String(value);
-            // Format to MM/DD/YYYY, using UTC methods to prevent timezone shifts
             const month = String(value.getUTCMonth() + 1).padStart(2, '0');
             const day = String(value.getUTCDate()).padStart(2, '0');
             const year = value.getUTCFullYear();
@@ -189,14 +185,19 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
+        // --- START OF FIX ---
+        // This function now correctly uses the showConfigModal system.
         document.getElementById('action-anonymize').addEventListener('click', () => {
             const activeDS = getActiveDataset();
             if (!activeDS) return alert("Please load a file first.");
             const types = [{ v: 'NONE', l: 'Do Not Anonymize' }, { v: 'FULL_NAME', l: 'Full Name' }, { v: 'FIRST_NAME', l: 'First Name' }, { v: 'LAST_NAME', l: 'Last Name' }, { v: 'EMAIL', l: 'Email' }, { v: 'PHONE', l: 'Phone' }];
-            const content = activeDS.headers.map(h => `<div class="grid grid-cols-2 gap-4 items-center border-b pb-2 mb-2"><label class="font-semibold truncate" title="${h}">${h}</label><select data-header="${h}" class="column-mapper w-full p-2 border rounded">${types.map(t => `<option value="${t.v}">${t.l}</option>`).join('')}</select></div>`).join('');
+            const content = `<div class="space-y-3">${activeDS.headers.map(h => `<div class="grid grid-cols-2 gap-4 items-center"><label class="font-semibold truncate" title="${h}">${h}</label><select data-header="${h}" class="column-mapper w-full p-2 border rounded">${types.map(t => `<option value="${t.v}">${t.l}</option>`).join('')}</select></div>`).join('')}</div>`;
+            
             showConfigModal('Anonymize Personal Information', content, () => {
+                // IMPORTANT: Query from inside the modal so we don't grab other elements on the page
                 const mappings = Array.from(configModal.querySelectorAll('.column-mapper')).filter(s => s.value !== 'NONE').map(s => ({ header: s.dataset.header, type: s.value }));
                 if (mappings.length === 0) return alert('Please select at least one column to anonymize.');
+
                 showLoader(true);
                 setTimeout(() => {
                     const fake = { FIRST: ['Alex', 'Jordan', 'Casey', 'Taylor'], LAST: ['Smith', 'Jones', 'Williams', 'Brown'], FULL: () => `${fake.FIRST[Math.floor(Math.random()*4)]} ${fake.LAST[Math.floor(Math.random()*4)]}`, EMAIL: () => `user${Math.floor(1000+Math.random()*9000)}@example.com`, PHONE: () => `(555) ${Math.floor(100+Math.random()*900)}-${Math.floor(1000+Math.random()*9000)}` };
@@ -212,6 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }, 50);
             });
         });
+        // --- END OF FIX ---
 
         document.getElementById('action-extract-columns').addEventListener('click', () => {
             const activeDS = getActiveDataset();
