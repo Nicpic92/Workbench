@@ -10,44 +10,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-    <style>
-        /* A simple CSS loader for the overlay */
-        .loader {
-            border: 8px solid #f3f3f3; /* Light grey */
-            border-top: 8px solid #3498db; /* Blue */
-            border-radius: 50%;
-            width: 60px;
-            height: 60px;
-            animation: spin 2s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        .action-btn {
-            display: block;
-            width: 100%;
-            text-align: left;
-            padding: 8px 12px;
-            border-radius: 4px;
-            background-color: #f8f9fa;
-            color: #334155;
-            font-size: 14px;
-            transition: background-color 0.2s;
-        }
-        .action-btn:hover {
-            background-color: #e2e8f0;
-        }
-        /* Ensure table header is sticky */
-        #data-table-container {
-            position: relative;
-        }
-        #data-table-container th {
-            position: sticky;
-            top: 0;
-            z-index: 10;
-        }
-    </style>
+    <link rel="stylesheet" href="/css/workbench.css">
 </head>
 <body class="flex flex-col h-screen bg-gray-100 text-gray-800 font-sans">
 
