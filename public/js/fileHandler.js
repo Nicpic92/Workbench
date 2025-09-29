@@ -3,8 +3,6 @@
 import { state } from './state.js';
 import { showLoader } from './ui.js';
 
-// --- START OF FIX ---
-// The main function now correctly uses Promise.all to wait for all files to finish processing.
 export async function handleFileUpload(event) {
     const files = Array.from(event.target.files);
     if (files.length === 0) return;
@@ -50,7 +48,6 @@ export async function handleFileUpload(event) {
     state.activeDatasetIndex = 0;
     showLoader(false);
 }
-// --- END OF FIX ---
 
 function readFile(file) {
     return new Promise((resolve, reject) => {
