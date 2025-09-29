@@ -40,6 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (const file of files) {
             try {
                 const data = await readFile(file);
+                // The 'cellDates: true' option is crucial for telling the library to parse dates
                 const workbook = XLSX.read(data, { type: 'array', cellDates: true });
                 if (workbook.SheetNames.length === 1) {
                     const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
@@ -113,6 +114,44 @@ document.addEventListener('DOMContentLoaded', () => {
         dataView.classList.remove('hidden');
     }
 
+    // --- START OF FIX: New function to format cell values ---
+    function formatCellValue(value) {
+        if (value === null || value === undefined) {
+            return '';
+        }
+
+        // 1. Check if the value is already a JavaScript Date object.
+        // This happens when 'cellDates: true' successfully parses a date.
+        if (value instanceof Date) {
+            if (isNaN(value.getTime())) {
+                return String(value); // Return invalid date string as is
+            }
+            // Format to MM/DD/YYYY
+            const month = String(value.getMonth() + 1).padStart(2, '0');
+            const day = String(value.getDate()).padStart(2, '0');
+            const year = value.getFullYear();
+            return `${month}/${day}/${year}`;
+        }
+
+        // 2. Fallback: Check if it's a number that looks like an Excel serial date.
+        // This catches cases where the library might fail to parse the date.
+        // Excel serial for 1/1/1970 is 25569. We check for numbers in a reasonable range.
+        if (typeof value === 'number' && value > 25569 && value < 100000) {
+            // Formula to convert Excel serial date to a JS Date object
+            const date = new Date((value - 25569) * 86400 * 1000);
+            if (date instanceof Date && !isNaN(date.getTime())) {
+                const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+                const day = String(date.getUTCDate()).padStart(2, '0');
+                const year = date.getUTCFullYear();
+                return `${month}/${day}/${year}`;
+            }
+        }
+
+        // 3. If it's not a date, return the value as a string.
+        return String(value);
+    }
+    // --- END OF FIX ---
+
     function renderDataTable(data, headers) {
         const table = document.createElement('table');
         const thead = table.createTHead();
@@ -127,7 +166,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const tr = tbody.insertRow();
             headers.forEach(header => {
                  const td = tr.insertCell();
-                 td.textContent = row[header] ?? '';
+                 // --- MODIFIED LINE ---
+                 // Use the new formatting function for every cell
+                 td.textContent = formatCellValue(row[header]);
+                 // --- END MODIFIED LINE ---
             });
         });
         tableContainer.innerHTML = '';
@@ -140,7 +182,6 @@ document.addEventListener('DOMContentLoaded', () => {
         modalTitle.textContent = title;
         modalBody.innerHTML = content;
         configModal.style.display = 'flex';
-        // Clone and replace button to remove old listeners
         const newConfirmBtn = modalConfirmBtn.cloneNode(true);
         modalConfirmBtn.parentNode.replaceChild(newConfirmBtn, modalConfirmBtn);
         newConfirmBtn.addEventListener('click', onConfirm);
@@ -334,5 +375,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 }, 50);
             });
         });
+    }
+
+    function handleDownload() {
+        const activeDataset = getActiveDataset();
+        if (!activeDataset) return;
+        showLoader(true);
+        setTimeout(() => {
+            // Create a temporary copy of the data to format dates for export
+            const exportData = activeDataset.data.map(row => {
+                const newRow = {};
+                for (const key in row) {
+                    const value = row[key];
+                    if (value instanceof Date) {
+                        // Format dates specifically for Excel readability
+                        newRow[key] = new Date(Date.UTC(value.getFullYear(), value.getMonth(), value.getDate()));
+                    } else {
+                        newRow[key] = value;
+                    }
+                }
+                return newRow;
+            });
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Result");
+            XLSX.writeFile(wb, `Processed_${activeDataset.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.xlsx`);
+            showLoader(false);
+        }, 50);
     }
 });
