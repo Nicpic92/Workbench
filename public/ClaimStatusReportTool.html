@@ -195,7 +195,8 @@
             });
 
             const getStatsForAOA = (aoa, config) => {
-                const dayBuckets = { '0 - 10': 0, '11 - 20': 0, '21 - 29': 0, '30 - 59': 0, '60+': 0 };
+                // --- MODIFIED BUCKETS for email summary ---
+                const dayBuckets = { '28-29': 0, '21-27': 0, '0-20': 0, '30+': 0 };
                 const stats = { 'PEND': { total: 0, ...dayBuckets }, 'ONHOLD': { total: 0, ...dayBuckets }, 'MANAGEMENTREVIEW': { total: 0, ...dayBuckets }, 'HC MGMT REV': { total: 0, ...dayBuckets }, 'W9_LETTER_NEEDED': { total: 0, ...dayBuckets }, 'W9_FOLLOW_UP': { total: 0, ...dayBuckets } };
                 
                 for(const row of aoa.slice(1)) {
@@ -205,7 +206,16 @@
                     const totalCharges = parseCurrency(row[config.totalChargesIndex]);
                     const claimType = String(row[config.claimTypeIndex] || '').trim().toUpperCase();
                     const cleanAge = parseInt(row[config.cleanAgeIndex], 10);
-                    const daysValue = !isNaN(cleanAge) ? (cleanAge <= 10 ? '0 - 10' : (cleanAge <= 20 ? '11 - 20' : (cleanAge <= 29 ? '21 - 29' : (cleanAge <= 59 ? '30 - 59' : '60+')))) : '';
+                    
+                    // --- NEW BUCKET LOGIC for email summary ---
+                    let daysValue = '';
+                    if (!isNaN(cleanAge)) {
+                        if (cleanAge >= 28 && cleanAge <= 29) { daysValue = '28-29'; }
+                        else if (cleanAge >= 21 && cleanAge <= 27) { daysValue = '21-27'; }
+                        else if (cleanAge >= 30) { daysValue = '30+'; }
+                        else { daysValue = '0-20'; }
+                    }
+
                     let finalClaimState = claimState;
                     if (claimState === 'MANAGEMENTREVIEW' && !isNaN(totalCharges) && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500))) {
                         finalClaimState = 'HC MGMT REV';
@@ -253,12 +263,13 @@
                 
                 const masterSheetName = "All Processed Data", highDollarSheetName = "High Dollar - Pat & Shelley";
                 const sheetsData = { [masterSheetName]: [], [highDollarSheetName]: [] };
+                const tabMetadata = {};
                 
                 const headerRow = main_aoa[0], newHeader = [...headerRow];
                 if (hasYesterdayReport) newHeader.splice(config.claimStatusIndex, 0, 'Yest. Claim State');
                 let daysInsertIndex = config.cleanAgeIndex + 1;
                 if (hasYesterdayReport && config.cleanAgeIndex >= config.claimStatusIndex) daysInsertIndex++; 
-                newHeader.splice(daysInsertIndex, 0, 'Days');
+                newHeader.splice(daysInsertIndex, 0, 'Days Bucket');
                 newHeader.push('Added (Owner)', 'Due Date');
                 sheetsData[masterSheetName].push(newHeader);
                 sheetsData[highDollarSheetName].push(newHeader);
@@ -286,9 +297,17 @@
                     const totalCharges = parseCurrency(originalRow[config.totalChargesIndex]);
                     const isHighCost = claimState === 'MANAGEMENTREVIEW' && !isNaN(totalCharges) && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500));
                     const cleanAge = parseInt(originalRow[config.cleanAgeIndex], 10);
-                    const daysValue = !isNaN(cleanAge) ? (cleanAge <= 10 ? '0 - 10' : (cleanAge <= 20 ? '11 - 20' : (cleanAge <= 29 ? '21 - 29' : (cleanAge <= 59 ? '30 - 59' : '60+')))) : '';
-                    let ownerValue = '';
+                    
+                    // --- NEW BUCKET AND TAB NAMING LOGIC ---
+                    let daysValue = '';
+                    if (!isNaN(cleanAge)) {
+                        if (cleanAge >= 28 && cleanAge <= 29) { daysValue = '28-29 days'; }
+                        else if (cleanAge >= 21 && cleanAge <= 27) { daysValue = '21-27 days'; }
+                        else if (cleanAge >= 30) { daysValue = '30+ days'; }
+                        else { daysValue = '0-20 days'; }
+                    }
 
+                    let ownerValue = '';
                     if (isHighCost) { 
                         ownerValue = 'Pat and Shelley';
                     } 
@@ -322,50 +341,135 @@
 
                         if (dsnpStatus && tabOwner && networkStatus) {
                             let tabKey = '';
+                            let priorityLevel = 0;
                             
-                            if (daysValue === '21 - 29') {
-                                tabKey = truncateSheetName(`${tabOwner} - PRIORITY ${networkStatus} ${statusTab} ${dsnpStatus}`);
-                            } 
-                            else if (['0 - 10', '11 - 20'].includes(daysValue)) {
-                                const ageTab = (daysValue === '0 - 10') ? '0-10d' : '11-20d';
-                                tabKey = truncateSheetName(`${tabOwner} - Queue ${ageTab} ${networkStatus} ${statusTab} ${dsnpStatus}`);
-                            }
-                            else if (['30 - 59', '60+'].includes(daysValue)) {
-                                const ageTab = (daysValue === '30 - 59') ? '30-59d' : '60+d';
-                                tabKey = truncateSheetName(`${tabOwner} - Aged ${ageTab} ${networkStatus} ${statusTab} ${dsnpStatus}`);
+                            if (cleanAge >= 28 && cleanAge <= 29) {
+                                priorityLevel = 1;
+                                tabKey = truncateSheetName(`CRITICAL (28-29d) ${networkStatus} ${statusTab} ${dsnpStatus}`);
+                            } else if (cleanAge >= 21 && cleanAge <= 27) {
+                                priorityLevel = 2;
+                                tabKey = truncateSheetName(`PRIORITY (21-27d) ${networkStatus} ${statusTab} ${dsnpStatus}`);
+                            } else if (cleanAge <= 20) {
+                                priorityLevel = 3;
+                                tabKey = truncateSheetName(`Queue (0-20d) ${networkStatus} ${statusTab} ${dsnpStatus}`);
+                            } else if (cleanAge >= 30) {
+                                priorityLevel = 4;
+                                tabKey = truncateSheetName(`Backlog (30+d) ${networkStatus} ${statusTab} ${dsnpStatus}`);
                             }
 
                             if (tabKey) {
-                                if (!sheetsData[tabKey]) sheetsData[tabKey] = [newHeader];
+                                if (!sheetsData[tabKey]) {
+                                    sheetsData[tabKey] = [newHeader];
+                                    tabMetadata[tabKey] = { owner: tabOwner, priority: priorityLevel };
+                                }
                                 sheetsData[tabKey].push(newRow);
                             }
                         }
                     }
 
                     if (config.notesIndex >= 0 && noteText.toLowerCase().includes('w9')) {
-                        let w9SheetName = '';
+                        let w9SheetName = '', tabOwner = '', priorityLevel = 5;
                         const noteLower = noteText.toLowerCase();
-                        if (noteLower.includes('requested') || noteLower.includes('req') || noteLower.includes('due')) w9SheetName = 'W9 Follow-Up - Pat';
-                        else if (noteLower.includes('denied') || noteLower.includes('missing') || noteLower.includes('not on file') || noteLower.includes('not received')) w9SheetName = 'W9 Letter Needed - Jess';
-                        else if (noteLower.includes('received') || noteLower.includes('reprocess') || noteLower.includes('rerun')) w9SheetName = 'W9 Received - Reprocess';
+                        if (noteLower.includes('requested') || noteLower.includes('req') || noteLower.includes('due')) {
+                            w9SheetName = 'W9 Follow-Up'; tabOwner = 'Pat';
+                        } else if (noteLower.includes('denied') || noteLower.includes('missing') || noteLower.includes('not on file') || noteLower.includes('not received')) {
+                            w9SheetName = 'W9 Letter Needed'; tabOwner = 'Jess';
+                        } else if (noteLower.includes('received') || noteLower.includes('reprocess') || noteLower.includes('rerun')) {
+                            w9SheetName = 'W9 Received - Reprocess'; tabOwner = 'System';
+                        }
+                        
                         if (w9SheetName) {
-                            if (!sheetsData[w9SheetName]) sheetsData[w9SheetName] = [newHeader];
+                            if (!sheetsData[w9SheetName]) {
+                                sheetsData[w9SheetName] = [newHeader];
+                                tabMetadata[w9SheetName] = { owner: tabOwner, priority: priorityLevel };
+                            }
                             sheetsData[w9SheetName].push(newRow);
                         }
                     }
                 }
                 
+                // --- COVER PAGE GENERATION ---
+                const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
+                const coverPageData = [
+                    ["Daily Action Report - KPI Improvement Guide"],
+                    [`Client: ${clientName}`],
+                    [`Date: ${getFormattedDate()}`],
+                    [], 
+                    ["Core Strategy:", "This report is built to achieve the 95% compliance target by focusing on newer claims. The primary emphasis is on PAR claims, while NON-PAR claims should be monitored. Work the tabs in the order of priority listed below."],
+                    [],
+                ];
+
+                const addSectionToCover = (title, description, priority, allTabs) => {
+                    const filteredTabs = allTabs.filter(key => tabMetadata[key] && tabMetadata[key].priority === priority).sort();
+                    if (filteredTabs.length > 0) {
+                        coverPageData.push([title]);
+                        coverPageData.push([description]);
+                        coverPageData.push(["Tab Name", "Claim Count", "Assigned Owner"]);
+                        filteredTabs.forEach(key => {
+                            const claimCount = sheetsData[key].length - 1;
+                            const owner = tabMetadata[key].owner;
+                            coverPageData.push([key, claimCount, owner]);
+                        });
+                        coverPageData.push([]); // Spacer
+                    }
+                };
+                
+                const allBreakoutTabs = Object.keys(tabMetadata);
+
+                addSectionToCover(
+                    "Priority 1: CRITICAL (28-29 days)",
+                    "WORK THESE FIRST. These claims will breach the 30-day threshold immediately. Clearing them is the top priority to prevent failures.",
+                    1, allBreakoutTabs
+                );
+                addSectionToCover(
+                    "Priority 2: PRIORITY (21-27 days)",
+                    "WORK THESE SECOND. This is the main focus for proactively reducing the aging pool and improving the KPI percentage.",
+                    2, allBreakoutTabs
+                );
+                addSectionToCover(
+                    "Priority 3: Standard Queue (0-20 days)",
+                    "WORK THESE THIRD. This is the standard daily queue. Keeping this clear prevents future critical issues.",
+                    3, allBreakoutTabs
+                );
+                 addSectionToCover(
+                    "Priority 4: Backlog (30+ days)",
+                    "WORK THESE LAST & MINIMALLY. Address a small number daily, focusing on urgent provider requests. Heavy work here will lower the monthly KPI.",
+                    4, allBreakoutTabs
+                );
+                addSectionToCover(
+                    "W9 and Other Tasks",
+                    "These tabs group claims that require specific, non-aging-related actions.",
+                    5, allBreakoutTabs
+                );
+
+                const coverWS = XLSX.utils.aoa_to_sheet(coverPageData);
+                coverWS['!cols'] = [{ wch: 45 }, { wch: 15 }, { wch: 20 }];
+                
                 const newWorkbook = XLSX.utils.book_new();
-                const sheetOrder = [masterSheetName, highDollarSheetName, ...Object.keys(sheetsData).filter(n => n.startsWith('W9 ')).sort(), ...Object.keys(sheetsData).filter(n => ![masterSheetName, highDollarSheetName].includes(n) && !n.startsWith('W9 ')).sort()];
+                XLSX.utils.book_append_sheet(newWorkbook, coverWS, "Cover Page");
+                
+                // --- END COVER PAGE ---
+
+                const sortedBreakoutTabs = Object.keys(sheetsData).filter(n => ![masterSheetName, highDollarSheetName].includes(n)).sort((a, b) => {
+                    const prioA = (tabMetadata[a] ? tabMetadata[a].priority : 99) || 99;
+                    const prioB = (tabMetadata[b] ? tabMetadata[b].priority : 99) || 99;
+                    if (prioA !== prioB) return prioA - prioB;
+                    return a.localeCompare(b);
+                });
+                
+                const sheetOrder = ["Cover Page", masterSheetName, highDollarSheetName, ...sortedBreakoutTabs];
+
                 sheetOrder.forEach(sheetName => {
-                    if (sheetsData[sheetName] && sheetsData[sheetName].length > 1) { 
+                    if (sheetName !== "Cover Page" && sheetsData[sheetName] && sheetsData[sheetName].length > 0) { 
                         const ws = XLSX.utils.aoa_to_sheet(sheetsData[sheetName]);
-                        ws['!autofilter'] = { ref: XLSX.utils.encode_range(XLSX.utils.decode_range(ws['!ref'])) };
+                        if (sheetsData[sheetName].length > 1) { // Only add autofilter if there are data rows
+                            ws['!autofilter'] = { ref: XLSX.utils.encode_range(XLSX.utils.decode_range(ws['!ref'])) };
+                        }
                         XLSX.utils.book_append_sheet(newWorkbook, ws, sheetName);
                     }
                 });
-                const clientText = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
-                document.getElementById('downloadLink').download = `${clientText} Daily Action Report for ${getFormattedDate()}.xlsx`;
+
+                document.getElementById('downloadLink').download = `${clientName} Daily Action Report for ${getFormattedDate()}.xlsx`;
                 document.getElementById('downloadLink').href = URL.createObjectURL(new Blob([XLSX.write(newWorkbook, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
                 document.getElementById('downloadLink').classList.remove('hidden');
                 document.getElementById('copyEmailBtn').classList.remove('hidden');
@@ -402,7 +506,7 @@
             let combinedMgmtRevYesterday = null;
             if (yesterday) {
                 combinedMgmtRevYesterday = { ...yesterday['MANAGEMENTREVIEW'] };
-                const hcYesterday = yesterday['HC MGMT REV'] || { total: 0, '0 - 10': 0, '11 - 20': 0, '21 - 29': 0, '30 - 59': 0, '60+': 0 };
+                const hcYesterday = yesterday['HC MGMT REV'] || { total: 0, '28-29': 0, '21-27': 0, '0-20': 0, '30+': 0 };
                 Object.keys(hcYesterday).forEach(key => {
                     combinedMgmtRevYesterday[key] = (combinedMgmtRevYesterday[key] || 0) + hcYesterday[key];
                 });
@@ -410,14 +514,15 @@
 
             const formatStatLine = (t, y) => yesterday ? `${t} (${y})` : `${t}`;
             
+            // --- NEW EMAIL SUMMARY BLOCK ---
             const createStatBlock = (title, todayStats, yestStats) => {
                 const y = yesterday ? yestStats : null;
-                return `Number of total claims ${title}: ${formatStatLine(todayStats.total, y?.total ?? 0)}\n0 - 10 Days: ${formatStatLine(todayStats['0 - 10'], y?.['0 - 10'] ?? 0)}\n11 - 20 Days: ${formatStatLine(todayStats['11 - 20'], y?.['11 - 20'] ?? 0)}\n21 - 29 Days: ${formatStatLine(todayStats['21 - 29'], y?.['21 - 29'] ?? 0)}\n30 - 59 Days: ${formatStatLine(todayStats['30 - 59'], y?.['30 - 59'] ?? 0)}\n60+ Days: ${formatStatLine(todayStats['60+'], y?.['60+'] ?? 0)}`;
+                return `Number of total claims ${title}: ${formatStatLine(todayStats.total, y?.total ?? 0)}\nCRITICAL (28-29 Days): ${formatStatLine(todayStats['28-29'], y?.['28-29'] ?? 0)}\nPRIORITY (21-27 Days): ${formatStatLine(todayStats['21-27'], y?.['21-27'] ?? 0)}\nQueue (0-20 Days): ${formatStatLine(todayStats['0-20'], y?.['0-20'] ?? 0)}\nBacklog (30+ Days): ${formatStatLine(todayStats['30+'], y?.['30+'] ?? 0)}`;
             };
             
             const yestCombined = yesterday ? combinedMgmtRevYesterday : null;
             const yestHc = yesterday ? yesterday['HC MGMT REV'] : null;
-            const mgmtReviewBlock = `Number of total claims Management Review: ${formatStatLine(combinedMgmtRevToday.total, yestCombined?.total ?? 0)}\nOf these, High Dollar Claims: ${formatStatLine(today['HC MGMT REV'].total, yestHc?.total ?? 0)}\n0 - 10 Days: ${formatStatLine(combinedMgmtRevToday['0 - 10'], yestCombined?.['0 - 10'] ?? 0)}\n11 - 20 Days: ${formatStatLine(combinedMgmtRevToday['11 - 20'], yestCombined?.['11 - 20'] ?? 0)}\n21 - 29 Days: ${formatStatLine(combinedMgmtRevToday['21 - 29'], yestCombined?.['21 - 29'] ?? 0)}\n30 - 59 Days: ${formatStatLine(combinedMgmtRevToday['30 - 59'], yestCombined?.['30 - 59'] ?? 0)}\n60+ Days: ${formatStatLine(combinedMgmtRevToday['60+'], yestCombined?.['60+'] ?? 0)}`;
+            const mgmtReviewBlock = `Number of total claims Management Review: ${formatStatLine(combinedMgmtRevToday.total, yestCombined?.total ?? 0)}\nOf these, High Dollar Claims: ${formatStatLine(today['HC MGMT REV'].total, yestHc?.total ?? 0)}\nCRITICAL (28-29 Days): ${formatStatLine(combinedMgmtRevToday['28-29'], yestCombined?.['28-29'] ?? 0)}\nPRIORITY (21-27 Days): ${formatStatLine(combinedMgmtRevToday['21-27'], yestCombined?.['21-27'] ?? 0)}\nQueue (0-20 Days): ${formatStatLine(combinedMgmtRevToday['0-20'], yestCombined?.['0-20'] ?? 0)}\nBacklog (30+ Days): ${formatStatLine(combinedMgmtRevToday['30+'], yestCombined?.['30+'] ?? 0)}`;
 
             const intro = yesterday ? `I have attached today's report for ${clientName}. Below are the highlights from this report, previous days are in (parenthesis):` : `I have attached today's report for ${clientName}. Below are the highlights from this report:`;
             
