@@ -201,7 +201,7 @@
                 for(const row of aoa.slice(1)) {
                     if (row.every(cell => cell === null)) continue;
                     let claimState = String(row[config.claimStatusIndex] || '').trim().toUpperCase();
-                    if (claimState === 'PREBATCH') continue;
+                    if (claimState.includes('PREBATCH')) continue;
                     const totalCharges = parseCurrency(row[config.totalChargesIndex]);
                     const claimType = String(row[config.claimTypeIndex] || '').trim().toUpperCase();
                     const cleanAge = parseInt(row[config.cleanAgeIndex], 10);
@@ -278,10 +278,34 @@
                 sheetsData[masterSheetName].push(newHeader);
                 sheetsData[highDollarSheetName].push(newHeader);
 
+                // --- NEW: Overall Summary Calculation ---
+                const overallSummary = {
+                    par: { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0, total: 0 },
+                    nonpar: { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0, total: 0 },
+                    prebatch: 0
+                };
+
                 for (const originalRow of main_aoa.slice(1)) {
                     if (originalRow.every(cell => cell === null)) continue;
-                    let claimState = String(originalRow[config.claimStatusIndex] || '').trim().toUpperCase();
-                    if (claimState === 'PREBATCH') continue;
+                    const claimState = String(originalRow[config.claimStatusIndex] || '').trim().toUpperCase();
+
+                    if (claimState.includes('PREBATCH')) {
+                        overallSummary.prebatch++;
+                        continue; // Skip prebatch claims for all other processing
+                    }
+                    
+                    const cleanAge = parseInt(originalRow[config.cleanAgeIndex], 10);
+                    const networkStatusRaw = String(originalRow[config.networkStatusIndex] || '').toUpperCase();
+                    const networkType = networkStatusRaw.includes('NON') ? 'nonpar' : 'par';
+
+                    overallSummary[networkType].total++;
+                    if (!isNaN(cleanAge)) {
+                        if (cleanAge >= 28 && cleanAge <= 29) { overallSummary[networkType]['28-29']++; }
+                        else if (cleanAge >= 21 && cleanAge <= 27) { overallSummary[networkType]['21-27']++; }
+                        else if (cleanAge >= 30) { overallSummary[networkType]['30+']++; }
+                        else { overallSummary[networkType]['0-20']++; }
+                    }
+
                     const newRow = [...originalRow];
                     
                     if (hasYesterdayReport) {
@@ -290,7 +314,8 @@
                         let yestStateForColumn = 'NEW';
                         if (yestData) {
                             yestStateForColumn = yestData.state;
-                            if ((yestData.state.includes('MANAGEMENT') && yestData.state.includes('REVIEW')) && !isNaN(yestData.charges) && ((yestData.type.includes('PROFESSIONAL') && yestData.charges > 3500) || (yestData.type.includes('INSTITUTIONAL') && yestData.charges > 6500))) {
+                            const isYestMgmtReview = yestData.state.includes('MANAGEMENT') && yestData.state.includes('REVIEW');
+                            if (isYestMgmtReview && !isNaN(yestData.charges) && ((yestData.type.includes('PROFESSIONAL') && yestData.charges > 3500) || (yestData.type.includes('INSTITUTIONAL') && yestData.charges > 6500))) {
                                 yestStateForColumn = 'HC MGMT REV';
                             }
                         }
@@ -302,8 +327,6 @@
 
                     const isMgmtReviewState = claimState.includes('MANAGEMENT') && claimState.includes('REVIEW');
                     const isHighCost = isMgmtReviewState && !isNaN(totalCharges) && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500));
-                    
-                    const cleanAge = parseInt(originalRow[config.cleanAgeIndex], 10);
                     
                     let daysValue = '';
                     if (!isNaN(cleanAge)) {
@@ -331,9 +354,6 @@
                     }
                     
                     if (!isHighCost && (['PEND', 'ONHOLD', 'DENY'].includes(claimState) || isMgmtReviewState)) {
-                        const networkStatusRaw = String(originalRow[config.networkStatusIndex] || '').toUpperCase();
-                        let networkStatus = networkStatusRaw.includes('NON') ? 'NonPar' : 'Par';
-
                         const dsnpRaw = String(originalRow[config.dsnpIndex] || '').toUpperCase();
                         let dsnpStatus = '';
                         if (dsnpRaw.includes('NON DSNP')) { dsnpStatus = 'NonDSNP'; } 
@@ -345,22 +365,22 @@
                         else if (claimState === 'PEND') { statusTab = 'Pend'; tabOwner = 'Patrick'; }
                         else if (claimState === 'DENY') { statusTab = 'Deny'; tabOwner = 'Patrick'; }
 
-                        if (dsnpStatus && tabOwner && networkStatus) {
+                        if (dsnpStatus && tabOwner && networkType) {
                             let tabKey = '';
                             let priorityLevel = 0;
                             
                             if (cleanAge >= 28 && cleanAge <= 29) {
                                 priorityLevel = 1;
-                                tabKey = truncateSheetName(`CRITICAL (28-29d) ${networkStatus} ${statusTab} ${dsnpStatus}`);
+                                tabKey = truncateSheetName(`CRITICAL (28-29d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`);
                             } else if (cleanAge >= 21 && cleanAge <= 27) {
                                 priorityLevel = 2;
-                                tabKey = truncateSheetName(`PRIORITY (21-27d) ${networkStatus} ${statusTab} ${dsnpStatus}`);
+                                tabKey = truncateSheetName(`PRIORITY (21-27d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`);
                             } else if (cleanAge >= 30) {
                                 priorityLevel = 3;
-                                tabKey = truncateSheetName(`Backlog (30+d) ${networkStatus} ${statusTab} ${dsnpStatus}`);
+                                tabKey = truncateSheetName(`Backlog (30+d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`);
                             } else if (cleanAge <= 20) {
                                 priorityLevel = 4;
-                                tabKey = truncateSheetName(`Queue (0-20d) ${networkStatus} ${statusTab} ${dsnpStatus}`);
+                                tabKey = truncateSheetName(`Queue (0-20d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`);
                             }
 
                             if (tabKey) {
@@ -400,6 +420,13 @@
                     [`Client: ${clientName}`],
                     [`Date: ${getFormattedDate()}`],
                     [], 
+                    ["Overall Claim Summary"],
+                    ["Category", "28-29 Days (Critical)", "21-27 Days (Priority)", "30+ Days (Backlog)", "0-20 Days (Queue)", "Total Active Claims"],
+                    ["Par Claims", overallSummary.par['28-29'], overallSummary.par['21-27'], overallSummary.par['30+'], overallSummary.par['0-20'], overallSummary.par.total],
+                    ["Non-Par Claims", overallSummary.nonpar['28-29'], overallSummary.nonpar['21-27'], overallSummary.nonpar['30+'], overallSummary.nonpar['0-20'], overallSummary.nonpar.total],
+                    [],
+                    ["Claims in Prebatch Status:", overallSummary.prebatch, "(These are excluded from the totals above and all report tabs)"],
+                    [],
                     ["Core Strategy:", "This report is built to achieve the 95% compliance target by focusing on claims nearing the 30-day threshold. The primary emphasis is on PAR claims, while NON-PAR claims should be monitored. Work the tabs in the order of priority listed below."],
                     [],
                 ];
@@ -421,34 +448,14 @@
                 
                 const allBreakoutTabs = Object.keys(tabMetadata);
 
-                addSectionToCover(
-                    "Priority 1: CRITICAL (28-29 days)",
-                    "WORK THESE FIRST. These claims will breach the 30-day threshold immediately. Clearing them is the top priority to prevent failures.",
-                    1, allBreakoutTabs
-                );
-                addSectionToCover(
-                    "Priority 2: PRIORITY (21-27 days)",
-                    "WORK THESE SECOND. This is the main focus for proactively reducing the aging pool and improving the KPI percentage.",
-                    2, allBreakoutTabs
-                );
-                addSectionToCover(
-                    "Priority 3: Backlog (30+ days)",
-                    "WORK THESE THIRD. Chip away at this backlog by addressing a small, limited number of claims daily, especially in response to urgent provider requests.",
-                    3, allBreakoutTabs
-                );
-                addSectionToCover(
-                    "Priority 4: Standard Queue (0-20 days)",
-                    "WORK THESE LAST. After addressing the higher priorities, work through this queue of new claims to stay ahead.",
-                    4, allBreakoutTabs
-                );
-                addSectionToCover(
-                    "W9 and Other Tasks",
-                    "These tabs group claims that require specific, non-aging-related actions. Handle as needed.",
-                    5, allBreakoutTabs
-                );
+                addSectionToCover( "Priority 1: CRITICAL (28-29 days)", "WORK THESE FIRST...", 1, allBreakoutTabs );
+                addSectionToCover( "Priority 2: PRIORITY (21-27 days)", "WORK THESE SECOND...", 2, allBreakoutTabs );
+                addSectionToCover( "Priority 3: Backlog (30+ days)", "WORK THESE THIRD...", 3, allBreakoutTabs );
+                addSectionToCover( "Priority 4: Standard Queue (0-20 days)", "WORK THESE LAST...", 4, allBreakoutTabs );
+                addSectionToCover( "W9 and Other Tasks", "Handle as needed.", 5, allBreakoutTabs );
 
                 const coverWS = XLSX.utils.aoa_to_sheet(coverPageData);
-                coverWS['!cols'] = [{ wch: 45 }, { wch: 15 }, { wch: 20 }];
+                coverWS['!cols'] = [{ wch: 25 }, { wch: 20 }, { wch: 22 }, { wch: 20 }, { wch: 20 }, { wch: 20 }];
                 
                 const newWorkbook = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(newWorkbook, coverWS, "Cover Page");
@@ -460,8 +467,6 @@
                     return a.localeCompare(b);
                 });
                 
-                // --- UPDATED SHEET ORDER ---
-                // "masterSheetName" (All Processed Data) is now at the end of the array.
                 const sheetOrder = ["Cover Page", highDollarSheetName, ...sortedBreakoutTabs, masterSheetName];
 
                 sheetOrder.forEach(sheetName => {
