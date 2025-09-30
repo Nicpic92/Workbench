@@ -111,11 +111,13 @@
             const yesterdayFileInput = document.getElementById('yesterdayFileInput');
             const processBtn = document.getElementById('processBtn');
 
+            // --- UPDATED PRESET FOR SOLIS ---
+            // Network Status Column is now 'U' by default.
             const clientPresets = {
-                solis: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'F', dsnpCol: 'X', claimTypeCol: 'B', totalChargesCol: 'S', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
-                liberty: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'F', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
-                secur: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'F', dsnpCol: 'Y', claimTypeCol: 'D', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
-                csh: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'F', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' }
+                solis: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'U', dsnpCol: 'X', claimTypeCol: 'B', totalChargesCol: 'S', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
+                liberty: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'U', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
+                secur: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'U', dsnpCol: 'Y', claimTypeCol: 'D', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
+                csh: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'U', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' }
             };
 
             clientSelect.addEventListener('change', () => {
@@ -278,7 +280,6 @@
                 sheetsData[masterSheetName].push(newHeader);
                 sheetsData[highDollarSheetName].push(newHeader);
 
-                // --- NEW: Overall Summary Calculation ---
                 const overallSummary = {
                     par: { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0, total: 0 },
                     nonpar: { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0, total: 0 },
@@ -291,12 +292,14 @@
 
                     if (claimState.includes('PREBATCH')) {
                         overallSummary.prebatch++;
-                        continue; // Skip prebatch claims for all other processing
+                        continue;
                     }
                     
                     const cleanAge = parseInt(originalRow[config.cleanAgeIndex], 10);
                     const networkStatusRaw = String(originalRow[config.networkStatusIndex] || '').toUpperCase();
-                    const networkType = networkStatusRaw.includes('NON') ? 'nonpar' : 'par';
+                    // --- UPDATED PAR/NON-PAR LOGIC ---
+                    // Now looks for "OUT" to identify Non-Par, defaults to Par.
+                    const networkType = networkStatusRaw.includes('OUT') ? 'nonpar' : 'par';
 
                     overallSummary[networkType].total++;
                     if (!isNaN(cleanAge)) {
@@ -448,11 +451,11 @@
                 
                 const allBreakoutTabs = Object.keys(tabMetadata);
 
-                addSectionToCover( "Priority 1: CRITICAL (28-29 days)", "WORK THESE FIRST...", 1, allBreakoutTabs );
-                addSectionToCover( "Priority 2: PRIORITY (21-27 days)", "WORK THESE SECOND...", 2, allBreakoutTabs );
-                addSectionToCover( "Priority 3: Backlog (30+ days)", "WORK THESE THIRD...", 3, allBreakoutTabs );
-                addSectionToCover( "Priority 4: Standard Queue (0-20 days)", "WORK THESE LAST...", 4, allBreakoutTabs );
-                addSectionToCover( "W9 and Other Tasks", "Handle as needed.", 5, allBreakoutTabs );
+                addSectionToCover( "Priority 1: CRITICAL (28-29 days)", "WORK THESE FIRST. These claims will breach the 30-day threshold immediately. Clearing them is the top priority to prevent failures.", 1, allBreakoutTabs );
+                addSectionToCover( "Priority 2: PRIORITY (21-27 days)", "WORK THESE SECOND. This is the main focus for proactively reducing the aging pool and improving the KPI percentage.", 2, allBreakoutTabs );
+                addSectionToCover( "Priority 3: Backlog (30+ days)", "WORK THESE THIRD. Chip away at this backlog by addressing a small, limited number of claims daily, especially in response to urgent provider requests.", 3, allBreakoutTabs );
+                addSectionToCover( "Priority 4: Standard Queue (0-20 days)", "WORK THESE LAST. After addressing the higher priorities, work through this queue of new claims to stay ahead.", 4, allBreakoutTabs );
+                addSectionToCover( "W9 and Other Tasks", "These tabs group claims that require specific, non-aging-related actions. Handle as needed.", 5, allBreakoutTabs );
 
                 const coverWS = XLSX.utils.aoa_to_sheet(coverPageData);
                 coverWS['!cols'] = [{ wch: 25 }, { wch: 20 }, { wch: 22 }, { wch: 20 }, { wch: 20 }, { wch: 20 }];
@@ -492,7 +495,7 @@
         
         function getFormattedDate() {
             const d=new Date(), day=d.getDate(), month=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()], year=d.getFullYear();
-            const s = (day%10===1&&day!==11)?'st':((day%10===2&&day!==12)?'nd':((day%10===3&&day!==13)?'rd':'th'));
+            const s = (day%10===1&&day!==11)?'st':((day%10===2&&day!==12)?'nd':((day%1-3&&day!==13)?'rd':'th'));
             return `${day}${s} ${month} ${year}`;
         }
         
