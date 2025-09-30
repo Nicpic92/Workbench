@@ -195,8 +195,7 @@
             });
 
             const getStatsForAOA = (aoa, config) => {
-                // --- MODIFIED BUCKETS for email summary ---
-                const dayBuckets = { '28-29': 0, '21-27': 0, '0-20': 0, '30+': 0 };
+                const dayBuckets = { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
                 const stats = { 'PEND': { total: 0, ...dayBuckets }, 'ONHOLD': { total: 0, ...dayBuckets }, 'MANAGEMENTREVIEW': { total: 0, ...dayBuckets }, 'HC MGMT REV': { total: 0, ...dayBuckets }, 'W9_LETTER_NEEDED': { total: 0, ...dayBuckets }, 'W9_FOLLOW_UP': { total: 0, ...dayBuckets } };
                 
                 for(const row of aoa.slice(1)) {
@@ -207,7 +206,6 @@
                     const claimType = String(row[config.claimTypeIndex] || '').trim().toUpperCase();
                     const cleanAge = parseInt(row[config.cleanAgeIndex], 10);
                     
-                    // --- NEW BUCKET LOGIC for email summary ---
                     let daysValue = '';
                     if (!isNaN(cleanAge)) {
                         if (cleanAge >= 28 && cleanAge <= 29) { daysValue = '28-29'; }
@@ -298,7 +296,6 @@
                     const isHighCost = claimState === 'MANAGEMENTREVIEW' && !isNaN(totalCharges) && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500));
                     const cleanAge = parseInt(originalRow[config.cleanAgeIndex], 10);
                     
-                    // --- NEW BUCKET AND TAB NAMING LOGIC ---
                     let daysValue = '';
                     if (!isNaN(cleanAge)) {
                         if (cleanAge >= 28 && cleanAge <= 29) { daysValue = '28-29 days'; }
@@ -349,12 +346,12 @@
                             } else if (cleanAge >= 21 && cleanAge <= 27) {
                                 priorityLevel = 2;
                                 tabKey = truncateSheetName(`PRIORITY (21-27d) ${networkStatus} ${statusTab} ${dsnpStatus}`);
-                            } else if (cleanAge <= 20) {
-                                priorityLevel = 3;
-                                tabKey = truncateSheetName(`Queue (0-20d) ${networkStatus} ${statusTab} ${dsnpStatus}`);
                             } else if (cleanAge >= 30) {
-                                priorityLevel = 4;
+                                priorityLevel = 3;
                                 tabKey = truncateSheetName(`Backlog (30+d) ${networkStatus} ${statusTab} ${dsnpStatus}`);
+                            } else if (cleanAge <= 20) {
+                                priorityLevel = 4;
+                                tabKey = truncateSheetName(`Queue (0-20d) ${networkStatus} ${statusTab} ${dsnpStatus}`);
                             }
 
                             if (tabKey) {
@@ -388,14 +385,13 @@
                     }
                 }
                 
-                // --- COVER PAGE GENERATION ---
                 const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
                 const coverPageData = [
                     ["Daily Action Report - KPI Improvement Guide"],
                     [`Client: ${clientName}`],
                     [`Date: ${getFormattedDate()}`],
                     [], 
-                    ["Core Strategy:", "This report is built to achieve the 95% compliance target by focusing on newer claims. The primary emphasis is on PAR claims, while NON-PAR claims should be monitored. Work the tabs in the order of priority listed below."],
+                    ["Core Strategy:", "This report is built to achieve the 95% compliance target by focusing on claims nearing the 30-day threshold. The primary emphasis is on PAR claims, while NON-PAR claims should be monitored. Work the tabs in the order of priority listed below."],
                     [],
                 ];
 
@@ -410,7 +406,7 @@
                             const owner = tabMetadata[key].owner;
                             coverPageData.push([key, claimCount, owner]);
                         });
-                        coverPageData.push([]); // Spacer
+                        coverPageData.push([]);
                     }
                 };
                 
@@ -427,18 +423,18 @@
                     2, allBreakoutTabs
                 );
                 addSectionToCover(
-                    "Priority 3: Standard Queue (0-20 days)",
-                    "WORK THESE THIRD. This is the standard daily queue. Keeping this clear prevents future critical issues.",
+                    "Priority 3: Backlog (30+ days)",
+                    "WORK THESE THIRD. Chip away at this backlog by addressing a small, limited number of claims daily, especially in response to urgent provider requests.",
                     3, allBreakoutTabs
                 );
-                 addSectionToCover(
-                    "Priority 4: Backlog (30+ days)",
-                    "WORK THESE LAST & MINIMALLY. Address a small number daily, focusing on urgent provider requests. Heavy work here will lower the monthly KPI.",
+                addSectionToCover(
+                    "Priority 4: Standard Queue (0-20 days)",
+                    "WORK THESE LAST. After addressing the higher priorities, work through this queue of new claims to stay ahead.",
                     4, allBreakoutTabs
                 );
                 addSectionToCover(
                     "W9 and Other Tasks",
-                    "These tabs group claims that require specific, non-aging-related actions.",
+                    "These tabs group claims that require specific, non-aging-related actions. Handle as needed.",
                     5, allBreakoutTabs
                 );
 
@@ -448,8 +444,6 @@
                 const newWorkbook = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(newWorkbook, coverWS, "Cover Page");
                 
-                // --- END COVER PAGE ---
-
                 const sortedBreakoutTabs = Object.keys(sheetsData).filter(n => ![masterSheetName, highDollarSheetName].includes(n)).sort((a, b) => {
                     const prioA = (tabMetadata[a] ? tabMetadata[a].priority : 99) || 99;
                     const prioB = (tabMetadata[b] ? tabMetadata[b].priority : 99) || 99;
@@ -462,7 +456,7 @@
                 sheetOrder.forEach(sheetName => {
                     if (sheetName !== "Cover Page" && sheetsData[sheetName] && sheetsData[sheetName].length > 0) { 
                         const ws = XLSX.utils.aoa_to_sheet(sheetsData[sheetName]);
-                        if (sheetsData[sheetName].length > 1) { // Only add autofilter if there are data rows
+                        if (sheetsData[sheetName].length > 1) {
                             ws['!autofilter'] = { ref: XLSX.utils.encode_range(XLSX.utils.decode_range(ws['!ref'])) };
                         }
                         XLSX.utils.book_append_sheet(newWorkbook, ws, sheetName);
@@ -497,6 +491,28 @@
             const ageBasisText = document.getElementById('cleanAgeCol-label').textContent.replace(':', '');
             const { today, yesterday } = processedReportData;
 
+            let criticalTotal = 0;
+            let priorityTotal = 0;
+            Object.values(today).forEach(status => {
+                criticalTotal += (status['28-29'] || 0);
+                priorityTotal += (status['21-27'] || 0);
+            });
+
+            const intro = yesterday 
+                ? `Attached is today's Daily Action Report for ${clientName}, structured to align with our new KPI improvement strategy. Previous day's counts are in (parenthesis).`
+                : `Attached is today's Daily Action Report for ${clientName}, structured to align with our new KPI improvement strategy.`;
+
+            const executiveSummary = `Today's immediate focus is on the ${criticalTotal} CRITICAL claims (28-29 days) to prevent compliance failures. The main proactive effort will be on the ${priorityTotal} PRIORITY claims (21-27 days).`;
+
+            const strategicReminders = `**Strategic Reminders:**\n- The primary focus remains on **Par claims** to drive the largest impact on the metric, while continuing to monitor Non-Par claims.\n- Please address a limited number of claims from the **Backlog (30+ Days)** tabs daily, prioritizing urgent provider requests.`;
+
+            const formatStatLine = (t, y) => yesterday ? `${t} (${y})` : `${t}`;
+            
+            const createStatBlock = (title, todayStats, yestStats) => {
+                const y = yesterday ? yestStats : null;
+                return `Number of total claims ${title}: ${formatStatLine(todayStats.total, y?.total ?? 0)}\nCRITICAL (28-29 Days): ${formatStatLine(todayStats['28-29'], y?.['28-29'] ?? 0)}\nPRIORITY (21-27 Days): ${formatStatLine(todayStats['21-27'], y?.['21-27'] ?? 0)}\nBacklog (30+ Days): ${formatStatLine(todayStats['30+'], y?.['30+'] ?? 0)}\nQueue (0-20 Days): ${formatStatLine(todayStats['0-20'], y?.['0-20'] ?? 0)}`;
+            };
+            
             const combinedMgmtRevToday = { ...today['MANAGEMENTREVIEW'] };
             const hcToday = today['HC MGMT REV'];
             Object.keys(hcToday).forEach(key => {
@@ -506,27 +522,15 @@
             let combinedMgmtRevYesterday = null;
             if (yesterday) {
                 combinedMgmtRevYesterday = { ...yesterday['MANAGEMENTREVIEW'] };
-                const hcYesterday = yesterday['HC MGMT REV'] || { total: 0, '28-29': 0, '21-27': 0, '0-20': 0, '30+': 0 };
+                const hcYesterday = yesterday['HC MGMT REV'] || { total: 0, '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
                 Object.keys(hcYesterday).forEach(key => {
                     combinedMgmtRevYesterday[key] = (combinedMgmtRevYesterday[key] || 0) + hcYesterday[key];
                 });
             }
+            
+            const mgmtReviewBlock = `Number of total claims Management Review: ${formatStatLine(combinedMgmtRevToday.total, combinedMgmtRevYesterday?.total ?? 0)}\nOf these, High Dollar Claims: ${formatStatLine(today['HC MGMT REV'].total, yesterday?.['HC MGMT REV']?.total ?? 0)}\nCRITICAL (28-29 Days): ${formatStatLine(combinedMgmtRevToday['28-29'], combinedMgmtRevYesterday?.['28-29'] ?? 0)}\nPRIORITY (21-27 Days): ${formatStatLine(combinedMgmtRevToday['21-27'], combinedMgmtRevYesterday?.['21-27'] ?? 0)}\nBacklog (30+ Days): ${formatStatLine(combinedMgmtRevToday['30+'], combinedMgmtRevYesterday?.['30+'] ?? 0)}\nQueue (0-20 Days): ${formatStatLine(combinedMgmtRevToday['0-20'], combinedMgmtRevYesterday?.['0-20'] ?? 0)}`;
 
-            const formatStatLine = (t, y) => yesterday ? `${t} (${y})` : `${t}`;
-            
-            // --- NEW EMAIL SUMMARY BLOCK ---
-            const createStatBlock = (title, todayStats, yestStats) => {
-                const y = yesterday ? yestStats : null;
-                return `Number of total claims ${title}: ${formatStatLine(todayStats.total, y?.total ?? 0)}\nCRITICAL (28-29 Days): ${formatStatLine(todayStats['28-29'], y?.['28-29'] ?? 0)}\nPRIORITY (21-27 Days): ${formatStatLine(todayStats['21-27'], y?.['21-27'] ?? 0)}\nQueue (0-20 Days): ${formatStatLine(todayStats['0-20'], y?.['0-20'] ?? 0)}\nBacklog (30+ Days): ${formatStatLine(todayStats['30+'], y?.['30+'] ?? 0)}`;
-            };
-            
-            const yestCombined = yesterday ? combinedMgmtRevYesterday : null;
-            const yestHc = yesterday ? yesterday['HC MGMT REV'] : null;
-            const mgmtReviewBlock = `Number of total claims Management Review: ${formatStatLine(combinedMgmtRevToday.total, yestCombined?.total ?? 0)}\nOf these, High Dollar Claims: ${formatStatLine(today['HC MGMT REV'].total, yestHc?.total ?? 0)}\nCRITICAL (28-29 Days): ${formatStatLine(combinedMgmtRevToday['28-29'], yestCombined?.['28-29'] ?? 0)}\nPRIORITY (21-27 Days): ${formatStatLine(combinedMgmtRevToday['21-27'], yestCombined?.['21-27'] ?? 0)}\nQueue (0-20 Days): ${formatStatLine(combinedMgmtRevToday['0-20'], yestCombined?.['0-20'] ?? 0)}\nBacklog (30+ Days): ${formatStatLine(combinedMgmtRevToday['30+'], yestCombined?.['30+'] ?? 0)}`;
-
-            const intro = yesterday ? `I have attached today's report for ${clientName}. Below are the highlights from this report, previous days are in (parenthesis):` : `I have attached today's report for ${clientName}. Below are the highlights from this report:`;
-            
-            const emailBody = `Hello Shelley, Jessica, and Pat,\n\n${intro}\n\n${createStatBlock('pending', today['PEND'], yesterday?.['PEND'])}\n\n${createStatBlock('On Hold', today['ONHOLD'], yesterday?.['ONHOLD'])}\n\n${mgmtReviewBlock}\n\n${createStatBlock('needing W9 Letter', today['W9_LETTER_NEEDED'], yesterday?.['W9_LETTER_NEEDED'])}\n\n${createStatBlock('for W9 Follow-Up', today['W9_FOLLOW_UP'], yesterday?.['W9_FOLLOW_UP'])}\n\nPlease let me know if you have any questions regarding this information.\n\nThis ${clientName} report is based on ${ageBasisText}.\n`;
+            const emailBody = `Hello Shelley, Jessica, and Pat,\n\n${intro}\n\n${executiveSummary}\n\nBelow are the detailed highlights from the report:\n\n${createStatBlock('pending', today['PEND'], yesterday?.['PEND'])}\n\n${createStatBlock('On Hold', today['ONHOLD'], yesterday?.['ONHOLD'])}\n\n${mgmtReviewBlock}\n\n${createStatBlock('needing W9 Letter', today['W9_LETTER_NEEDED'], yesterday?.['W9_LETTER_NEEDED'])}\n\n${createStatBlock('for W9 Follow-Up', today['W9_FOLLOW_UP'], yesterday?.['W9_FOLLOW_UP'])}\n\n${strategicReminders}\n\nPlease let me know if you have any questions.\n\nThis ${clientName} report is based on ${ageBasisText}.\n`;
             
             navigator.clipboard.writeText(emailBody).then(() => {
                 const btn = document.getElementById('copyEmailBtn');
