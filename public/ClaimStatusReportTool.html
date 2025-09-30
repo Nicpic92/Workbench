@@ -307,7 +307,7 @@
                     
                     if (!isHighCost && ['PEND', 'ONHOLD', 'MANAGEMENTREVIEW', 'DENY'].includes(claimState)) {
                         const networkStatusRaw = String(originalRow[config.networkStatusIndex] || '').toUpperCase();
-                        let networkStatus = networkStatusRaw.includes('NON') ? 'NonPar' : (networkStatusRaw.includes('PAR') ? 'Par' : '');
+                        let networkStatus = networkStatusRaw.includes('NON') ? 'NonPar' : 'Par';
 
                         const dsnpRaw = String(originalRow[config.dsnpIndex] || '').toUpperCase();
                         let dsnpStatus = '';
@@ -324,15 +324,15 @@
                             let tabKey = '';
                             
                             if (daysValue === '21 - 29') {
-                                tabKey = truncateSheetName(`PRIORITY ${networkStatus} ${dsnpStatus} ${statusTab} - ${tabOwner}`);
+                                tabKey = truncateSheetName(`${tabOwner} - PRIORITY ${networkStatus} ${statusTab} ${dsnpStatus}`);
                             } 
                             else if (['0 - 10', '11 - 20'].includes(daysValue)) {
                                 const ageTab = (daysValue === '0 - 10') ? '0-10d' : '11-20d';
-                                tabKey = truncateSheetName(`Queue ${ageTab} ${networkStatus} ${dsnpStatus} ${statusTab} - ${tabOwner}`);
+                                tabKey = truncateSheetName(`${tabOwner} - Queue ${ageTab} ${networkStatus} ${statusTab} ${dsnpStatus}`);
                             }
                             else if (['30 - 59', '60+'].includes(daysValue)) {
                                 const ageTab = (daysValue === '30 - 59') ? '30-59d' : '60+d';
-                                tabKey = truncateSheetName(`Aged ${ageTab} ${networkStatus} ${dsnpStatus} ${statusTab} - ${tabOwner}`);
+                                tabKey = truncateSheetName(`${tabOwner} - Aged ${ageTab} ${networkStatus} ${statusTab} ${dsnpStatus}`);
                             }
 
                             if (tabKey) {
