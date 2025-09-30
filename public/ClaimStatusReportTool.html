@@ -215,13 +215,19 @@
                     }
 
                     let finalClaimState = claimState;
-                    if (claimState === 'MANAGEMENTREVIEW' && !isNaN(totalCharges) && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500))) {
+                    const isMgmtReview = claimState.includes('MANAGEMENT') && claimState.includes('REVIEW');
+                    if (isMgmtReview && !isNaN(totalCharges) && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500))) {
                         finalClaimState = 'HC MGMT REV';
                     }
+
                     if (stats[finalClaimState]) {
                         stats[finalClaimState].total++;
                         if (stats[finalClaimState][daysValue] !== undefined) stats[finalClaimState][daysValue]++;
+                    } else if (isMgmtReview && stats['MANAGEMENTREVIEW']) {
+                        stats['MANAGEMENTREVIEW'].total++;
+                        if (stats['MANAGEMENTREVIEW'][daysValue] !== undefined) stats['MANAGEMENTREVIEW'][daysValue]++;
                     }
+
                     const noteTextLower = String(row[config.notesIndex] || '').toLowerCase();
                     if (noteTextLower.includes('w9')) {
                         if (noteTextLower.includes('requested') || noteTextLower.includes('req') || noteTextLower.includes('due')) {
@@ -284,7 +290,7 @@
                         let yestStateForColumn = 'NEW';
                         if (yestData) {
                             yestStateForColumn = yestData.state;
-                            if (yestData.state === 'MANAGEMENTREVIEW' && !isNaN(yestData.charges) && ((yestData.type.includes('PROFESSIONAL') && yestData.charges > 3500) || (yestData.type.includes('INSTITUTIONAL') && yestData.charges > 6500))) {
+                            if ((yestData.state.includes('MANAGEMENT') && yestData.state.includes('REVIEW')) && !isNaN(yestData.charges) && ((yestData.type.includes('PROFESSIONAL') && yestData.charges > 3500) || (yestData.type.includes('INSTITUTIONAL') && yestData.charges > 6500))) {
                                 yestStateForColumn = 'HC MGMT REV';
                             }
                         }
@@ -293,7 +299,10 @@
                     
                     const claimType = String(originalRow[config.claimTypeIndex] || '').trim().toUpperCase();
                     const totalCharges = parseCurrency(originalRow[config.totalChargesIndex]);
-                    const isHighCost = claimState === 'MANAGEMENTREVIEW' && !isNaN(totalCharges) && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500));
+
+                    const isMgmtReviewState = claimState.includes('MANAGEMENT') && claimState.includes('REVIEW');
+                    const isHighCost = isMgmtReviewState && !isNaN(totalCharges) && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500));
+                    
                     const cleanAge = parseInt(originalRow[config.cleanAgeIndex], 10);
                     
                     let daysValue = '';
@@ -308,7 +317,7 @@
                     if (isHighCost) { 
                         ownerValue = 'Pat and Shelley';
                     } 
-                    else if (['MANAGEMENTREVIEW', 'ONHOLD'].includes(claimState)) { ownerValue = 'Jessica'; } 
+                    else if (isMgmtReviewState || claimState === 'ONHOLD') { ownerValue = 'Jessica'; } 
                     else if (['PEND', 'APPROVED', 'DENY'].includes(claimState)) { ownerValue = 'Patrick'; } 
                     else if (claimState === 'PR') { ownerValue = originalRow[config.payerIndex] || ''; }
 
@@ -321,7 +330,7 @@
                         sheetsData[highDollarSheetName].push(newRow);
                     }
                     
-                    if (!isHighCost && ['PEND', 'ONHOLD', 'MANAGEMENTREVIEW', 'DENY'].includes(claimState)) {
+                    if (!isHighCost && (['PEND', 'ONHOLD', 'DENY'].includes(claimState) || isMgmtReviewState)) {
                         const networkStatusRaw = String(originalRow[config.networkStatusIndex] || '').toUpperCase();
                         let networkStatus = networkStatusRaw.includes('NON') ? 'NonPar' : 'Par';
 
@@ -331,7 +340,7 @@
                         else if (dsnpRaw.includes('DSNP') || dsnpRaw === 'Y') { dsnpStatus = 'DSNP'; }
 
                         let statusTab = '', tabOwner = '';
-                        if (claimState === 'MANAGEMENTREVIEW') { statusTab = 'MgmtRev'; tabOwner = 'Jessica'; }
+                        if (isMgmtReviewState) { statusTab = 'MgmtRev'; tabOwner = 'Jessica'; }
                         else if (claimState === 'ONHOLD') { statusTab = 'OnHold'; tabOwner = 'Jessica'; }
                         else if (claimState === 'PEND') { statusTab = 'Pend'; tabOwner = 'Patrick'; }
                         else if (claimState === 'DENY') { statusTab = 'Deny'; tabOwner = 'Patrick'; }
@@ -451,7 +460,9 @@
                     return a.localeCompare(b);
                 });
                 
-                const sheetOrder = ["Cover Page", masterSheetName, highDollarSheetName, ...sortedBreakoutTabs];
+                // --- UPDATED SHEET ORDER ---
+                // "masterSheetName" (All Processed Data) is now at the end of the array.
+                const sheetOrder = ["Cover Page", highDollarSheetName, ...sortedBreakoutTabs, masterSheetName];
 
                 sheetOrder.forEach(sheetName => {
                     if (sheetName !== "Cover Page" && sheetsData[sheetName] && sheetsData[sheetName].length > 0) { 
