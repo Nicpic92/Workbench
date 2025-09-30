@@ -47,7 +47,7 @@
                         <option value="">-- Choose a Client --</option>
                         <option value="solis">SOLIS</option>
                         <option value="liberty">LIBERTY</option>
-                        <option value="secur">SECUR</option>
+                        <option value="secur">SECUR (Sonder)</option>
                         <option value="csh">CSH</option>
                     </select>
                 </div>
@@ -111,8 +111,8 @@
             const yesterdayFileInput = document.getElementById('yesterdayFileInput');
             const processBtn = document.getElementById('processBtn');
 
-            // --- UPDATED PRESET FOR SOLIS ---
-            // Network Status Column is now 'U' by default.
+            // --- UNIVERSAL PRESET UPDATE ---
+            // The 'networkStatusCol' is now 'U' for all clients, while respecting their other unique columns.
             const clientPresets = {
                 solis: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'U', dsnpCol: 'X', claimTypeCol: 'B', totalChargesCol: 'S', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
                 liberty: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'U', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
@@ -297,8 +297,6 @@
                     
                     const cleanAge = parseInt(originalRow[config.cleanAgeIndex], 10);
                     const networkStatusRaw = String(originalRow[config.networkStatusIndex] || '').toUpperCase();
-                    // --- UPDATED PAR/NON-PAR LOGIC ---
-                    // Now looks for "OUT" to identify Non-Par, defaults to Par.
                     const networkType = networkStatusRaw.includes('OUT') ? 'nonpar' : 'par';
 
                     overallSummary[networkType].total++;
@@ -495,7 +493,7 @@
         
         function getFormattedDate() {
             const d=new Date(), day=d.getDate(), month=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()], year=d.getFullYear();
-            const s = (day%10===1&&day!==11)?'st':((day%10===2&&day!==12)?'nd':((day%1-3&&day!==13)?'rd':'th'));
+            const s = (day%10===1&&day!==11)?'st':((day%10===2&&day!==12)?'nd':((day%10===3&&day!==13)?'rd':'th'));
             return `${day}${s} ${month} ${year}`;
         }
         
