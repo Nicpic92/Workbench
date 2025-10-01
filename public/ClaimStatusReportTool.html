@@ -422,15 +422,15 @@
             }
 
             if (triagedPrebatchRows.length > 0) {
-                generatePrebatchReport(triagedPrebatchRows, reportHeader, currentConfig);
+                generatePrebatchReport();
             }
-            if (triagedMainReportRows.length > 0 || triagedMgmtReviewRows.length > 0) {
-                // Combine main and (now assigned) mgmt review rows for the main action report
-                const combinedMainRows = [...triagedMainReportRows, ...triagedMgmtReviewRows];
-                generateMainActionReport(combinedMainRows, reportHeader, currentConfig);
+
+            const allActionableRows = [...triagedMainReportRows, ...triagedMgmtReviewRows];
+            if (allActionableRows.length > 0) {
+                generateMainActionReport(allActionableRows);
             }
             if (triagedMgmtReviewRows.length > 0) {
-                generateMgmtReviewReport(triagedMgmtReviewRows, reportHeader, currentConfig);
+                generateMgmtReviewReport();
             }
             
             if (document.getElementById('download-links').children.length > 0) {
@@ -444,32 +444,20 @@
                 displayStatus('No data to generate reports.', 'info');
             }
         }
-        
-        // --- Report Generation Functions ---
-        function generatePrebatchReport(rows, header, config) {
-            const fileName = `${config.clientName} Prebatch Report for ${getFormattedDate()}.xlsx`;
-            const sheetName = 'Prebatch Claims';
-            const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
-            ws['!autofilter'] = { ref: XLSX.utils.encode_range(XLSX.utils.decode_range(ws['!ref'])) };
-            XLSX.utils.book_append_sheet(wb, ws, sheetName);
-            const fileData = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-            createDownloadLink(fileData, fileName, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Prebatch Report');
-        }
 
-        function generateMainActionReport(allMainRows, header, config) {
+        // --- Reusable Workbook Builder ---
+        function buildPrioritizedWorkbook(rowsToProcess, header, config, reportTitle, coverPageDescription) {
             const { indices, rules } = config;
             const highDollarSheetName = `High Dollar - ${rules.owners.highDollar}`;
-            const masterSheetName = "All Processed Data";
+            const masterSheetName = "All Data";
             const sheetsData = { [masterSheetName]: [header], [highDollarSheetName]: [header] };
             const tabMetadata = {};
-
             const overallSummary = {
                 par: { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0, total: 0 },
                 nonpar: { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0, total: 0 }
             };
 
-            for (const newRow of allMainRows) {
+            for (const newRow of rowsToProcess) {
                 const cleanAge = parseInt(newRow[indices.cleanAgeIndex], 10);
                 const networkStatusRaw = String(newRow[indices.networkStatusIndex] || '').toUpperCase();
                 const networkType = networkStatusRaw.includes('OUT') ? 'nonpar' : 'par';
@@ -485,15 +473,17 @@
                 }
 
                 const owner = newRow[newRow.length - 2];
-                if (owner === rules.owners.highDollar) {
+                const totalCharges = parseCurrency(newRow[indices.totalChargesIndex]);
+                const claimType = String(newRow[indices.claimTypeIndex] || '').trim().toUpperCase();
+                const isHighCost = !isNaN(totalCharges) && ((claimType.includes('PROFESSIONAL') && totalCharges > rules.highDollar.professional) || (claimType.includes('INSTITUTIONAL') && totalCharges > rules.highDollar.institutional));
+
+                if (isHighCost && isMgmtReviewState) {
                     sheetsData[highDollarSheetName].push(newRow);
                 }
 
-                if (owner !== rules.owners.highDollar && (['PEND', 'ONHOLD', 'DENY'].includes(claimState) || isMgmtReviewState)) {
+                if (!isHighCost && (['PEND', 'ONHOLD', 'DENY'].includes(claimState) || isMgmtReviewState)) {
                     const dsnpRaw = String(newRow[indices.dsnpIndex] || '').toUpperCase();
-                    let dsnpStatus = '';
-                    if (dsnpRaw.includes('NON DSNP')) { dsnpStatus = 'NonDSNP'; } 
-                    else if (dsnpRaw.includes('DSNP') || dsnpRaw === 'Y') { dsnpStatus = 'DSNP'; }
+                    let dsnpStatus = dsnpRaw.includes('NON DSNP') ? 'NonDSNP' : (dsnpRaw.includes('DSNP') || dsnpRaw === 'Y' ? 'DSNP' : '');
 
                     let statusTab = '', tabOwner = '';
                     if (isMgmtReviewState) { statusTab = 'MgmtRev'; tabOwner = owner; }
@@ -533,8 +523,8 @@
             }
 
             const coverPageData = [
-                ["Daily Action Report - KPI Improvement Guide"], [`Client: ${config.clientName}`], [`Date: ${getFormattedDate()}`], [], 
-                ["Overall Claim Summary (Excludes Prebatch)"],
+                [reportTitle], [`Client: ${config.clientName}`], [`Date: ${getFormattedDate()}`], [], 
+                [coverPageDescription],
                 ["Category", "28-29 Days (Critical)", "21-27 Days (Priority)", "30+ Days (Backlog)", "0-20 Days (Queue)", "Total Active Claims"],
                 ["Par Claims", overallSummary.par['28-29'], overallSummary.par['21-27'], overallSummary.par['30+'], overallSummary.par['0-20'], overallSummary.par.total],
                 ["Non-Par Claims", overallSummary.nonpar['28-29'], overallSummary.nonpar['21-27'], overallSummary.nonpar['30+'], overallSummary.nonpar['0-20'], overallSummary.nonpar.total],
@@ -578,35 +568,34 @@
                     XLSX.utils.book_append_sheet(newWorkbook, ws, sheetName);
                 }
             });
-
-            const fileName = `${config.clientName} Daily Action Report for ${getFormattedDate()}.xlsx`;
-            const fileData = XLSX.write(newWorkbook, { bookType: 'xlsx', type: 'array' });
-            createDownloadLink(fileData, fileName, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Action Report');
+            
+            return newWorkbook;
         }
 
-        function generateMgmtReviewReport(rows, header, config) {
-            const assignedData = new Map();
-            rows.forEach(claim => {
-                const owner = claim[claim.length - 2] || 'Unassigned';
-                if (!assignedData.has(owner)) {
-                    assignedData.set(owner, []);
-                }
-                assignedData.get(owner).push(claim);
-            });
-
+        // --- Report Generation Wrappers ---
+        function generatePrebatchReport() {
+            const fileName = `${currentConfig.clientName} Prebatch Report for ${getFormattedDate()}.xlsx`;
+            const sheetName = 'Prebatch Claims';
             const wb = XLSX.utils.book_new();
-            
-            assignedData.forEach((claims, assignment) => {
-                const sheetName = truncateSheetName(assignment);
-                const sheetData = [header, ...claims];
-                const ws = XLSX.utils.aoa_to_sheet(sheetData);
-                ws['!autofilter'] = { ref: XLSX.utils.encode_range(XLSX.utils.decode_range(ws['!ref'])) };
-                XLSX.utils.book_append_sheet(wb, ws, sheetName);
-            });
-
-            const fileName = `${config.clientName} Mgmt Review Assigned Report for ${getFormattedDate()}.xlsx`;
+            const ws = XLSX.utils.aoa_to_sheet([reportHeader, ...triagedPrebatchRows]);
+            ws['!autofilter'] = { ref: XLSX.utils.encode_range(XLSX.utils.decode_range(ws['!ref'])) };
+            XLSX.utils.book_append_sheet(wb, ws, sheetName);
             const fileData = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-            createDownloadLink(fileData, fileName, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Mgmt Review Report');
+            createDownloadLink(fileData, fileName, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Prebatch Report');
+        }
+
+        function generateMainActionReport(allActionableRows) {
+            const workbook = buildPrioritizedWorkbook(allActionableRows, reportHeader, currentConfig, "Daily Action Report (Management)", "Overall Claim Summary (Excludes Prebatch)");
+            const fileName = `${currentConfig.clientName} Daily Action Report for ${getFormattedDate()}.xlsx`;
+            const fileData = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+            createDownloadLink(fileData, fileName, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Action Report (Mgmt)');
+        }
+
+        function generateMgmtReviewReport() {
+            const workbook = buildPrioritizedWorkbook(triagedMgmtReviewRows, reportHeader, currentConfig, "Management Review Action Report (Teams)", "Management Review Claim Summary");
+            const fileName = `${currentConfig.clientName} Mgmt Review Action Report for ${getFormattedDate()}.xlsx`;
+            const fileData = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+            createDownloadLink(fileData, fileName, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Mgmt Review Report (Teams)');
         }
 
         // --- Helper & UI Functions ---
@@ -645,7 +634,7 @@
             const isHighCost = isMgmtReviewState && !isNaN(totalCharges) && ((claimType.includes('PROFESSIONAL') && totalCharges > rules.highDollar.professional) || (claimType.includes('INSTITUTIONAL') && totalCharges > rules.highDollar.institutional));
 
             let ownerValue = '';
-            if (isHighCost) { ownerValue = rules.owners.highDollar; } 
+            if (isHighCost && isMgmtReviewState) { ownerValue = rules.owners.highDollar; } 
             else if (isMgmtReviewState) { ownerValue = rules.owners.mgmtReview; }
             else if (claimState === 'ONHOLD') { ownerValue = rules.owners.onHold; }
             else if (claimState === 'PEND') { ownerValue = rules.owners.pend; } 
@@ -659,34 +648,30 @@
         
         function autoAssignOwner(noteText) {
             const lowerNote = noteText.toLowerCase();
-            if (lowerNote.includes('no matching contract found with pbp') || lowerNote.includes('pay to name mismatch') || lowerNote.includes('no matching contract found') || lowerNote.includes('issue while getting contract') || lowerNote.includes('hold for payer review')) return 'PV';
-            if (lowerNote.includes('part b outpatient claim to be priced at line level') || lowerNote.includes('part a inpatient claim to be priced at claim level') || lowerNote.includes('professional duplicate service') || (lowerNote.includes('w9 req') && lowerNote.includes('due')) || (lowerNote.includes('w9') && lowerNote.includes('received') && lowerNote.includes('pv updated')) || lowerNote.includes('payment>') || lowerNote.includes('exceeds total payment') || lowerNote.includes('net pay >') || lowerNote.includes('$10,000') || lowerNote.includes('$10000') || lowerNote.includes('pv updated') || lowerNote.includes('rerun rule') || lowerNote.includes('rerun') || lowerNote.includes('remap')) return 'Claims';
+            if (lowerNote.includes('claim paid as per') || lowerNote.includes('hold for review per rachael')) { return 'Client/Claims'; }
+            if (lowerNote.includes('no matching contract found') || lowerNote.includes('pay to name mismatch') || lowerNote.includes('issue while getting contract') || lowerNote.includes('hold for payer review') || lowerNote.includes('provider type not found') || lowerNote.includes('no data for the rendering provider') || lowerNote.includes('missing contract requested')) { return 'PV'; }
+            const claimsKeywords = [ 'to be priced at line level', 'to be priced at claim level', 'duplicate service', 'duplicate validation', 'ambulance duplicate validation', 'w9 req', 'w9 requested', 'w9 past due', 'w9 on file', 'w9 recvd', 'payment>', 'exceeds total payment', 'net pay >', '$10,000', '$10000', 'pv updated', 'rerun', 'remap', 'pay-to-provider id updated', 'provider not found', 'precertification/authorization', 'contract rate already updated', 'validated/adjudicated', 'oon rate applied', 'see clients notes below', 'servicelineseq', 'eye exam', 'claim allowed amount' ];
+            if (claimsKeywords.some(keyword => lowerNote.includes(keyword))) { return 'Claims'; }
             return '';
         }
 
         function displayAssignmentTable(mgmtRows, notesIndex) {
             const tableBody = document.getElementById('assignment-table-body');
             tableBody.innerHTML = '';
-
             const notesSummary = new Map();
             mgmtRows.forEach(row => {
                 const noteText = String(row[notesIndex] || '').trim();
                 if (noteText === '') return;
-                if (!notesSummary.has(noteText)) {
-                    notesSummary.set(noteText, { count: 0 });
-                }
+                if (!notesSummary.has(noteText)) { notesSummary.set(noteText, { count: 0 }); }
                 notesSummary.get(noteText).count++;
             });
-            
             const sortedNotes = [...notesSummary.entries()].sort((a, b) => b[1].count - a[1].count);
-
             sortedNotes.forEach(([noteText, data]) => {
                 const preAssigned = autoAssignOwner(noteText);
                 const row = document.createElement('tr');
                 row.innerHTML = `<td class="px-6 py-4 text-sm text-gray-700 align-top break-words max-w-lg">${noteText}</td><td class="px-6 py-4 text-sm text-gray-700 align-top">${data.count}</td><td class="px-6 py-4 text-sm text-gray-700 align-top"><input type="text" class="table-input" data-note="${noteText.replace(/"/g, '&quot;')}" value="${preAssigned}"></td>`;
                 tableBody.appendChild(row);
             });
-            
             document.getElementById('mgmt-review-assignment-container').classList.remove('hidden');
         }
 
@@ -724,7 +709,6 @@
             const { indices: idx, rules: rls } = cfg;
             const dayBuckets = { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
             const stats = { 'PEND': { total: 0, ...dayBuckets }, 'ONHOLD': { total: 0, ...dayBuckets }, 'MANAGEMENTREVIEW': { total: 0, ...dayBuckets }, 'HC MGMT REV': { total: 0, ...dayBuckets }, 'W9_LETTER_NEEDED': { total: 0, ...dayBuckets }, 'W9_FOLLOW_UP': { total: 0, ...dayBuckets } };
-            
             for(const row of aoa.slice(1)) {
                 if (row.every(cell => cell === null)) continue;
                 let claimState = String(row[idx.claimStatusIndex] || '').trim().toUpperCase();
@@ -732,21 +716,10 @@
                 const totalCharges = parseCurrency(row[idx.totalChargesIndex]);
                 const claimType = String(row[idx.claimTypeIndex] || '').trim().toUpperCase();
                 const cleanAge = parseInt(row[idx.cleanAgeIndex], 10);
-                
-                let daysValue = '';
-                if (!isNaN(cleanAge)) {
-                    if (cleanAge >= 28 && cleanAge <= 29) { daysValue = '28-29'; }
-                    else if (cleanAge >= 21 && cleanAge <= 27) { daysValue = '21-27'; }
-                    else if (cleanAge >= 30) { daysValue = '30+'; }
-                    else { daysValue = '0-20'; }
-                }
-
+                let daysValue = !isNaN(cleanAge) ? (cleanAge >= 28 && cleanAge <= 29 ? '28-29' : (cleanAge >= 21 && cleanAge <= 27 ? '21-27' : (cleanAge >= 30 ? '30+' : '0-20'))) : '';
                 let finalClaimState = claimState;
                 const isMgmtReview = claimState.includes('MANAGEMENT') && claimState.includes('REVIEW');
-                if (isMgmtReview && !isNaN(totalCharges) && ((claimType.includes('PROFESSIONAL') && totalCharges > rls.highDollar.professional) || (claimType.includes('INSTITUTIONAL') && totalCharges > rls.highDollar.institutional))) {
-                    finalClaimState = 'HC MGMT REV';
-                }
-
+                if (isMgmtReview && !isNaN(totalCharges) && ((claimType.includes('PROFESSIONAL') && totalCharges > rls.highDollar.professional) || (claimType.includes('INSTITUTIONAL') && totalCharges > rls.highDollar.institutional))) { finalClaimState = 'HC MGMT REV'; }
                 if (stats[finalClaimState]) {
                     stats[finalClaimState].total++;
                     if (stats[finalClaimState][daysValue] !== undefined) stats[finalClaimState][daysValue]++;
@@ -754,7 +727,6 @@
                     stats['MANAGEMENTREVIEW'].total++;
                     if (stats['MANAGEMENTREVIEW'][daysValue] !== undefined) stats['MANAGEMENTREVIEW'][daysValue]++;
                 }
-
                 const noteTextLower = String(row[idx.notesIndex] || '').toLowerCase();
                 if (noteTextLower.includes('w9')) {
                     if (noteTextLower.includes('requested') || noteTextLower.includes('req') || noteTextLower.includes('due')) {
@@ -771,42 +743,31 @@
 
         function copyEmailText() {
             if (!processedReportData || !currentConfig) return alert("Please process a report first.");
-            
             const { clientName, ageColumnLabel } = currentConfig;
             const { today, yesterday } = processedReportData;
-
             let criticalTotal = 0, priorityTotal = 0;
             Object.values(today).forEach(status => {
                 criticalTotal += (status['28-29'] || 0);
                 priorityTotal += (status['21-27'] || 0);
             });
-
-            const intro = yesterday 
-                ? `Attached is today's Daily Action Report for ${clientName}, structured to align with our new KPI improvement strategy. Previous day's counts are in (parenthesis).`
-                : `Attached is today's Daily Action Report for ${clientName}, structured to align with our new KPI improvement strategy.`;
-
+            const intro = yesterday ? `Attached is today's Daily Action Report for ${clientName}, structured to align with our new KPI improvement strategy. Previous day's counts are in (parenthesis).` : `Attached is today's Daily Action Report for ${clientName}, structured to align with our new KPI improvement strategy.`;
             const executiveSummary = `Today's immediate focus is on the ${criticalTotal} CRITICAL claims (28-29 days) to prevent compliance failures. The main proactive effort will be on the ${priorityTotal} PRIORITY claims (21-27 days).`;
             const strategicReminders = `**Strategic Reminders:**\n- The primary focus remains on **Par claims** to drive the largest impact on the metric, while continuing to monitor Non-Par claims.\n- Please address a limited number of claims from the **Backlog (30+ Days)** tabs daily, prioritizing urgent provider requests.`;
             const formatStatLine = (t, y) => yesterday ? `${t} (${y})` : `${t}`;
-            
             const createStatBlock = (title, todayStats, yestStats) => {
                 const y = yesterday && yestStats ? yestStats : { total: 0, '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
                 return `Number of total claims ${title}: ${formatStatLine(todayStats.total, y.total)}\nCRITICAL (28-29 Days): ${formatStatLine(todayStats['28-29'], y['28-29'])}\nPRIORITY (21-27 Days): ${formatStatLine(todayStats['21-27'], y['21-27'])}\nBacklog (30+ Days): ${formatStatLine(todayStats['30+'], y['30+'])}\nQueue (0-20 Days): ${formatStatLine(todayStats['0-20'], y['0-20'])}`;
             };
-            
             const combinedMgmtRevToday = { ...today['MANAGEMENTREVIEW'] };
             const hcToday = today['HC MGMT REV'];
             Object.keys(hcToday).forEach(key => { combinedMgmtRevToday[key] = (combinedMgmtRevToday[key] || 0) + hcToday[key]; });
-
             let combinedMgmtRevYesterday = yesterday ? { ...(yesterday['MANAGEMENTREVIEW'] || { total: 0, '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 }) } : { total: 0, '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
             if (yesterday) {
                 const hcYesterday = yesterday['HC MGMT REV'] || { total: 0, '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
                 Object.keys(hcYesterday).forEach(key => { combinedMgmtRevYesterday[key] = (combinedMgmtRevYesterday[key] || 0) + hcYesterday[key]; });
             }
-            
             const mgmtReviewBlock = `Number of total claims Management Review: ${formatStatLine(combinedMgmtRevToday.total, combinedMgmtRevYesterday.total)}\nOf these, High Dollar Claims: ${formatStatLine(today['HC MGMT REV'].total, yesterday?.['HC MGMT REV']?.total ?? 0)}\nCRITICAL (28-29 Days): ${formatStatLine(combinedMgmtRevToday['28-29'], combinedMgmtRevYesterday['28-29'])}\nPRIORITY (21-27 Days): ${formatStatLine(combinedMgmtRevToday['21-27'], combinedMgmtRevYesterday['21-27'])}\nBacklog (30+ Days): ${formatStatLine(combinedMgmtRevToday['30+'], combinedMgmtRevYesterday['30+'])}\nQueue (0-20 Days): ${formatStatLine(combinedMgmtRevToday['0-20'], combinedMgmtRevYesterday['0-20'])}`;
             const emailBody = `Hello Claims and PV Teams,\n\n${intro}\n\n${executiveSummary}\n\nBelow are the detailed highlights from the report:\n\n${createStatBlock('pending', today['PEND'], yesterday?.['PEND'])}\n\n${createStatBlock('On Hold', today['ONHOLD'], yesterday?.['ONHOLD'])}\n\n${mgmtReviewBlock}\n\n${createStatBlock('needing W9 Letter', today['W9_LETTER_NEEDED'], yesterday?.['W9_LETTER_NEEDED'])}\n\n${createStatBlock('for W9 Follow-Up', today['W9_FOLLOW_UP'], yesterday?.['W9_FOLLOW_UP'])}\n\n${strategicReminders}\n\nPlease let me know if you have any questions.\n\nThis ${clientName} report is based on ${ageColumnLabel}.\n`;
-            
             navigator.clipboard.writeText(emailBody).then(() => {
                 const btn = document.getElementById('copyEmailBtn');
                 const originalText = btn.textContent;
@@ -827,9 +788,7 @@
         }
         
         const parseCurrency = (value) => (value === null || value === undefined) ? NaN : parseFloat(String(value).replace(/[^0-9.-]/g, '')) || NaN;
-
         const truncateSheetName = (name) => name.replace(/[\\\/\?\*\[\]]/g, '').substring(0, 31);
-
         document.addEventListener('DOMContentLoaded', initializeTool);
     </script>
 
