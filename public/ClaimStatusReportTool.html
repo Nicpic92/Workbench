@@ -171,6 +171,7 @@
         let currentConfig = null;
         let managementReviewClaims = [];
         let reportHeader = [];
+        let finalNotesIndexForMgmtReview = -1;
 
         // --- Client Configuration Data ---
         const clientConfigs = {
@@ -260,21 +261,14 @@
 
         // --- Configuration Form Handling ---
         function populateConfigForm(config) {
-            // General settings
             document.getElementById('config-clientName').value = config.clientName || '';
             document.getElementById('config-ageColumnLabel').value = config.ageColumnLabel || '';
-
-            // Column Mappings
             for (const key in config.columns) {
                 const element = document.getElementById(`config-col-${key}`);
                 if (element) element.value = config.columns[key];
             }
-
-            // High Dollar Rules
             document.getElementById('config-rule-hd-professional').value = config.rules.highDollar.professional;
             document.getElementById('config-rule-hd-institutional').value = config.rules.highDollar.institutional;
-
-            // Owner Assignments
             for (const key in config.rules.owners) {
                 const element = document.getElementById(`config-rule-owner-${key}`);
                 if (element) element.value = config.rules.owners[key];
@@ -288,40 +282,22 @@
         function gatherAndParseConfig() {
             try {
                 const config = {
-                    clientName: document.getElementById('config-clientName').value,
-                    ageColumnLabel: document.getElementById('config-ageColumnLabel').value,
+                    clientName: document.getElementById('config-clientName').value, ageColumnLabel: document.getElementById('config-ageColumnLabel').value,
                     columns: {},
-                    rules: {
-                        highDollar: {},
-                        owners: {},
-                        w9Owners: {}
-                    }
+                    rules: { highDollar: {}, owners: {}, w9Owners: {} }
                 };
-
-                // Column Mappings
                 const colKeys = ['cleanAge', 'claimStatus', 'claimNumber', 'payer', 'networkStatus', 'dsnp', 'claimType', 'totalCharges', 'notes', 'dateCols'];
-                colKeys.forEach(key => {
-                    config.columns[key] = document.getElementById(`config-col-${key}`).value;
-                });
-
-                // High Dollar
+                colKeys.forEach(key => { config.columns[key] = document.getElementById(`config-col-${key}`).value; });
                 config.rules.highDollar.professional = parseFloat(document.getElementById('config-rule-hd-professional').value);
                 config.rules.highDollar.institutional = parseFloat(document.getElementById('config-rule-hd-institutional').value);
-
-                // Owners
                 const ownerKeys = ['highDollar', 'mgmtReview', 'onHold', 'pend', 'deny'];
-                ownerKeys.forEach(key => {
-                    config.rules.owners[key] = document.getElementById(`config-rule-owner-${key}`).value;
-                });
+                ownerKeys.forEach(key => { config.rules.owners[key] = document.getElementById(`config-rule-owner-${key}`).value; });
                 const w9OwnerKeys = ['followUp', 'letterNeeded', 'reprocess'];
-                w9OwnerKeys.forEach(key => {
-                    config.rules.w9Owners[key] = document.getElementById(`config-rule-w9-${key}`).value;
-                });
+                w9OwnerKeys.forEach(key => { config.rules.w9Owners[key] = document.getElementById(`config-rule-w9-${key}`).value; });
                 
-                // --- Now, convert column letters to indices ---
                 const colLetterToIndex = (letter) => {
                     if (!letter || typeof letter !== 'string' || !/^[A-Z,]+$/i.test(letter.replace(/,/g, ''))) return -1;
-                    if (letter.includes(',')) return letter; // Handle dateCols separately
+                    if (letter.includes(',')) return letter;
                     let col = 0; letter = letter.toUpperCase();
                     for (let i = 0; i < letter.length; i++) col += (letter.charCodeAt(i) - 64) * Math.pow(26, letter.length - i - 1);
                     return col - 1;
@@ -339,24 +315,21 @@
                 if (Object.values(indices).some(val => val === -1 || (Array.isArray(val) && val.includes(-1)))) {
                     throw new Error("Invalid column letter found in configuration.");
                 }
-                
                 config.indices = indices;
                 return config;
-
             } catch (error) {
                 displayStatus(`Configuration Error: ${error.message}`, 'error');
                 return null;
             }
         }
         
-        // --- Core Processing Logic (largely unchanged, uses config object) ---
+        // --- Core Processing Logic ---
         async function processFiles(mainFile, yesterdayFile, config) {
             resetUI();
             displayStatus('Processing... Please wait.', 'info', true);
-            const { indices, rules } = config;
+            const { indices } = config;
             const hasYesterdayReport = !!yesterdayFile;
 
-            // ... (readFileAsAOA and getStatsForAOA are unchanged)
             const readFileAsAOA = (file) => new Promise((resolve, reject) => {
                 const reader = new FileReader();
                 reader.onload = e => {
@@ -369,7 +342,7 @@
                 reader.readAsArrayBuffer(file);
             });
 
-             const getStatsForAOA = (aoa, cfg) => {
+            const getStatsForAOA = (aoa, cfg) => {
                 const { indices: idx, rules: rls } = cfg;
                 const dayBuckets = { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
                 const stats = { 'PEND': { total: 0, ...dayBuckets }, 'ONHOLD': { total: 0, ...dayBuckets }, 'MANAGEMENTREVIEW': { total: 0, ...dayBuckets }, 'HC MGMT REV': { total: 0, ...dayBuckets }, 'W9_LETTER_NEEDED': { total: 0, ...dayBuckets }, 'W9_FOLLOW_UP': { total: 0, ...dayBuckets } };
@@ -446,11 +419,22 @@
                 
                 const headerRow = main_aoa[0];
                 reportHeader = [...headerRow];
-                if (hasYesterdayReport) reportHeader.splice(indices.claimStatusIndex, 0, 'Yest. Claim State');
+                
+                // --- CORRECTED INDEX CALCULATION ---
                 let daysInsertIndex = indices.cleanAgeIndex + 1;
-                if (hasYesterdayReport && indices.cleanAgeIndex >= indices.claimStatusIndex) daysInsertIndex++; 
+                finalNotesIndexForMgmtReview = indices.notesIndex;
+
+                if (hasYesterdayReport) {
+                    reportHeader.splice(indices.claimStatusIndex, 0, 'Yest. Claim State');
+                    if (indices.claimStatusIndex <= daysInsertIndex) daysInsertIndex++;
+                    if (indices.claimStatusIndex <= finalNotesIndexForMgmtReview) finalNotesIndexForMgmtReview++;
+                }
+
                 reportHeader.splice(daysInsertIndex, 0, 'Days Bucket');
+                if (daysInsertIndex <= finalNotesIndexForMgmtReview) finalNotesIndexForMgmtReview++;
+
                 reportHeader.push('Added (Owner)', 'Due Date');
+                // --- END OF CORRECTION ---
 
                 for (const originalRow of main_aoa.slice(1)) {
                     if (originalRow.every(cell => cell === null)) continue;
@@ -476,7 +460,7 @@
                 }
 
                 if (managementReviewClaims.length > 0) {
-                    displayAssignmentTable(managementReviewClaims, indices.notesIndex);
+                    displayAssignmentTable(managementReviewClaims, finalNotesIndexForMgmtReview);
                 }
 
                 displayStatus('Initial reports generated. Please complete assignment step.', 'success');
@@ -546,16 +530,10 @@
             };
 
             for (const newRow of mainReportRows) {
-                const originalCleanAgeIndex = indices.cleanAgeIndex;
-                const originalNetworkStatusIndex = indices.networkStatusIndex;
-                const originalClaimStateIndex = indices.claimStatusIndex;
-                const originalDSNPIndex = indices.dsnpIndex;
-                const originalNotesIndex = indices.notesIndex;
-
-                const cleanAge = parseInt(newRow[originalCleanAgeIndex], 10);
-                const networkStatusRaw = String(newRow[originalNetworkStatusIndex] || '').toUpperCase();
+                const cleanAge = parseInt(newRow[indices.cleanAgeIndex], 10);
+                const networkStatusRaw = String(newRow[indices.networkStatusIndex] || '').toUpperCase();
                 const networkType = networkStatusRaw.includes('OUT') ? 'nonpar' : 'par';
-                const claimState = String(newRow[originalClaimStateIndex] || '').trim().toUpperCase();
+                const claimState = String(newRow[indices.claimStatusIndex] || '').trim().toUpperCase();
                 
                 overallSummary[networkType].total++;
                 if (!isNaN(cleanAge)) {
@@ -571,7 +549,7 @@
                 }
 
                 if (owner !== rules.owners.highDollar && ['PEND', 'ONHOLD', 'DENY'].includes(claimState)) {
-                    const dsnpRaw = String(newRow[originalDSNPIndex] || '').toUpperCase();
+                    const dsnpRaw = String(newRow[indices.dsnpIndex] || '').toUpperCase();
                     let dsnpStatus = '';
                     if (dsnpRaw.includes('NON DSNP')) { dsnpStatus = 'NonDSNP'; } 
                     else if (dsnpRaw.includes('DSNP') || dsnpRaw === 'Y') { dsnpStatus = 'DSNP'; }
@@ -596,7 +574,7 @@
                     }
                 }
 
-                const noteText = String(newRow[originalNotesIndex] || '');
+                const noteText = String(newRow[indices.notesIndex] || '');
                 if (indices.notesIndex >= 0 && noteText.toLowerCase().includes('w9')) {
                     let w9SheetName = '', tabOwner = '', priorityLevel = 5;
                     const noteLower = noteText.toLowerCase();
@@ -708,7 +686,6 @@
                 }
             });
 
-            const notesIndex = currentConfig.indices.notesIndex;
             const assignedData = new Map();
             const assignmentSummary = [['Note Text', 'Claim Count', 'Assignment']];
 
@@ -721,7 +698,7 @@
             sortedNotes.forEach(row => assignmentSummary.push(row));
 
             managementReviewClaims.forEach(claim => {
-                const noteText = String(claim[notesIndex] || '(blank)').trim();
+                const noteText = String(claim[finalNotesIndexForMgmtReview] || '(blank)').trim();
                 const assignment = noteToAssignmentMap.get(noteText) || 'Unassigned';
                 if (!assignedData.has(assignment)) {
                     assignedData.set(assignment, []);
@@ -756,6 +733,7 @@
             document.getElementById('download-links').innerHTML = '';
             document.getElementById('copy-email-container').innerHTML = '';
             managementReviewClaims = []; reportHeader = [];
+            finalNotesIndexForMgmtReview = -1;
         }
 
         function createAndDownloadSimpleWorkbook(rows, header, fileName, sheetName) {
@@ -812,7 +790,7 @@
             const formatStatLine = (t, y) => yesterday ? `${t} (${y})` : `${t}`;
             
             const createStatBlock = (title, todayStats, yestStats) => {
-                const y = yesterday ? yestStats : { total: 0, '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
+                const y = yesterday && yestStats ? yestStats : { total: 0, '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
                 return `Number of total claims ${title}: ${formatStatLine(todayStats.total, y.total)}\nCRITICAL (28-29 Days): ${formatStatLine(todayStats['28-29'], y['28-29'])}\nPRIORITY (21-27 Days): ${formatStatLine(todayStats['21-27'], y['21-27'])}\nBacklog (30+ Days): ${formatStatLine(todayStats['30+'], y['30+'])}\nQueue (0-20 Days): ${formatStatLine(todayStats['0-20'], y['0-20'])}`;
             };
             
