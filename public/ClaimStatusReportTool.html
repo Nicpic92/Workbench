@@ -573,10 +573,11 @@
                     }
                 }
                 
-                // Adjust for shifted index when reading notes from an enhanced row
                 let notesIndexInEnhancedRow = indices.notesIndex;
-                if(config.yesterdayDataMap) notesIndexInEnhancedRow++;
-                if(config.yesterdayDataMap && indices.claimStatusIndex <= indices.notesIndex) notesIndexInEnhancedRow++;
+                if(config.yesterdayDataMap) {
+                    if(indices.claimStatusIndex <= indices.notesIndex) notesIndexInEnhancedRow++;
+                }
+                if(indices.cleanAgeIndex + 1 <= notesIndexInEnhancedRow) notesIndexInEnhancedRow++;
                 
                 const noteText = String(newRow[notesIndexInEnhancedRow] || '');
                 if (indices.notesIndex >= 0 && noteText.toLowerCase().includes('w9')) {
@@ -648,8 +649,33 @@
             const copyBtnContainer = document.getElementById('copy-email-container');
             copyBtnContainer.innerHTML = `<button id="copyEmailBtn" class="inline-block bg-blue-600 text-white font-bold text-lg rounded-lg py-3 px-10 hover:bg-blue-700">Copy Email Text</button>`;
         }
-
+        
         // --- Management Review Assignment ---
+        function autoAssignOwner(noteText) {
+            const lowerNote = noteText.toLowerCase();
+
+            // PV Rules
+            if (lowerNote.includes('no matching contract found with pbp')) return 'PV';
+            if (lowerNote.includes('pay to name mismatch')) return 'PV';
+            if (lowerNote.includes('no matching contract found')) return 'PV';
+            if (lowerNote.includes('issue while getting contract')) return 'PV';
+            if (lowerNote.includes('hold for payer review')) return 'PV';
+
+            // Claims Rules
+            if (lowerNote.includes('part b outpatient claim to be priced at line level')) return 'Claims';
+            if (lowerNote.includes('part a inpatient claim to be priced at claim level')) return 'Claims';
+            if (lowerNote.includes('professional duplicate service')) return 'Claims';
+            if (lowerNote.includes('w9 req') && lowerNote.includes('due')) return 'Claims';
+            if (lowerNote.includes('w9') && lowerNote.includes('received') && lowerNote.includes('pv updated')) return 'Claims';
+            if (lowerNote.includes('payment>') || lowerNote.includes('exceeds total payment') || lowerNote.includes('net pay >') || lowerNote.includes('$10,000') || lowerNote.includes('$10000')) return 'Claims';
+            if (lowerNote.includes('pv updated')) return 'Claims';
+            if (lowerNote.includes('rerun rule')) return 'Claims';
+            if (lowerNote.includes('rerun')) return 'Claims';
+            if (lowerNote.includes('remap')) return 'Claims';
+
+            return ''; // Default: no assignment
+        }
+
         function displayAssignmentTable(mgmtRows, notesIndex) {
             const assignmentContainer = document.getElementById('mgmt-review-assignment-container');
             const tableBody = document.getElementById('assignment-table-body');
@@ -657,7 +683,9 @@
 
             const notesSummary = new Map();
             mgmtRows.forEach(row => {
-                const noteText = String(row[notesIndex] || '(blank)').trim();
+                const noteText = String(row[notesIndex] || '').trim();
+                if (noteText === '') return; // Skip blank notes
+
                 if (!notesSummary.has(noteText)) {
                     notesSummary.set(noteText, { count: 0 });
                 }
@@ -667,12 +695,13 @@
             const sortedNotes = [...notesSummary.entries()].sort((a, b) => b[1].count - a[1].count);
 
             sortedNotes.forEach(([noteText, data]) => {
+                const preAssigned = autoAssignOwner(noteText);
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td class="px-6 py-4 text-sm text-gray-700 align-top break-words max-w-lg">${noteText}</td>
                     <td class="px-6 py-4 text-sm text-gray-700 align-top">${data.count}</td>
                     <td class="px-6 py-4 text-sm text-gray-700 align-top">
-                        <input type="text" class="table-input" data-note="${noteText.replace(/"/g, '&quot;')}">
+                        <input type="text" class="table-input" data-note="${noteText.replace(/"/g, '&quot;')}" value="${preAssigned}">
                     </td>
                 `;
                 tableBody.appendChild(row);
@@ -702,7 +731,8 @@
             sortedNotes.forEach(row => assignmentSummary.push(row));
 
             managementReviewClaims.forEach(claim => {
-                const noteText = String(claim[finalNotesIndexForMgmtReview] || '(blank)').trim();
+                const noteText = String(claim[finalNotesIndexForMgmtReview] || '').trim();
+                if (noteText === '') return; // Also skip blanks here when assigning
                 const assignment = noteToAssignmentMap.get(noteText) || 'Unassigned';
                 if (!assignedData.has(assignment)) {
                     assignedData.set(assignment, []);
