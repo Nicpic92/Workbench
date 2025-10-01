@@ -480,17 +480,14 @@
 
                 if (isHighCost && isMgmtReviewState) {
                     sheetsData[highDollarSheetName].push(newRow);
-                }
-                
-                if (!isHighCost && (['PEND', 'ONHOLD', 'DENY'].includes(claimState) || isMgmtReviewState)) {
+                } else { // CORRECTED: Process ALL non-high-dollar claims for breakout tabs
                     const dsnpRaw = String(newRow[indices.dsnpIndex] || '').toUpperCase();
                     let dsnpStatus = dsnpRaw.includes('NON DSNP') ? 'NonDSNP' : (dsnpRaw.includes('DSNP') || dsnpRaw === 'Y' ? 'DSNP' : '');
 
-                    let statusTab = '', tabOwner = '';
-                    if (isMgmtReviewState) { statusTab = 'MgmtRev'; tabOwner = owner; }
-                    else if (claimState === 'ONHOLD') { statusTab = 'OnHold'; tabOwner = rules.owners.onHold; }
-                    else if (claimState === 'PEND') { statusTab = 'Pend'; tabOwner = rules.owners.pend; }
-                    else if (claimState === 'DENY') { statusTab = 'Deny'; tabOwner = rules.owners.deny; }
+                    let statusTab = claimState;
+                    if(isMgmtReviewState) statusTab = 'MgmtRev';
+                    
+                    const tabOwner = owner; 
 
                     if (dsnpStatus && tabOwner && networkType) {
                         let tabKey = '', priorityLevel = 0;
