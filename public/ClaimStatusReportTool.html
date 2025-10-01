@@ -257,16 +257,11 @@
 
         function processAndAssignClaims(aoa, config) {
             const claims = [];
-            const localPrebatch = [];
-
             for (const row of aoa.slice(1)) {
                 if (row.every(c => c === null)) continue;
                 
                 const claimState = String(row[config.claimStatusIndex] || '').trim().toUpperCase();
-                if (claimState.includes('PREBATCH')) {
-                    localPrebatch.push(row);
-                    continue;
-                }
+                if (claimState.includes('PREBATCH')) continue;
                 
                 const noteText = String(row[config.notesIndex] || '');
                 const cleanAge = parseInt(row[config.cleanAgeIndex], 10);
@@ -287,7 +282,7 @@
                 
                 claims.push({ ...config, originalRow: row, noteText, cleanAge, claimState, owner });
             }
-            return { claimsList: claims, prebatchList: localPrebatch };
+            return claims;
         }
         
         async function performInitialProcessing(mainFile, yesterdayFile, config) {
@@ -313,7 +308,7 @@
             try {
                 if (hasYesterdayFile) {
                     const yesterday_aoa = await readFileAsAOA(yesterdayFile);
-                    const { claimsList: yestClaims } = processAndAssignClaims(yesterday_aoa, config);
+                    const yestClaims = processAndAssignClaims(yesterday_aoa, config);
                     yesterdayStats = calculateStats(yestClaims);
                     yestClaims.forEach(claim => {
                         const claimNumber = claim.originalRow[config.claimNumberIndex];
@@ -323,9 +318,9 @@
                 
                 const main_aoa = await readFileAsAOA(mainFile);
                 mainReportHeader = main_aoa[0];
-                const { claimsList: todayClaims, prebatchList } = processAndAssignClaims(main_aoa, config);
-                processedClaimsList = todayClaims;
-                prebatchClaims = prebatchList;
+                
+                prebatchClaims = main_aoa.slice(1).filter(row => String(row[config.claimStatusIndex] || '').toUpperCase().includes('PREBATCH'));
+                processedClaimsList = processAndAssignClaims(main_aoa, config);
 
                 fileHeaderRow = [...mainReportHeader];
                 if (hasYesterdayFile) fileHeaderRow.splice(config.claimStatusIndex, 0, 'Yest. Claim State');
@@ -461,7 +456,10 @@
 
         function buildWorkbook(claimsData, reportTitle, ownerFilter = null) {
             const masterSheetName = "All Processed Data", highDollarSheetName = "High Dollar";
-            const sheetsData = { [masterSheetName]: [fileHeaderRow], [highDollarSheetName]: [fileHeaderRow] };
+            const sheetsData = { [masterSheetName]: [fileHeaderRow] };
+            if (ownerFilter !== 'PV') {
+                sheetsData[highDollarSheetName] = [fileHeaderRow];
+            }
             const tabMetadata = {};
 
             const overallSummary = {
@@ -486,17 +484,19 @@
                 const isMgmtReview = claim.claimState.includes('MANAGEMENT') && claim.claimState.includes('REVIEW');
                 const isHighCost = isMgmtReview && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500));
                 
-                if (isHighCost) sheetsData[highDollarSheetName].push(claim.processedRow);
+                if (isHighCost && ownerFilter !== 'PV') {
+                    sheetsData[highDollarSheetName].push(claim.processedRow);
+                }
                 
-                 const dsnpRaw = String(claim.originalRow[claim.dsnpIndex] || '').toUpperCase();
-                 const dsnpStatus = dsnpRaw.includes('NON DSNP') ? 'NonDSNP' : (dsnpRaw.includes('DSNP') || dsnpRaw === 'Y' ? 'DSNP' : '');
-                 let statusTab = '', tabOwner = '';
-                 if (isMgmtReview) { statusTab = 'MgmtRev'; tabOwner = 'PV'; }
-                 else if (claim.claimState === 'ONHOLD') { statusTab = 'OnHold'; tabOwner = 'PV'; }
-                 else if (claim.claimState === 'PEND') { statusTab = 'Pend'; tabOwner = 'Claims'; }
-                 else if (claim.claimState === 'DENY') { statusTab = 'Deny'; tabOwner = 'Claims'; }
-                 
-                 if (dsnpStatus && tabOwner && networkType && !isHighCost) {
+                const dsnpRaw = String(claim.originalRow[claim.dsnpIndex] || '').toUpperCase();
+                const dsnpStatus = dsnpRaw.includes('NON DSNP') ? 'NonDSNP' : (dsnpRaw.includes('DSNP') || dsnpRaw === 'Y' ? 'DSNP' : '');
+                let statusTab = '', tabOwner = '';
+                if (isMgmtReview) { statusTab = 'MgmtRev'; tabOwner = 'PV'; }
+                else if (claim.claimState === 'ONHOLD') { statusTab = 'OnHold'; tabOwner = 'PV'; }
+                else if (claim.claimState === 'PEND') { statusTab = 'Pend'; tabOwner = 'Claims'; }
+                else if (claim.claimState === 'DENY') { statusTab = 'Deny'; tabOwner = 'Claims'; }
+                
+                if (dsnpStatus && tabOwner && networkType && (ownerFilter === 'PV' || !isHighCost)) {
                     let tabKey = '', priorityLevel = 0;
                     if (claim.cleanAge >= 28 && claim.cleanAge <= 29) { priorityLevel = 1; tabKey = `CRITICAL (28-29d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
                     else if (claim.cleanAge >= 21 && claim.cleanAge <= 27) { priorityLevel = 2; tabKey = `PRIORITY (21-27d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
@@ -506,10 +506,10 @@
                     const truncatedTabKey = tabKey.replace(/[\\\/\?\*\[\]]/g, '').substring(0, 31);
                     if (!sheetsData[truncatedTabKey]) { sheetsData[truncatedTabKey] = [fileHeaderRow]; tabMetadata[truncatedTabKey] = { owner: tabOwner, priority: priorityLevel }; }
                     sheetsData[truncatedTabKey].push(claim.processedRow);
-                 }
+                }
 
-                 const noteLower = claim.noteText.toLowerCase();
-                 if (noteLower.includes('w9')) {
+                const noteLower = claim.noteText.toLowerCase();
+                if (noteLower.includes('w9')) {
                     let w9SheetName = '', w9Owner = '';
                     if (noteLower.includes('req')) { w9SheetName = 'W9 Follow-Up'; w9Owner = 'Claims'; }
                     else if (noteLower.includes('denied') || noteLower.includes('missing')) { w9SheetName = 'W9 Letter Needed'; w9Owner = 'PV'; }
@@ -519,14 +519,14 @@
                         if (!sheetsData[w9SheetName]) { sheetsData[w9SheetName] = [fileHeaderRow]; tabMetadata[w9SheetName] = { owner: w9Owner, priority: 5 }; }
                         sheetsData[w9SheetName].push(claim.processedRow);
                     }
-                 }
+                }
             }
 
             const coverPageData = [[reportTitle], [`Date: ${getFormattedDate()}`], [], ["Overall Claim Summary"], ["Category", "28-29 Days (Critical)", "21-27 Days (Priority)", "30+ Days (Backlog)", "0-20 Days (Queue)", "Total Active Claims"], ["Par Claims", overallSummary.par['28-29'], overallSummary.par['21-27'], overallSummary.par['30+'], overallSummary.par['0-20'], overallSummary.par.total], ["Non-Par Claims", overallSummary.nonpar['28-29'], overallSummary.nonpar['21-27'], overallSummary.nonpar['30+'], overallSummary.nonpar['0-20'], overallSummary.nonpar.total], [], ["Core Strategy: Focus on claims nearing the 30-day threshold. Work tabs in priority order."], []];
             
             const allBreakoutTabs = Object.keys(tabMetadata);
             const addSectionToCover = (title, priority) => {
-                const filteredTabs = allBreakoutTabs.filter(key => tabMetadata[key] && tabMetadata[key].priority === priority && (!ownerFilter || tabMetadata[key].owner === ownerFilter)).sort();
+                const filteredTabs = allBreakoutTabs.filter(key => tabMetadata[key]?.priority === priority && (!ownerFilter || tabMetadata[key].owner === ownerFilter)).sort();
                 if (filteredTabs.length > 0) {
                     coverPageData.push([title], ["Tab Name", "Claim Count", "Assigned Owner"]);
                     filteredTabs.forEach(key => coverPageData.push([key, sheetsData[key].length - 1, tabMetadata[key].owner]));
@@ -544,9 +544,14 @@
             coverWS['!cols'] = [{ wch: 35 }, { wch: 20 }, { wch: 22 }];
             XLSX.utils.book_append_sheet(wb, coverWS, "Cover Page");
             
-            const sheetOrder = ["Cover Page", highDollarSheetName, ...allBreakoutTabs.sort((a,b) => (tabMetadata[a].priority - tabMetadata[b].priority) || a.localeCompare(b)), masterSheetName];
+            let sheetOrder = ["Cover Page"];
+            if (ownerFilter !== 'PV') {
+                sheetOrder.push(highDollarSheetName);
+            }
+            sheetOrder.push(...allBreakoutTabs.sort((a,b) => (tabMetadata[a].priority - tabMetadata[b].priority) || a.localeCompare(b)), masterSheetName);
+
             sheetOrder.forEach(sheetName => {
-                if (sheetsData[sheetName] && sheetsData[sheetName].length > 1 && (!ownerFilter || (tabMetadata[sheetName] && tabMetadata[sheetName].owner === ownerFilter) || [masterSheetName, highDollarSheetName].includes(sheetName))) {
+                if (sheetsData[sheetName] && sheetsData[sheetName].length > 1) {
                     const ws = XLSX.utils.aoa_to_sheet(sheetsData[sheetName]);
                     ws['!autofilter'] = { ref: ws['!ref'] };
                     XLSX.utils.book_append_sheet(wb, ws, sheetName);
@@ -561,11 +566,7 @@
             const stats = { 'PEND': { total: 0, ...dayBuckets }, 'ONHOLD': { total: 0, ...dayBuckets }, 'MANAGEMENTREVIEW': { total: 0, ...dayBuckets }, 'DENY': { total: 0, ...dayBuckets } };
             
             for(const claim of claimsList) {
-                let finalClaimState = claim.claimState;
-                if (claim.claimState.includes('MANAGEMENT') && claim.claimState.includes('REVIEW')) {
-                    finalClaimState = 'MANAGEMENTREVIEW'; // Normalize for stats
-                }
-                
+                let finalClaimState = claim.claimState.includes('MANAGEMENT') ? 'MANAGEMENTREVIEW' : claim.claimState;
                 if (stats[finalClaimState]) {
                     stats[finalClaimState].total++;
                     let daysValue = '';
@@ -612,9 +613,8 @@
             
             navigator.clipboard.writeText(emailBody).then(() => {
                 const btn = document.getElementById('copyEmailBtn');
-                const originalText = btn.textContent;
                 btn.textContent = 'Copied!';
-                setTimeout(() => { btn.textContent = originalText; }, 2000);
+                setTimeout(() => { btn.textContent = 'Copy Email Text'; }, 2000);
             }).catch(err => alert('Failed to copy text.'));
         }
         
