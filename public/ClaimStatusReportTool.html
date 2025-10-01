@@ -480,7 +480,7 @@
 
                 if (isHighCost && isMgmtReviewState) {
                     sheetsData[highDollarSheetName].push(newRow);
-                } else { // CORRECTED: Process ALL non-high-dollar claims for breakout tabs
+                } else {
                     const dsnpRaw = String(newRow[indices.dsnpIndex] || '').toUpperCase();
                     let dsnpStatus = dsnpRaw.includes('NON DSNP') ? 'NonDSNP' : (dsnpRaw.includes('DSNP') || dsnpRaw === 'Y' ? 'DSNP' : '');
 
@@ -490,17 +490,20 @@
                     const tabOwner = owner; 
 
                     if (dsnpStatus && tabOwner && networkType) {
-                        let tabKey = '', priorityLevel = 0;
-                        if (cleanAge >= 28 && cleanAge <= 29) { priorityLevel = 1; tabKey = `CRITICAL (28-29d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
-                        else if (cleanAge >= 21 && cleanAge <= 27) { priorityLevel = 2; tabKey = `PRIORITY (21-27d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
-                        else if (cleanAge >= 30) { priorityLevel = 3; tabKey = `Backlog (30+d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
-                        else if (cleanAge <= 20) { priorityLevel = 4; tabKey = `Queue (0-20d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
+                        let tabKey = '', priorityLevel = 0, priorityLabel = '';
+                        
+                        if (cleanAge >= 28 && cleanAge <= 29) { priorityLevel = 1; priorityLabel = "CRITICAL (28-29d)"; }
+                        else if (cleanAge >= 21 && cleanAge <= 27) { priorityLevel = 2; priorityLabel = "PRIORITY (21-27d)"; }
+                        else if (cleanAge >= 30) { priorityLevel = 3; priorityLabel = "Backlog (30+d)"; }
+                        else { priorityLevel = 4; priorityLabel = "Queue (0-20d)"; }
 
-                        if (tabKey) {
-                            tabKey = truncateSheetName(tabKey);
-                            if (!sheetsData[tabKey]) { sheetsData[tabKey] = [header]; tabMetadata[tabKey] = { owner: tabOwner, priority: priorityLevel }; }
-                            sheetsData[tabKey].push(newRow);
+                        tabKey = truncateSheetName(`${priorityLabel} ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`);
+                        
+                        if (!sheetsData[tabKey]) {
+                            sheetsData[tabKey] = [header];
+                            tabMetadata[tabKey] = { owner: tabOwner, priority: priorityLevel };
                         }
+                        sheetsData[tabKey].push(newRow);
                     }
                 }
                 
