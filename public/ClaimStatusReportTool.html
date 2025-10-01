@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale-1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Claim Status Report Tool - Spreadsheet Simplicity</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
@@ -144,42 +144,38 @@
         let mainReportHeader = [];
         let yesterdayDataMap = new Map();
 
-        // --- NEW: Hardcoded Assignment Logic ---
         function getHardcodedAssignment(noteText) {
             const note = noteText || "";
-            if (note === "No Note") return null;
+            if (note === "No Note" || note === "") return null;
 
             const noteLower = note.toLowerCase();
 
-            // Broad pattern matching
+            // --- PV Rules ---
+            if (noteLower.includes('rachael notes') || noteLower.includes('rachael response') || noteLower.includes('as per rachael')) return 'PV';
             if (noteLower.includes('red tab')) return 'PV';
+            if (noteLower.includes('hold for payer review')) return 'PV';
+            if (noteLower.includes('no matching contract') || noteLower.includes('contract not found') || noteLower.includes('missing contract')) return 'PV';
+            if (noteLower.includes('pay to name mismatch')) return 'PV';
+            if (noteLower.includes('provider type not found') || noteLower.includes('no data for the rendering provider')) return 'PV';
+            if (noteLower.includes('missing/incomplete/invalid pay-to')) return 'PV';
+            if (noteLower.includes('w9 missing')) return 'PV';
+            if (noteLower.includes('issue while getting contract')) return 'PV';
+            
+            // --- Claims Rules ---
+            if (noteLower.startsWith('error -')) return 'Claims';
+            if (noteLower.startsWith('servicelineseq:')) return 'Claims';
             if (noteLower.includes('pv updated')) return 'Claims';
             if (noteLower.includes('remap')) return 'Claims';
-            if (noteLower.includes('w9 req')) return 'Claims';
-            if (noteLower.includes('rachael notes')) return 'Claims';
+            if (noteLower.includes('rerun')) return 'Claims';
+            if (noteLower.includes('w9 req') || noteLower.includes('w9 requested')) return 'Claims';
+            if (noteLower.includes('to be priced at')) return 'Claims';
+            if (noteLower.includes('payment >') || noteLower.includes('net pay >') || noteLower.includes('>$10000') || noteLower.includes('exceeds total payment') || noteLower.includes('greater then 10k') || noteLower.includes('allowed amount 10k')) return 'Claims';
+            if (noteLower.includes('no auth on file') || noteLower.includes('denied for authorization') || noteLower.includes('required authorization is not found')) return 'Claims';
+            if (noteLower.includes('duplicate')) return 'Claims';
             if (noteLower.includes('pay-to-provider id updated')) return 'Claims';
             if (noteLower.includes('paid as per pv updated')) return 'Claims';
             if (noteLower.includes('tin is oon')) return 'Claims';
-            if (noteLower.includes('hold for payer review')) return 'PV';
-            if (noteLower.includes('rerun')) return 'Claims';
-            if (noteLower.includes('no matching contract') || noteLower.includes('contract not found')) return 'PV';
-            if (noteLower.includes('pay to name mismatch')) return 'PV';
-            if (noteLower.includes('missing/incomplete/invalid pay-to')) return 'PV';
-            if (noteLower.includes('w9 missing')) return 'PV';
-            if (noteLower.includes('precertification/authorization')) return 'Claims';
             if (noteLower.includes('sequestration applied')) return 'Claims';
-            
-            // Specific exact matches for edge cases
-            const exactMatches = {
-                "Part B OutPatient claim to be priced at line level": "Claims",
-                "Recover from A/R running balance": "Claims",
-                "Outpatient Duplicate Validation": "Claims",
-                "ERROR - Contract 100% applied incorrectly. It should be applied 85% for Nurse practitioner.": "PV"
-            };
-
-            if (exactMatches[note]) {
-                return exactMatches[note];
-            }
 
             return null; // No hardcoded rule found
         }
@@ -217,6 +213,8 @@
             });
             
             const checkFiles = () => {
+                document.getElementById('fileName').textContent = fileInput.files[0] ? `Selected: ${fileInput.files[0].name}` : 'No file selected';
+                document.getElementById('yesterdayFileName').textContent = yesterdayFileInput.files[0] ? `Selected: ${yesterdayFileInput.files[0].name}` : 'No file selected';
                 processBtn.disabled = !fileInput.files[0];
             };
 
@@ -316,6 +314,7 @@
                         else if (isMgmtReview || claimState === 'ONHOLD') defaultOwner = 'PV';
                         else if (['PEND', 'APPROVED', 'DENY'].includes(claimState)) defaultOwner = 'Claims';
                         else if (claimState === 'PR') defaultOwner = originalRow[config.payerIndex] || '';
+                        else defaultOwner = 'PV'; // Default fallback for unassigned notes
                     }
                     
                     const newRow = [...originalRow];
@@ -460,7 +459,6 @@
 
                 sheetsData[masterSheetName].push(claim.processedRow);
                 
-                // Simplified High Dollar check
                 const totalCharges = parseFloat(String(claim.originalRow[claim.totalChargesIndex]).replace(/[^0-9.-]/g, '')) || 0;
                 const claimType = String(claim.originalRow[claim.claimTypeIndex] || '').toUpperCase();
                 const isMgmtReview = claim.claimState.includes('MANAGEMENT') && claim.claimState.includes('REVIEW');
@@ -468,7 +466,6 @@
                 
                 if (isHighCost) sheetsData[highDollarSheetName].push(claim.processedRow);
                 
-                // Breakout tab logic
                  const dsnpRaw = String(claim.originalRow[claim.dsnpIndex] || '').toUpperCase();
                  const dsnpStatus = dsnpRaw.includes('NON DSNP') ? 'NonDSNP' : (dsnpRaw.includes('DSNP') || dsnpRaw === 'Y' ? 'DSNP' : '');
                  let statusTab = '', tabOwner = '';
@@ -484,8 +481,9 @@
                     else if (claim.cleanAge >= 30) { priorityLevel = 3; tabKey = `Backlog (30+d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
                     else { priorityLevel = 4; tabKey = `Queue (0-20d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
                     
-                    if (!sheetsData[tabKey]) { sheetsData[tabKey] = [fileHeaderRow]; tabMetadata[tabKey] = { owner: tabOwner, priority: priorityLevel }; }
-                    sheetsData[tabKey].push(claim.processedRow);
+                    const truncatedTabKey = tabKey.replace(/[\\\/\?\*\[\]]/g, '').substring(0, 31);
+                    if (!sheetsData[truncatedTabKey]) { sheetsData[truncatedTabKey] = [fileHeaderRow]; tabMetadata[truncatedTabKey] = { owner: tabOwner, priority: priorityLevel }; }
+                    sheetsData[truncatedTabKey].push(claim.processedRow);
                  }
 
                  const noteLower = claim.noteText.toLowerCase();
@@ -521,7 +519,7 @@
 
             const wb = XLSX.utils.book_new();
             const coverWS = XLSX.utils.aoa_to_sheet(coverPageData);
-            coverWS['!cols'] = [{ wch: 25 }, { wch: 20 }, { wch: 22 }];
+            coverWS['!cols'] = [{ wch: 35 }, { wch: 20 }, { wch: 22 }];
             XLSX.utils.book_append_sheet(wb, coverWS, "Cover Page");
             
             const sheetOrder = ["Cover Page", highDollarSheetName, ...allBreakoutTabs.sort((a,b) => (tabMetadata[a].priority - tabMetadata[b].priority) || a.localeCompare(b)), masterSheetName];
@@ -529,7 +527,7 @@
                 if (sheetsData[sheetName] && sheetsData[sheetName].length > 1 && (!ownerFilter || (tabMetadata[sheetName] && tabMetadata[sheetName].owner === ownerFilter) || [masterSheetName, highDollarSheetName].includes(sheetName))) {
                     const ws = XLSX.utils.aoa_to_sheet(sheetsData[sheetName]);
                     ws['!autofilter'] = { ref: ws['!ref'] };
-                    XLSX.utils.book_append_sheet(wb, ws, sheetName.substring(0, 31));
+                    XLSX.utils.book_append_sheet(wb, ws, sheetName);
                 }
             });
 
