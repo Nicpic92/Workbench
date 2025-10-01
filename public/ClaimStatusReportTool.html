@@ -61,7 +61,6 @@
                     <h2 class="text-2xl font-bold text-gray-900 mb-4 border-t pt-8">2. Configuration</h2>
                     <p class="text-gray-600 mb-4">The configuration for the selected client is loaded below. You can change any value before running the report.</p>
                     <div id="config-form" class="space-y-4">
-                        <!-- Column Mappings -->
                         <h3 class="config-section-title">Column Mappings</h3>
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             <div><label class="config-label" for="config-col-cleanAge">Clean Age:</label><input type="text" id="config-col-cleanAge" class="config-input uppercase"></div>
@@ -75,17 +74,13 @@
                             <div><label class="config-label" for="config-col-notes">Notes / W9:</label><input type="text" id="config-col-notes" class="config-input uppercase"></div>
                             <div class="lg:col-span-3"><label class="config-label" for="config-col-dateCols">Date Columns (comma-separated):</label><input type="text" id="config-col-dateCols" class="config-input uppercase"></div>
                         </div>
-
-                        <!-- Business Rules -->
                         <h3 class="config-section-title">Business Rules & Assignments</h3>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-6">
-                            <!-- High Dollar -->
                             <div class="space-y-4">
                                 <h4 class="font-semibold text-gray-700">High Dollar Thresholds</h4>
                                 <div><label class="config-label" for="config-rule-hd-professional">Professional Claim > $</label><input type="number" id="config-rule-hd-professional" class="config-input"></div>
                                 <div><label class="config-label" for="config-rule-hd-institutional">Institutional Claim > $</label><input type="number" id="config-rule-hd-institutional" class="config-input"></div>
                             </div>
-                            <!-- General Owners -->
                             <div class="space-y-4">
                                  <h4 class="font-semibold text-gray-700">Standard Owner Assignments</h4>
                                 <div><label class="config-label" for="config-rule-owner-highDollar">High Dollar:</label><input type="text" id="config-rule-owner-highDollar" class="config-input"></div>
@@ -94,15 +89,12 @@
                                 <div><label class="config-label" for="config-rule-owner-pend">Pend:</label><input type="text" id="config-rule-owner-pend" class="config-input"></div>
                                 <div><label class="config-label" for="config-rule-owner-deny">Deny:</label><input type="text" id="config-rule-owner-deny" class="config-input"></div>
                             </div>
-                             <!-- W9 Owners -->
                             <div class="space-y-4 md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
                                 <div><label class="config-label" for="config-rule-w9-followUp">W9 Follow-Up:</label><input type="text" id="config-rule-w9-followUp" class="config-input"></div>
                                 <div><label class="config-label" for="config-rule-w9-letterNeeded">W9 Letter Needed:</label><input type="text" id="config-rule-w9-letterNeeded" class="config-input"></div>
                                 <div><label class="config-label" for="config-rule-w9-reprocess">W9 Reprocess:</label><input type="text" id="config-rule-w9-reprocess" class="config-input"></div>
                             </div>
                         </div>
-
-                         <!-- General Settings -->
                         <h3 class="config-section-title">Report Settings</h3>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                              <div><label class="config-label" for="config-clientName">Client Name (for file naming):</label><input type="text" id="config-clientName" class="config-input"></div>
@@ -126,7 +118,6 @@
                                 <div id="yesterdayFileName" class="text-left mt-2 text-sm text-gray-600">No file selected</div>
                             </div>
                         </div>
-
                         <div id="process-btn-container" class="text-center mt-8">
                             <button id="processBtn" disabled class="bg-indigo-600 text-white font-bold text-lg rounded-lg py-3 px-10 hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed">Process Reports</button>
                         </div>
@@ -154,9 +145,7 @@
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assignment</th>
                                 </tr>
                             </thead>
-                            <tbody id="assignment-table-body" class="bg-white divide-y divide-gray-200">
-                                <!-- Rows will be dynamically inserted here -->
-                            </tbody>
+                            <tbody id="assignment-table-body" class="bg-white divide-y divide-gray-200"></tbody>
                         </table>
                     </div>
                     <div class="text-center mt-8">
@@ -172,11 +161,8 @@
         let processedReportData = null; 
         let currentConfig = null;
         let reportHeader = [];
-        let finalNotesIndex = -1;
-        // Triage arrays
-        let triagedPrebatchRows = [];
-        let triagedMainReportRows = [];
-        let triagedMgmtReviewRows = [];
+        let finalColumnIndices = {};
+        let triagedPrebatchRows = [], triagedMainReportRows = [], triagedMgmtReviewRows = [];
 
         // --- Client Configuration Data ---
         const clientConfigs = {
@@ -368,23 +354,26 @@
                 }
                 
                 reportHeader = [...main_aoa[0]];
-                let daysInsertIndex = indices.cleanAgeIndex + 1;
-                finalNotesIndex = indices.notesIndex;
+                
+                let daysInsert = indices.cleanAgeIndex + 1;
+                let notes = indices.notesIndex;
 
                 if (hasYesterdayReport) {
                     reportHeader.splice(indices.claimStatusIndex, 0, 'Yest. Claim State');
-                    if (indices.claimStatusIndex <= daysInsertIndex) daysInsertIndex++;
-                    if (indices.claimStatusIndex <= finalNotesIndex) finalNotesIndex++;
+                    if (indices.claimStatusIndex <= daysInsert) daysInsert++;
+                    if (indices.claimStatusIndex <= notes) notes++;
                 }
-                reportHeader.splice(daysInsertIndex, 0, 'Days Bucket');
-                if (daysInsertIndex <= finalNotesIndex) finalNotesIndex++;
+                reportHeader.splice(daysInsert, 0, 'Days Bucket');
+                if (daysInsert <= notes) notes++;
                 reportHeader.push('Added (Owner)', 'Due Date');
+                
+                finalColumnIndices = { daysInsert, notes };
 
                 for (const originalRow of main_aoa.slice(1)) {
                     if (originalRow.every(cell => cell === null)) continue;
                     
                     const claimState = String(originalRow[indices.claimStatusIndex] || '').trim().toUpperCase();
-                    const newRow = createEnhancedRow(originalRow, config, daysInsertIndex);
+                    const newRow = createEnhancedRow(originalRow, config, finalColumnIndices.daysInsert);
 
                     if (claimState.includes('PREBATCH')) {
                         triagedPrebatchRows.push(newRow);
@@ -397,7 +386,7 @@
                 
                 displayStatus('', 'info', false); 
                 if (triagedMgmtReviewRows.length > 0) {
-                    displayAssignmentTable(triagedMgmtReviewRows, finalNotesIndex);
+                    displayAssignmentTable(triagedMgmtReviewRows, finalColumnIndices.notes);
                 } else {
                     finalizeAndGenerateReports();
                 }
@@ -424,7 +413,7 @@
                 });
 
                 triagedMgmtReviewRows.forEach(row => {
-                    const noteText = String(row[finalNotesIndex] || '').trim();
+                    const noteText = String(row[finalColumnIndices.notes] || '').trim();
                     const assignment = noteToAssignmentMap.get(noteText);
                     if (assignment) {
                         row[row.length - 2] = assignment;
@@ -435,8 +424,10 @@
             if (triagedPrebatchRows.length > 0) {
                 generatePrebatchReport(triagedPrebatchRows, reportHeader, currentConfig);
             }
-            if (triagedMainReportRows.length > 0) {
-                generateMainActionReport(triagedMainReportRows, reportHeader, currentConfig);
+            if (triagedMainReportRows.length > 0 || triagedMgmtReviewRows.length > 0) {
+                // Combine main and (now assigned) mgmt review rows for the main action report
+                const combinedMainRows = [...triagedMainReportRows, ...triagedMgmtReviewRows];
+                generateMainActionReport(combinedMainRows, reportHeader, currentConfig);
             }
             if (triagedMgmtReviewRows.length > 0) {
                 generateMgmtReviewReport(triagedMgmtReviewRows, reportHeader, currentConfig);
@@ -444,8 +435,9 @@
             
             if (document.getElementById('download-links').children.length > 0) {
                 displayStatus('All reports generated!', 'success');
-                document.getElementById('copy-email-container').innerHTML = `<button id="copyEmailBtn" class="inline-block bg-blue-600 text-white font-bold text-lg rounded-lg py-3 px-10 hover:bg-blue-700">Copy Email Text</button>`;
-                 document.getElementById('copy-email-container').addEventListener('click', (e) => {
+                const copyBtnContainer = document.getElementById('copy-email-container');
+                copyBtnContainer.innerHTML = `<button id="copyEmailBtn" class="inline-block bg-blue-600 text-white font-bold text-lg rounded-lg py-3 px-10 hover:bg-blue-700">Copy Email Text</button>`;
+                copyBtnContainer.addEventListener('click', (e) => {
                     if(e.target.id === 'copyEmailBtn') copyEmailText();
                 });
             } else {
@@ -465,7 +457,7 @@
             createDownloadLink(fileData, fileName, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Prebatch Report');
         }
 
-        function generateMainActionReport(mainReportRows, header, config) {
+        function generateMainActionReport(allMainRows, header, config) {
             const { indices, rules } = config;
             const highDollarSheetName = `High Dollar - ${rules.owners.highDollar}`;
             const masterSheetName = "All Processed Data";
@@ -477,11 +469,12 @@
                 nonpar: { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0, total: 0 }
             };
 
-            for (const newRow of mainReportRows) {
+            for (const newRow of allMainRows) {
                 const cleanAge = parseInt(newRow[indices.cleanAgeIndex], 10);
                 const networkStatusRaw = String(newRow[indices.networkStatusIndex] || '').toUpperCase();
                 const networkType = networkStatusRaw.includes('OUT') ? 'nonpar' : 'par';
                 const claimState = String(newRow[indices.claimStatusIndex] || '').trim().toUpperCase();
+                const isMgmtReviewState = claimState.includes('MANAGEMENT') && claimState.includes('REVIEW');
                 
                 overallSummary[networkType].total++;
                 if (!isNaN(cleanAge)) {
@@ -496,14 +489,15 @@
                     sheetsData[highDollarSheetName].push(newRow);
                 }
 
-                if (owner !== rules.owners.highDollar && ['PEND', 'ONHOLD', 'DENY'].includes(claimState)) {
+                if (owner !== rules.owners.highDollar && (['PEND', 'ONHOLD', 'DENY'].includes(claimState) || isMgmtReviewState)) {
                     const dsnpRaw = String(newRow[indices.dsnpIndex] || '').toUpperCase();
                     let dsnpStatus = '';
                     if (dsnpRaw.includes('NON DSNP')) { dsnpStatus = 'NonDSNP'; } 
                     else if (dsnpRaw.includes('DSNP') || dsnpRaw === 'Y') { dsnpStatus = 'DSNP'; }
 
                     let statusTab = '', tabOwner = '';
-                    if (claimState === 'ONHOLD') { statusTab = 'OnHold'; tabOwner = rules.owners.onHold; }
+                    if (isMgmtReviewState) { statusTab = 'MgmtRev'; tabOwner = owner; }
+                    else if (claimState === 'ONHOLD') { statusTab = 'OnHold'; tabOwner = rules.owners.onHold; }
                     else if (claimState === 'PEND') { statusTab = 'Pend'; tabOwner = rules.owners.pend; }
                     else if (claimState === 'DENY') { statusTab = 'Deny'; tabOwner = rules.owners.deny; }
 
@@ -522,7 +516,7 @@
                     }
                 }
                 
-                const noteText = String(newRow[finalNotesIndex] || '');
+                const noteText = String(newRow[finalColumnIndices.notes] || '');
                 if (indices.notesIndex >= 0 && noteText.toLowerCase().includes('w9')) {
                     let w9SheetName = '', tabOwner = '', priorityLevel = 5;
                     const noteLower = noteText.toLowerCase();
@@ -540,7 +534,7 @@
 
             const coverPageData = [
                 ["Daily Action Report - KPI Improvement Guide"], [`Client: ${config.clientName}`], [`Date: ${getFormattedDate()}`], [], 
-                ["Overall Claim Summary (Excludes Prebatch & Mgmt Review)"],
+                ["Overall Claim Summary (Excludes Prebatch)"],
                 ["Category", "28-29 Days (Critical)", "21-27 Days (Priority)", "30+ Days (Backlog)", "0-20 Days (Queue)", "Total Active Claims"],
                 ["Par Claims", overallSummary.par['28-29'], overallSummary.par['21-27'], overallSummary.par['30+'], overallSummary.par['0-20'], overallSummary.par.total],
                 ["Non-Par Claims", overallSummary.nonpar['28-29'], overallSummary.nonpar['21-27'], overallSummary.nonpar['30+'], overallSummary.nonpar['0-20'], overallSummary.nonpar.total],
@@ -704,7 +698,7 @@
             document.getElementById('copy-email-container').innerHTML = '';
             document.getElementById('process-btn-container').classList.remove('hidden');
             triagedPrebatchRows = []; triagedMainReportRows = []; triagedMgmtReviewRows = [];
-            reportHeader = []; finalNotesIndex = -1;
+            reportHeader = []; finalColumnIndices = {};
         }
 
         function createDownloadLink(data, fileName, mimeType, label) {
