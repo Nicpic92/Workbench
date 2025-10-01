@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale-1.0">
     <title>Claim Status Report Tool - Spreadsheet Simplicity</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
@@ -94,24 +94,21 @@
                 <div id="status" class="text-center mt-4 font-semibold h-6"></div>
                 <div id="loader"></div>
                 
-                <!-- NEW REVIEW AND FINALIZE SECTION -->
                 <div id="review-container" class="hidden space-y-8 border-t pt-8">
                     <div class="text-center">
                         <h2 class="text-3xl font-extrabold text-gray-900">4. Review & Finalize</h2>
                         <p class="mt-2 text-lg text-gray-600">Review assignments for un-coded notes and download reports.</p>
                     </div>
 
-                    <!-- PREBATCH DOWNLOAD -->
                     <div id="prebatch-container" class="hidden bg-gray-50 p-6 rounded-lg">
                         <h3 class="text-xl font-bold text-gray-900 mb-3">Prebatch Claims</h3>
                         <p id="prebatch-summary" class="text-gray-700 mb-4"></p>
                         <button id="downloadPrebatchBtn" class="bg-teal-600 text-white font-bold text-lg rounded-lg py-3 px-8 hover:bg-teal-700">Download Prebatch Report</button>
                     </div>
 
-                    <!-- ASSIGNMENT EDITOR -->
                     <div id="assignment-editor">
                         <h3 class="text-xl font-bold text-gray-900 mb-3">Assignment Editor (Exceptions Only)</h3>
-                        <p id="assignment-editor-description" class="text-gray-700 mb-4">The following notes were not automatically assigned by hardcoded rules. Please assign them below.</p>
+                        <p id="assignment-editor-description" class="text-gray-700 mb-4"></p>
                         <div class="table-container border rounded-lg">
                             <table class="min-w-full divide-y divide-gray-200 table-fixed">
                                 <thead class="bg-gray-100 sticky top-0">
@@ -122,24 +119,18 @@
                                         <th scope="col" class="w-1/4 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">New Assignment (Override)</th>
                                     </tr>
                                 </thead>
-                                <tbody id="assignment-editor-body" class="bg-white divide-y divide-gray-200">
-                                    <!-- Rows will be injected here by JavaScript -->
-                                </tbody>
+                                <tbody id="assignment-editor-body" class="bg-white divide-y divide-gray-200"></tbody>
                             </table>
                         </div>
                     </div>
 
-                    <!-- FINAL GENERATION BUTTON -->
                     <div class="text-center pt-6">
                         <button id="generateFinalReportsBtn" class="bg-green-600 text-white font-bold text-lg rounded-lg py-3 px-10 hover:bg-green-700">Generate Final Reports</button>
                     </div>
                 </div>
 
-                <!-- FINAL DOWNLOADS SECTION -->
                 <div id="final-downloads-container" class="hidden text-center mt-4 space-y-4">
-                    <div id="download-links-container" class="flex flex-wrap justify-center gap-4">
-                        <!-- Download links will be injected here -->
-                    </div>
+                    <div id="download-links-container" class="flex flex-wrap justify-center gap-4"></div>
                     <button id="copyEmailBtn" class="hidden inline-block bg-blue-600 text-white font-bold text-lg rounded-lg py-3 px-10 hover:bg-blue-700">Copy Email Text</button>
                 </div>
             </div>
@@ -147,7 +138,6 @@
     </main>
     
     <script>
-        // --- Global State Variables ---
         let processedClaimsList = [];
         let prebatchClaims = [];
         let fileHeaderRow = [];
@@ -155,45 +145,40 @@
         let yesterdayDataMap = new Map();
 
         // --- NEW: Hardcoded Assignment Logic ---
-        const hardcodedNoteOverrides = {
-            // Exact matches take precedence
-            "Part B OutPatient claim to be priced at line level": "Claims",
-            "Recover from A/R running balance": "Claims",
-            "Pay to name mismatch": "PV",
-            "No Note": "PV",
-            "pv updated": "PV",
-            "No matching contract found with pbp": "PV",
-            "No Matching Contract Found": "PV",
-            "VEN00008797 w9 recieved. pv updated": "Claims",
-            "RERUN RULE": "Claims",
-            "VEN00006638 w9 dated 04-14-23 received on 01/03/25. pv updated": "PV",
-            "Pay-To-Provider ID Updated from VEN00010089 to VEN00010172": "Claims",
-            "Outpatient Duplicate Validation": "Claims",
-            "pV UPDATED. tin is oon": "Claims",
-            "remap, contracted updated": "PV",
-            "Precertification/authorization #341127006, Frequency limit of 1 for CPT 70553 exceeded.": "Claims",
-            "remap vendor": "Claims",
-            "Missing/incomplete/invalid pay-to provider address.": "PV",
-            "CLAIM DENIED DUE TO W9 MISSING.": "PV",
-            "PART B, DEDUCTIBLES MET, PAID @103%. PROVIDER IS INN/OON SEQUESTRATION APPLIED.": "Claims",
-            "ERROR - Contract 100% applied incorrectly. It should be applied 85% for Nurse practitioner.": "PV"
-        };
-
         function getHardcodedAssignment(noteText) {
             const note = noteText || "";
+            if (note === "No Note") return null;
+
             const noteLower = note.toLowerCase();
 
-            // Check for exact match first
-            if (hardcodedNoteOverrides[note]) {
-                return hardcodedNoteOverrides[note];
-            }
+            // Broad pattern matching
+            if (noteLower.includes('red tab')) return 'PV';
+            if (noteLower.includes('pv updated')) return 'Claims';
+            if (noteLower.includes('remap')) return 'Claims';
+            if (noteLower.includes('w9 req')) return 'Claims';
+            if (noteLower.includes('rachael notes')) return 'Claims';
+            if (noteLower.includes('pay-to-provider id updated')) return 'Claims';
+            if (noteLower.includes('paid as per pv updated')) return 'Claims';
+            if (noteLower.includes('tin is oon')) return 'Claims';
+            if (noteLower.includes('hold for payer review')) return 'PV';
+            if (noteLower.includes('rerun')) return 'Claims';
+            if (noteLower.includes('no matching contract') || noteLower.includes('contract not found')) return 'PV';
+            if (noteLower.includes('pay to name mismatch')) return 'PV';
+            if (noteLower.includes('missing/incomplete/invalid pay-to')) return 'PV';
+            if (noteLower.includes('w9 missing')) return 'PV';
+            if (noteLower.includes('precertification/authorization')) return 'Claims';
+            if (noteLower.includes('sequestration applied')) return 'Claims';
             
-            // Then check for patterns
-            if (noteLower.includes('hold for payer review')) {
-                return 'PV';
-            }
-            if (noteLower.includes('rerun')) {
-                return 'Claims';
+            // Specific exact matches for edge cases
+            const exactMatches = {
+                "Part B OutPatient claim to be priced at line level": "Claims",
+                "Recover from A/R running balance": "Claims",
+                "Outpatient Duplicate Validation": "Claims",
+                "ERROR - Contract 100% applied incorrectly. It should be applied 85% for Nurse practitioner.": "PV"
+            };
+
+            if (exactMatches[note]) {
+                return exactMatches[note];
             }
 
             return null; // No hardcoded rule found
@@ -221,10 +206,7 @@
                     const preset = clientPresets[selectedClient];
                     document.getElementById('cleanAgeCol-label').textContent = preset.label;
                     Object.keys(preset).forEach(key => {
-                        if (key !== 'label') {
-                            const element = document.getElementById(key);
-                            if (element) element.value = preset[key];
-                        }
+                        if (key !== 'label') document.getElementById(key).value = preset[key];
                     });
                     configContainer.classList.remove('hidden');
                     uploadContainer.classList.remove('hidden');
@@ -235,10 +217,7 @@
             });
             
             const checkFiles = () => {
-                const mainFile = fileInput.files[0];
-                document.getElementById('fileName').textContent = mainFile ? `Selected: ${mainFile.name}` : 'No file selected';
-                document.getElementById('yesterdayFileName').textContent = yesterdayFileInput.files[0] ? `Selected: ${yesterdayFileInput.files[0].name}` : 'No file selected';
-                processBtn.disabled = !mainFile;
+                processBtn.disabled = !fileInput.files[0];
             };
 
             fileInput.addEventListener('change', checkFiles);
@@ -248,22 +227,19 @@
                     performInitialProcessing(fileInput.files[0], yesterdayFileInput.files[0], gatherConfig());
                 }
             });
-            document.getElementById('copyEmailBtn').addEventListener('click', copyEmailText);
             document.getElementById('generateFinalReportsBtn').addEventListener('click', generateFinalReports);
         }
 
         function resetUI() {
-            document.getElementById('review-container').classList.add('hidden');
-            document.getElementById('final-downloads-container').classList.add('hidden');
+            ['review-container', 'final-downloads-container'].forEach(id => document.getElementById(id).classList.add('hidden'));
             document.getElementById('download-links-container').innerHTML = '';
-            document.getElementById('copyEmailBtn').classList.add('hidden');
             document.getElementById('status').textContent = '';
         }
         
         function gatherConfig() {
             try {
                 const colLetterToIndex = (letter) => {
-                    if (!letter || typeof letter !== 'string' || !/^[A-Z]+$/i.test(letter)) return -1;
+                    if (!letter || !/^[A-Z]+$/i.test(letter)) return -1;
                     let col = 0; letter = letter.toUpperCase();
                     for (let i = 0; i < letter.length; i++) col += (letter.charCodeAt(i) - 64) * Math.pow(26, letter.length - i - 1);
                     return col - 1;
@@ -271,8 +247,7 @@
                 const config = {};
                 const ids = ['cleanAge', 'claimStatus', 'claimNumber', 'payer', 'networkStatus', 'dsnp', 'claimType', 'totalCharges', 'notes'];
                 ids.forEach(id => config[`${id}Index`] = colLetterToIndex(document.getElementById(`${id}Col`).value));
-                config.dateIndices = document.getElementById('dateCols').value.toUpperCase().trim().split(',').filter(c => c).map(c => colLetterToIndex(c.trim()));
-                if (Object.values(config).some(val => val === -1 || (Array.isArray(val) && val.includes(-1)))) throw new Error("Invalid column letter entered.");
+                if (Object.values(config).some(val => val === -1)) throw new Error("Invalid column letter entered.");
                 return config;
             } catch (error) {
                 displayStatus(`Configuration Error: ${error.message}`, 'error');
@@ -284,48 +259,42 @@
             displayStatus('Processing... Please wait.', 'info', true);
             resetUI();
             
-            processedClaimsList = [];
-            prebatchClaims = [];
+            [processedClaimsList, prebatchClaims] = [[], []];
             yesterdayDataMap.clear();
-
-            const hasYesterdayReport = !!yesterdayFile;
 
             const readFileAsAOA = (file) => new Promise((resolve, reject) => {
                 const reader = new FileReader();
                 reader.onload = e => {
                     try {
-                        const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
-                        resolve(XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: null }));
-                    } catch (err) { reject(new Error(`Failed to read ${file.name}: ${err.message}`)); }
+                        const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+                        resolve(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: null }));
+                    } catch (err) { reject(err); }
                 };
-                reader.onerror = () => reject(new Error(`File reader error on ${file.name}`));
+                reader.onerror = () => reject(new Error('File reader error'));
                 reader.readAsArrayBuffer(file);
             });
 
             try {
                 const main_aoa = await readFileAsAOA(mainFile);
-                if (main_aoa.length < 1) throw new Error("Main report is empty.");
                 mainReportHeader = main_aoa[0];
 
-                if (hasYesterdayReport) {
+                if (yesterdayFile) {
                     const yesterday_aoa = await readFileAsAOA(yesterdayFile);
                     yesterday_aoa.slice(1).forEach(row => {
                         const claimNumber = row[config.claimNumberIndex];
-                        if (claimNumber != null) {
-                            yesterdayDataMap.set(String(claimNumber).trim(), { state: String(row[config.claimStatusIndex] || '').trim().toUpperCase() });
-                        }
+                        if (claimNumber) yesterdayDataMap.set(String(claimNumber).trim(), { state: String(row[config.claimStatusIndex] || '').trim().toUpperCase() });
                     });
                 }
                 
                 fileHeaderRow = [...mainReportHeader];
-                if (hasYesterdayReport) fileHeaderRow.splice(config.claimStatusIndex, 0, 'Yest. Claim State');
+                if (yesterdayFile) fileHeaderRow.splice(config.claimStatusIndex, 0, 'Yest. Claim State');
                 let daysInsertIndex = config.cleanAgeIndex + 1;
-                if (hasYesterdayReport && config.cleanAgeIndex >= config.claimStatusIndex) daysInsertIndex++; 
+                if (yesterdayFile && config.cleanAgeIndex >= config.claimStatusIndex) daysInsertIndex++; 
                 fileHeaderRow.splice(daysInsertIndex, 0, 'Days Bucket');
                 fileHeaderRow.push('Added (Owner)', 'Due Date');
 
                 for (const originalRow of main_aoa.slice(1)) {
-                    if (originalRow.every(cell => cell === null)) continue;
+                    if (originalRow.every(c => c === null)) continue;
                     
                     const claimState = String(originalRow[config.claimStatusIndex] || '').trim().toUpperCase();
                     if (claimState.includes('PREBATCH')) {
@@ -336,43 +305,35 @@
                     const noteText = String(originalRow[config.notesIndex] || '');
                     const cleanAge = parseInt(originalRow[config.cleanAgeIndex], 10);
                     
-                    // --- MODIFICATION: Assignment Logic Update ---
                     let defaultOwner = getHardcodedAssignment(noteText);
-                    
-                    if (!defaultOwner) { // Fallback to old logic if no hardcoded rule applies
-                        const totalCharges = parseFloat(String(originalRow[config.totalChargesIndex]).replace(/[^0-9.-]/g, '')) || NaN;
-                        const claimType = String(originalRow[config.claimTypeIndex] || '').trim().toUpperCase();
-                        const isMgmtReviewState = claimState.includes('MANAGEMENT') && claimState.includes('REVIEW');
-                        const isHighCost = isMgmtReviewState && !isNaN(totalCharges) && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500));
+                    if (defaultOwner === null) {
+                        const totalCharges = parseFloat(String(originalRow[config.totalChargesIndex]).replace(/[^0-9.-]/g, '')) || 0;
+                        const claimType = String(originalRow[config.claimTypeIndex] || '').toUpperCase();
+                        const isMgmtReview = claimState.includes('MANAGEMENT') && claimState.includes('REVIEW');
+                        const isHighCost = isMgmtReview && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500));
                         
-                        if (isHighCost) { defaultOwner = 'Claims'; }
-                        else if (isMgmtReviewState || claimState === 'ONHOLD') { defaultOwner = 'PV'; }
-                        else if (['PEND', 'APPROVED', 'DENY'].includes(claimState)) { defaultOwner = 'Claims'; }
-                        else if (claimState === 'PR') { defaultOwner = originalRow[config.payerIndex] || ''; }
+                        if (isHighCost) defaultOwner = 'Claims';
+                        else if (isMgmtReview || claimState === 'ONHOLD') defaultOwner = 'PV';
+                        else if (['PEND', 'APPROVED', 'DENY'].includes(claimState)) defaultOwner = 'Claims';
+                        else if (claimState === 'PR') defaultOwner = originalRow[config.payerIndex] || '';
                     }
                     
                     const newRow = [...originalRow];
-                    if (hasYesterdayReport) {
+                    if (yesterdayFile) {
                         const claimNumber = String(originalRow[config.claimNumberIndex] || '').trim();
                         newRow.splice(config.claimStatusIndex, 0, yesterdayDataMap.get(claimNumber)?.state || 'NEW');
                     }
                     let daysValue = '';
                     if (!isNaN(cleanAge)) {
-                        if (cleanAge >= 28 && cleanAge <= 29) { daysValue = '28-29 days'; }
-                        else if (cleanAge >= 21 && cleanAge <= 27) { daysValue = '21-27 days'; }
-                        else if (cleanAge >= 30) { daysValue = '30+ days'; }
-                        else { daysValue = '0-20 days'; }
+                        if (cleanAge >= 28 && cleanAge <= 29) daysValue = '28-29 days';
+                        else if (cleanAge >= 21 && cleanAge <= 27) daysValue = '21-27 days';
+                        else if (cleanAge >= 30) daysValue = '30+ days';
+                        else daysValue = '0-20 days';
                     }
                     newRow.splice(daysInsertIndex, 0, daysValue);
-                    newRow.push(defaultOwner, (noteText.match(/due\s*(by)?[:\s]*(\d{1,2}[\/-]\d{1,2}(?:[\/-]\d{2,4})?)/i) || [])[2] || '');
+                    newRow.push(defaultOwner, (noteText.match(/due\s*by?[:\s]*(\d{1,2}[\/-]\d{1,2}(?:[\/-]\d{2,4})?)/i) || [])[1] || '');
 
-                    processedClaimsList.push({
-                        originalRow: originalRow,
-                        processedRow: newRow,
-                        noteText: noteText,
-                        defaultOwner: defaultOwner,
-                        finalOwner: defaultOwner
-                    });
+                    processedClaimsList.push({ ...config, originalRow, processedRow: newRow, noteText, cleanAge, claimState, defaultOwner, finalOwner: defaultOwner });
                 }
                 
                 displayStatus('Processing Complete. Please review and finalize.', 'success');
@@ -380,7 +341,6 @@
 
             } catch (error) {
                 displayStatus(`Error: ${error.message}`, 'error');
-                console.error(error);
             }
         }
         
@@ -399,72 +359,54 @@
 
             const notesMap = new Map();
             processedClaimsList.forEach(claim => {
-                // MODIFICATION: Only show notes that were NOT hardcoded
-                if (!getHardcodedAssignment(claim.noteText)) {
-                    const note = claim.noteText || "No Note";
-                    if (!notesMap.has(note)) {
-                        notesMap.set(note, { count: 0, defaultOwner: claim.defaultOwner });
-                    }
+                const note = claim.noteText || "No Note";
+                if (note !== "No Note" && !getHardcodedAssignment(note)) {
+                    if (!notesMap.has(note)) notesMap.set(note, { count: 0, defaultOwner: claim.defaultOwner });
                     notesMap.get(note).count++;
                 }
             });
 
             if (notesMap.size === 0) {
-                document.getElementById('assignment-editor-description').textContent = "All notes were assigned automatically by hardcoded rules. No exceptions to review.";
-                document.getElementById('assignment-editor-body').innerHTML = `<tr><td colspan="4" class="text-center py-4 text-gray-500">No un-coded notes found.</td></tr>`;
+                document.getElementById('assignment-editor-description').textContent = "All notes were assigned automatically. No exceptions to review.";
+                assignmentEditorBody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-gray-500">No un-coded notes found.</td></tr>`;
             } else {
-                document.getElementById('assignment-editor-description').textContent = "The following notes were not automatically assigned by hardcoded rules. Please assign them below.";
+                document.getElementById('assignment-editor-description').textContent = "The following notes were not automatically assigned. Please review and assign them below.";
                 const sortedNotes = Array.from(notesMap.entries()).sort((a, b) => b[1].count - a[1].count);
-
                 sortedNotes.forEach(([note, data]) => {
                     const row = document.createElement('tr');
                     row.innerHTML = `
                         <td class="px-6 py-4 text-sm text-gray-700 break-words">${note}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${data.count}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${data.defaultOwner || 'N/A'}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            <select class="p-2 border border-gray-300 rounded-md assignment-override" data-note-text="${note}">
-                                <option value="">Keep Default</option>
-                                <option value="Claims">Claims</option>
-                                <option value="PV">PV</option>
+                        <td class="px-6 py-4 text-sm text-gray-700">${data.count}</td>
+                        <td class="px-6 py-4 text-sm font-medium text-gray-900">${data.defaultOwner || 'N/A'}</td>
+                        <td class="px-6 py-4 text-sm text-gray-500">
+                            <select class="p-2 border rounded-md assignment-override" data-note-text="${note}">
+                                <option value="">Keep Default</option><option value="Claims">Claims</option><option value="PV">PV</option>
                             </select>
-                        </td>
-                    `;
+                        </td>`;
                     assignmentEditorBody.appendChild(row);
                 });
             }
-
             document.getElementById('review-container').classList.remove('hidden');
         }
 
         function downloadPrebatchReport() {
             const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
-            const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.aoa_to_sheet([mainReportHeader, ...prebatchClaims]);
+            const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Prebatch Claims");
-            const fileName = `${clientName} Prebatch Report for ${getFormattedDate()}.xlsx`;
-            XLSX.writeFile(wb, fileName);
+            XLSX.writeFile(wb, `${clientName} Prebatch Report for ${getFormattedDate()}.xlsx`);
         }
 
         function generateFinalReports() {
-            // This function and its helpers (createDownloadLink, buildWorkbook, etc.)
-            // do not need changes for this feature, as the logic relies on the `finalOwner`
-            // property which is correctly set in `performInitialProcessing` and updated here.
-            
             displayStatus('Generating final reports...', 'info', true);
             
-            const overrides = document.querySelectorAll('.assignment-override');
             const noteOverrides = new Map();
-            overrides.forEach(select => {
-                if (select.value) {
-                    const noteText = select.dataset.noteText;
-                    noteOverrides.set(noteText, select.value);
-                }
+            document.querySelectorAll('.assignment-override').forEach(select => {
+                if (select.value) noteOverrides.set(select.dataset.noteText, select.value);
             });
 
             processedClaimsList.forEach(claim => {
-                const note = claim.noteText || "No Note";
-                const override = noteOverrides.get(note);
+                const override = noteOverrides.get(claim.noteText || "No Note");
                 if (override) {
                     claim.finalOwner = override;
                     claim.processedRow[claim.processedRow.length - 2] = override;
@@ -473,21 +415,14 @@
             
             const selectedClient = document.getElementById('client-select').value;
             const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
-            const downloadLinksContainer = document.getElementById('download-links-container');
-            downloadLinksContainer.innerHTML = '';
+            document.getElementById('download-links-container').innerHTML = '';
 
-            // The rest of this function remains the same as the previous version...
             if (selectedClient === 'liberty') {
-                const allDataBlob = buildWorkbook(processedClaimsList.map(c=>c.processedRow), `${clientName} Daily Action Report`);
-                const claimsDataBlob = buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'Claims').map(c=>c.processedRow), `${clientName} Claims - Action Report`, 'Claims');
-                const pvDataBlob = buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'PV').map(c=>c.processedRow), `${clientName} PV - Action Report`, 'PV');
-                
-                createDownloadLink(allDataBlob, `Overall Daily Action Report for ${getFormattedDate()}.xlsx`);
-                createDownloadLink(claimsDataBlob, `Claims - Action Report for ${getFormattedDate()}.xlsx`);
-                createDownloadLink(pvDataBlob, `PV - Action Report for ${getFormattedDate()}.xlsx`);
+                createDownloadLink(buildWorkbook(processedClaimsList, `${clientName} Daily Action Report`), `Overall Daily Action Report for ${getFormattedDate()}.xlsx`);
+                createDownloadLink(buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'Claims'), `${clientName} Claims - Action Report`, 'Claims'), `Claims - Action Report for ${getFormattedDate()}.xlsx`);
+                createDownloadLink(buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'PV'), `${clientName} PV - Action Report`, 'PV'), `PV - Action Report for ${getFormattedDate()}.xlsx`);
             } else {
-                const allDataBlob = buildWorkbook(processedClaimsList.map(c=>c.processedRow), `${clientName} Daily Action Report`);
-                createDownloadLink(allDataBlob, `${clientName} Daily Action Report for ${getFormattedDate()}.xlsx`);
+                createDownloadLink(buildWorkbook(processedClaimsList, `${clientName} Daily Action Report`), `${clientName} Daily Action Report for ${getFormattedDate()}.xlsx`);
             }
             
             document.getElementById('final-downloads-container').classList.remove('hidden');
@@ -503,33 +438,110 @@
             document.getElementById('download-links-container').appendChild(link);
         }
 
-        function buildWorkbook(claimsDataRows, reportTitle, ownerFilter = null) {
-            // This function can be simplified as it no longer needs the full claim object
-            const masterSheetName = "All Processed Data";
-            const wb = XLSX.utils.book_new();
+        function buildWorkbook(claimsData, reportTitle, ownerFilter = null) {
+            const masterSheetName = "All Processed Data", highDollarSheetName = "High Dollar";
+            const sheetsData = { [masterSheetName]: [fileHeaderRow], [highDollarSheetName]: [fileHeaderRow] };
+            const tabMetadata = {};
+
+            const overallSummary = {
+                par: { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0, total: 0 },
+                nonpar: { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0, total: 0 }
+            };
+
+            for (const claim of claimsData) {
+                const networkType = String(claim.originalRow[claim.networkStatusIndex] || '').toUpperCase().includes('OUT') ? 'nonpar' : 'par';
+                overallSummary[networkType].total++;
+                if (!isNaN(claim.cleanAge)) {
+                    if (claim.cleanAge >= 28 && claim.cleanAge <= 29) overallSummary[networkType]['28-29']++;
+                    else if (claim.cleanAge >= 21 && claim.cleanAge <= 27) overallSummary[networkType]['21-27']++;
+                    else if (claim.cleanAge >= 30) overallSummary[networkType]['30+']++;
+                    else overallSummary[networkType]['0-20']++;
+                }
+
+                sheetsData[masterSheetName].push(claim.processedRow);
+                
+                // Simplified High Dollar check
+                const totalCharges = parseFloat(String(claim.originalRow[claim.totalChargesIndex]).replace(/[^0-9.-]/g, '')) || 0;
+                const claimType = String(claim.originalRow[claim.claimTypeIndex] || '').toUpperCase();
+                const isMgmtReview = claim.claimState.includes('MANAGEMENT') && claim.claimState.includes('REVIEW');
+                const isHighCost = isMgmtReview && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500));
+                
+                if (isHighCost) sheetsData[highDollarSheetName].push(claim.processedRow);
+                
+                // Breakout tab logic
+                 const dsnpRaw = String(claim.originalRow[claim.dsnpIndex] || '').toUpperCase();
+                 const dsnpStatus = dsnpRaw.includes('NON DSNP') ? 'NonDSNP' : (dsnpRaw.includes('DSNP') || dsnpRaw === 'Y' ? 'DSNP' : '');
+                 let statusTab = '', tabOwner = '';
+                 if (isMgmtReview) { statusTab = 'MgmtRev'; tabOwner = 'PV'; }
+                 else if (claim.claimState === 'ONHOLD') { statusTab = 'OnHold'; tabOwner = 'PV'; }
+                 else if (claim.claimState === 'PEND') { statusTab = 'Pend'; tabOwner = 'Claims'; }
+                 else if (claim.claimState === 'DENY') { statusTab = 'Deny'; tabOwner = 'Claims'; }
+                 
+                 if (dsnpStatus && tabOwner && networkType && !isHighCost) {
+                    let tabKey = '', priorityLevel = 0;
+                    if (claim.cleanAge >= 28 && claim.cleanAge <= 29) { priorityLevel = 1; tabKey = `CRITICAL (28-29d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
+                    else if (claim.cleanAge >= 21 && claim.cleanAge <= 27) { priorityLevel = 2; tabKey = `PRIORITY (21-27d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
+                    else if (claim.cleanAge >= 30) { priorityLevel = 3; tabKey = `Backlog (30+d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
+                    else { priorityLevel = 4; tabKey = `Queue (0-20d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
+                    
+                    if (!sheetsData[tabKey]) { sheetsData[tabKey] = [fileHeaderRow]; tabMetadata[tabKey] = { owner: tabOwner, priority: priorityLevel }; }
+                    sheetsData[tabKey].push(claim.processedRow);
+                 }
+
+                 const noteLower = claim.noteText.toLowerCase();
+                 if (noteLower.includes('w9')) {
+                    let w9SheetName = '', w9Owner = '';
+                    if (noteLower.includes('req')) { w9SheetName = 'W9 Follow-Up'; w9Owner = 'Claims'; }
+                    else if (noteLower.includes('denied') || noteLower.includes('missing')) { w9SheetName = 'W9 Letter Needed'; w9Owner = 'PV'; }
+                    else if (noteLower.includes('received') || noteLower.includes('reprocess')) { w9SheetName = 'W9 Received - Reprocess'; w9Owner = 'Claims'; }
+
+                    if (w9SheetName) {
+                        if (!sheetsData[w9SheetName]) { sheetsData[w9SheetName] = [fileHeaderRow]; tabMetadata[w9SheetName] = { owner: w9Owner, priority: 5 }; }
+                        sheetsData[w9SheetName].push(claim.processedRow);
+                    }
+                 }
+            }
+
+            const coverPageData = [[reportTitle], [`Date: ${getFormattedDate()}`], [], ["Overall Claim Summary"], ["Category", "28-29 Days (Critical)", "21-27 Days (Priority)", "30+ Days (Backlog)", "0-20 Days (Queue)", "Total Active Claims"], ["Par Claims", overallSummary.par['28-29'], overallSummary.par['21-27'], overallSummary.par['30+'], overallSummary.par['0-20'], overallSummary.par.total], ["Non-Par Claims", overallSummary.nonpar['28-29'], overallSummary.nonpar['21-27'], overallSummary.nonpar['30+'], overallSummary.nonpar['0-20'], overallSummary.nonpar.total], [], ["Core Strategy: Focus on claims nearing the 30-day threshold. Work tabs in priority order."], []];
             
-            // For simplicity, we'll just create the master sheet for now.
-            // A more complex implementation would regenerate summaries and breakout tabs.
-            const coverPageData = [[reportTitle], [`Date: ${getFormattedDate()}`]];
+            const allBreakoutTabs = Object.keys(tabMetadata);
+            const addSectionToCover = (title, priority) => {
+                const filteredTabs = allBreakoutTabs.filter(key => tabMetadata[key] && tabMetadata[key].priority === priority && (!ownerFilter || tabMetadata[key].owner === ownerFilter)).sort();
+                if (filteredTabs.length > 0) {
+                    coverPageData.push([title], ["Tab Name", "Claim Count", "Assigned Owner"]);
+                    filteredTabs.forEach(key => coverPageData.push([key, sheetsData[key].length - 1, tabMetadata[key].owner]));
+                    coverPageData.push([]);
+                }
+            };
+            addSectionToCover("Priority 1: CRITICAL (28-29 days)", 1);
+            addSectionToCover("Priority 2: PRIORITY (21-27 days)", 2);
+            addSectionToCover("Priority 3: Backlog (30+ days)", 3);
+            addSectionToCover("Priority 4: Standard Queue (0-20 days)", 4);
+            addSectionToCover("W9 and Other Tasks", 5);
+
+            const wb = XLSX.utils.book_new();
             const coverWS = XLSX.utils.aoa_to_sheet(coverPageData);
+            coverWS['!cols'] = [{ wch: 25 }, { wch: 20 }, { wch: 22 }];
             XLSX.utils.book_append_sheet(wb, coverWS, "Cover Page");
+            
+            const sheetOrder = ["Cover Page", highDollarSheetName, ...allBreakoutTabs.sort((a,b) => (tabMetadata[a].priority - tabMetadata[b].priority) || a.localeCompare(b)), masterSheetName];
+            sheetOrder.forEach(sheetName => {
+                if (sheetsData[sheetName] && sheetsData[sheetName].length > 1 && (!ownerFilter || (tabMetadata[sheetName] && tabMetadata[sheetName].owner === ownerFilter) || [masterSheetName, highDollarSheetName].includes(sheetName))) {
+                    const ws = XLSX.utils.aoa_to_sheet(sheetsData[sheetName]);
+                    ws['!autofilter'] = { ref: ws['!ref'] };
+                    XLSX.utils.book_append_sheet(wb, ws, sheetName.substring(0, 31));
+                }
+            });
 
-            const masterWSData = [fileHeaderRow, ...claimsDataRows];
-            const masterWS = XLSX.utils.aoa_to_sheet(masterWSData);
-            masterWS['!autofilter'] = { ref: masterWS['!ref'] };
-            XLSX.utils.book_append_sheet(wb, masterWS, masterSheetName);
-
-            const wb_out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-            return new Blob([wb_out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            return new Blob([XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         }
         
-        // --- Utility Functions (unchanged) ---
         function getFormattedDate() {
-            const d=new Date(), day=d.getDate(), month=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()], year=d.getFullYear();
-            const s = (day%10===1&&day!==11)?'st':((day%10===2&&day!==12)?'nd':((day%10===3&&day!==13)?'rd':'th'));
+            const d = new Date(), day = d.getDate(), month = d.toLocaleString('default', { month: 'short' }), year = d.getFullYear();
+            const s = (day % 10 == 1 && day != 11) ? 'st' : ((day % 10 == 2 && day != 12) ? 'nd' : ((day % 10 == 3 && day != 13) ? 'rd' : 'th'));
             return `${day}${s} ${month} ${year}`;
         }
-        function copyEmailText() { alert("Email generation needs to be updated for the new workflow."); }
+
         function displayStatus(message, type, showLoader = false) {
             const statusDiv = document.getElementById('status');
             statusDiv.textContent = message;
@@ -537,12 +549,8 @@
             document.getElementById('loader').style.display = showLoader ? 'block' : 'none';
             document.getElementById('processBtn').disabled = !!showLoader;
         }
-    </script>
-    
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            initializeTool();
-        });
+
+        document.addEventListener('DOMContentLoaded', initializeTool);
     </script>
 </body>
 </html>
