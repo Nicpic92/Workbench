@@ -147,7 +147,7 @@
                         <table class="min-w-full divide-y divide-gray-200">
                             <thead class="bg-gray-50">
                                 <tr>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Note Text</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/2">Note Text</th>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Claim Count</th>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assignment</th>
                                 </tr>
@@ -180,8 +180,8 @@
               "columns": { "cleanAge": "Q", "claimStatus": "I", "claimNumber": "C", "payer": "A", "networkStatus": "U", "dsnp": "X", "claimType": "B", "totalCharges": "S", "notes": "AA", "dateCols": "E,O,P" },
               "rules": {
                 "highDollar": { "professional": 3500, "institutional": 6500 },
-                "owners": { "highDollar": "Pat and Shelley", "mgmtReview": "Jessica", "onHold": "Jessica", "pend": "Patrick", "deny": "Patrick" },
-                "w9Owners": { "followUp": "Pat", "letterNeeded": "Jess", "reprocess": "System" }
+                "owners": { "highDollar": "Claims", "mgmtReview": "PV", "onHold": "PV", "pend": "Claims", "deny": "Claims" },
+                "w9Owners": { "followUp": "Claims", "letterNeeded": "PV", "reprocess": "System" }
               }
             },
             liberty: {
@@ -189,8 +189,8 @@
               "columns": { "cleanAge": "R", "claimStatus": "I", "claimNumber": "C", "payer": "A", "networkStatus": "V", "dsnp": "Y", "claimType": "B", "totalCharges": "T", "notes": "AA", "dateCols": "E,O,P" },
                "rules": {
                 "highDollar": { "professional": 3500, "institutional": 6500 },
-                "owners": { "highDollar": "Pat and Shelley", "mgmtReview": "Jessica", "onHold": "Jessica", "pend": "Patrick", "deny": "Patrick" },
-                "w9Owners": { "followUp": "Pat", "letterNeeded": "Jess", "reprocess": "System" }
+                "owners": { "highDollar": "Claims", "mgmtReview": "PV", "onHold": "PV", "pend": "Claims", "deny": "Claims" },
+                "w9Owners": { "followUp": "Claims", "letterNeeded": "PV", "reprocess": "System" }
               }
             },
             secur: {
@@ -198,8 +198,8 @@
               "columns": { "cleanAge": "Q", "claimStatus": "I", "claimNumber": "C", "payer": "A", "networkStatus": "U", "dsnp": "Y", "claimType": "D", "totalCharges": "T", "notes": "AA", "dateCols": "E,O,P" },
                "rules": {
                 "highDollar": { "professional": 3500, "institutional": 6500 },
-                "owners": { "highDollar": "Pat and Shelley", "mgmtReview": "Jessica", "onHold": "Jessica", "pend": "Patrick", "deny": "Patrick" },
-                "w9Owners": { "followUp": "Pat", "letterNeeded": "Jess", "reprocess": "System" }
+                "owners": { "highDollar": "Claims", "mgmtReview": "PV", "onHold": "PV", "pend": "Claims", "deny": "Claims" },
+                "w9Owners": { "followUp": "Claims", "letterNeeded": "PV", "reprocess": "System" }
               }
             },
             csh: {
@@ -207,8 +207,8 @@
               "columns": { "cleanAge": "R", "claimStatus": "I", "claimNumber": "C", "payer": "A", "networkStatus": "U", "dsnp": "Y", "claimType": "B", "totalCharges": "T", "notes": "AA", "dateCols": "E,O,P" },
                "rules": {
                 "highDollar": { "professional": 3500, "institutional": 6500 },
-                "owners": { "highDollar": "Pat and Shelley", "mgmtReview": "Jessica", "onHold": "Jessica", "pend": "Patrick", "deny": "Patrick" },
-                "w9Owners": { "followUp": "Pat", "letterNeeded": "Jess", "reprocess": "System" }
+                "owners": { "highDollar": "Claims", "mgmtReview": "PV", "onHold": "PV", "pend": "Claims", "deny": "Claims" },
+                "w9Owners": { "followUp": "Claims", "letterNeeded": "PV", "reprocess": "System" }
               }
             }
         };
@@ -420,7 +420,6 @@
                 const headerRow = main_aoa[0];
                 reportHeader = [...headerRow];
                 
-                // --- CORRECTED INDEX CALCULATION ---
                 let daysInsertIndex = indices.cleanAgeIndex + 1;
                 finalNotesIndexForMgmtReview = indices.notesIndex;
 
@@ -434,7 +433,6 @@
                 if (daysInsertIndex <= finalNotesIndexForMgmtReview) finalNotesIndexForMgmtReview++;
 
                 reportHeader.push('Added (Owner)', 'Due Date');
-                // --- END OF CORRECTION ---
 
                 for (const originalRow of main_aoa.slice(1)) {
                     if (originalRow.every(cell => cell === null)) continue;
@@ -519,8 +517,9 @@
         }
 
         function generateMainActionReport(mainReportRows, header, config) {
-             const { indices, rules } = config;
-            const masterSheetName = "All Processed Data", highDollarSheetName = "High Dollar - Pat & Shelley";
+            const { indices, rules } = config;
+            const highDollarSheetName = `High Dollar - ${rules.owners.highDollar}`;
+            const masterSheetName = "All Processed Data";
             const sheetsData = { [masterSheetName]: [header], [highDollarSheetName]: [header] };
             const tabMetadata = {};
 
@@ -573,8 +572,13 @@
                         }
                     }
                 }
-
-                const noteText = String(newRow[indices.notesIndex] || '');
+                
+                // Adjust for shifted index when reading notes from an enhanced row
+                let notesIndexInEnhancedRow = indices.notesIndex;
+                if(config.yesterdayDataMap) notesIndexInEnhancedRow++;
+                if(config.yesterdayDataMap && indices.claimStatusIndex <= indices.notesIndex) notesIndexInEnhancedRow++;
+                
+                const noteText = String(newRow[notesIndexInEnhancedRow] || '');
                 if (indices.notesIndex >= 0 && noteText.toLowerCase().includes('w9')) {
                     let w9SheetName = '', tabOwner = '', priorityLevel = 5;
                     const noteLower = noteText.toLowerCase();
@@ -665,9 +669,9 @@
             sortedNotes.forEach(([noteText, data]) => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${noteText}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${data.count}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                    <td class="px-6 py-4 text-sm text-gray-700 align-top break-words max-w-lg">${noteText}</td>
+                    <td class="px-6 py-4 text-sm text-gray-700 align-top">${data.count}</td>
+                    <td class="px-6 py-4 text-sm text-gray-700 align-top">
                         <input type="text" class="table-input" data-note="${noteText.replace(/"/g, '&quot;')}">
                     </td>
                 `;
@@ -805,7 +809,7 @@
             }
             
             const mgmtReviewBlock = `Number of total claims Management Review: ${formatStatLine(combinedMgmtRevToday.total, combinedMgmtRevYesterday.total)}\nOf these, High Dollar Claims: ${formatStatLine(today['HC MGMT REV'].total, yesterday?.['HC MGMT REV']?.total ?? 0)}\nCRITICAL (28-29 Days): ${formatStatLine(combinedMgmtRevToday['28-29'], combinedMgmtRevYesterday['28-29'])}\nPRIORITY (21-27 Days): ${formatStatLine(combinedMgmtRevToday['21-27'], combinedMgmtRevYesterday['21-27'])}\nBacklog (30+ Days): ${formatStatLine(combinedMgmtRevToday['30+'], combinedMgmtRevYesterday['30+'])}\nQueue (0-20 Days): ${formatStatLine(combinedMgmtRevToday['0-20'], combinedMgmtRevYesterday['0-20'])}`;
-            const emailBody = `Hello Shelley, Jessica, and Pat,\n\n${intro}\n\n${executiveSummary}\n\nBelow are the detailed highlights from the report:\n\n${createStatBlock('pending', today['PEND'], yesterday?.['PEND'])}\n\n${createStatBlock('On Hold', today['ONHOLD'], yesterday?.['ONHOLD'])}\n\n${mgmtReviewBlock}\n\n${createStatBlock('needing W9 Letter', today['W9_LETTER_NEEDED'], yesterday?.['W9_LETTER_NEEDED'])}\n\n${createStatBlock('for W9 Follow-Up', today['W9_FOLLOW_UP'], yesterday?.['W9_FOLLOW_UP'])}\n\n${strategicReminders}\n\nPlease let me know if you have any questions.\n\nThis ${clientName} report is based on ${ageColumnLabel}.\n`;
+            const emailBody = `Hello Claims and PV Teams,\n\n${intro}\n\n${executiveSummary}\n\nBelow are the detailed highlights from the report:\n\n${createStatBlock('pending', today['PEND'], yesterday?.['PEND'])}\n\n${createStatBlock('On Hold', today['ONHOLD'], yesterday?.['ONHOLD'])}\n\n${mgmtReviewBlock}\n\n${createStatBlock('needing W9 Letter', today['W9_LETTER_NEEDED'], yesterday?.['W9_LETTER_NEEDED'])}\n\n${createStatBlock('for W9 Follow-Up', today['W9_FOLLOW_UP'], yesterday?.['W9_FOLLOW_UP'])}\n\n${strategicReminders}\n\nPlease let me know if you have any questions.\n\nThis ${clientName} report is based on ${ageColumnLabel}.\n`;
             
             navigator.clipboard.writeText(emailBody).then(() => {
                 const btn = document.getElementById('copyEmailBtn');
