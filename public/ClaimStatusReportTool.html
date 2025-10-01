@@ -113,7 +113,6 @@
                         <h3 class="text-xl font-bold text-gray-900 mb-3">Assignment Editor</h3>
                         <p class="text-gray-700 mb-4">Optionally override the default assignments based on the note text. Any un-changed notes will keep their default assignment.</p>
                         <div class="table-container border rounded-lg">
-                            <!-- MODIFICATION: Added table-fixed and defined column widths -->
                             <table class="min-w-full divide-y divide-gray-200 table-fixed">
                                 <thead class="bg-gray-100 sticky top-0">
                                     <tr>
@@ -245,7 +244,6 @@
             displayStatus('Processing... Please wait.', 'info', true);
             resetUI();
             
-            // Clear previous global data
             processedClaimsList = [];
             prebatchClaims = [];
             yesterdayDataMap.clear();
@@ -267,9 +265,8 @@
             try {
                 const main_aoa = await readFileAsAOA(mainFile);
                 if (main_aoa.length < 1) throw new Error("Main report is empty.");
-                mainReportHeader = main_aoa[0]; // Store original header
+                mainReportHeader = main_aoa[0];
 
-                // Process yesterday's report first if it exists
                 if (hasYesterdayReport) {
                     const yesterday_aoa = await readFileAsAOA(yesterdayFile);
                     yesterday_aoa.slice(1).forEach(row => {
@@ -291,7 +288,6 @@
                 fileHeaderRow.splice(daysInsertIndex, 0, 'Days Bucket');
                 fileHeaderRow.push('Added (Owner)', 'Due Date');
 
-                // Main processing loop
                 for (const originalRow of main_aoa.slice(1)) {
                     if (originalRow.every(cell => cell === null)) continue;
                     
@@ -299,7 +295,7 @@
 
                     if (claimState.includes('PREBATCH')) {
                         prebatchClaims.push(originalRow);
-                        continue; // Skip prebatch from main processing
+                        continue;
                     }
                     
                     const claimData = {};
@@ -321,7 +317,6 @@
                     const isMgmtReviewState = claimState.includes('MANAGEMENT') && claimState.includes('REVIEW');
                     const isHighCost = isMgmtReviewState && !isNaN(totalCharges) && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500));
                     
-                    // Determine Default Owner
                     let defaultOwner = '';
                     if (isHighCost) { 
                         defaultOwner = 'Claims';
@@ -374,7 +369,7 @@
                         isMgmtReview: isMgmtReviewState,
                         isHighCost: isHighCost,
                         defaultOwner: defaultOwner,
-                        finalOwner: defaultOwner // Initially set final owner to default
+                        finalOwner: defaultOwner
                     });
                 }
                 
@@ -388,7 +383,6 @@
         }
         
         function displayReviewStep() {
-            // 1. Handle Prebatch section
             const prebatchContainer = document.getElementById('prebatch-container');
             if (prebatchClaims.length > 0) {
                 document.getElementById('prebatch-summary').textContent = `Found ${prebatchClaims.length} claims in Prebatch status.`;
@@ -398,9 +392,8 @@
                 prebatchContainer.classList.add('hidden');
             }
 
-            // 2. Handle Assignment Editor
             const assignmentEditorBody = document.getElementById('assignment-editor-body');
-            assignmentEditorBody.innerHTML = ''; // Clear previous data
+            assignmentEditorBody.innerHTML = '';
 
             const notesMap = new Map();
             processedClaimsList.forEach((claim, index) => {
@@ -412,9 +405,12 @@
                 notesMap.get(note).indices.push(index);
             });
 
-            notesMap.forEach((data, note) => {
+            // MODIFICATION: Convert Map to array and sort by count descending
+            const sortedNotes = Array.from(notesMap.entries()).sort((a, b) => b[1].count - a[1].count);
+
+            // MODIFICATION: Iterate over the sorted array
+            sortedNotes.forEach(([note, data]) => {
                 const row = document.createElement('tr');
-                // MODIFICATION: Removed 'whitespace-nowrap' from the first cell and added 'break-words'
                 row.innerHTML = `
                     <td class="px-6 py-4 text-sm text-gray-700 break-words">${note}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${data.count}</td>
@@ -430,7 +426,6 @@
                 assignmentEditorBody.appendChild(row);
             });
 
-            // 3. Show the main review container
             document.getElementById('review-container').classList.remove('hidden');
         }
 
@@ -446,11 +441,10 @@
         function generateFinalReports() {
             displayStatus('Generating final reports...', 'info', true);
             
-            // 1. Apply overrides from the editor
             const overrides = document.querySelectorAll('.assignment-override');
             const noteOverrides = new Map();
             overrides.forEach(select => {
-                if (select.value) { // If a new assignment is chosen
+                if (select.value) {
                     const noteText = select.dataset.noteText;
                     noteOverrides.set(noteText, select.value);
                 }
@@ -461,19 +455,16 @@
                 const override = noteOverrides.get(note);
                 if (override) {
                     claim.finalOwner = override;
-                    // Also update the owner in the processed row data
                     claim.processedRow[claim.processedRow.length - 2] = override;
                 }
             });
             
-            // 2. Determine report generation strategy
             const selectedClient = document.getElementById('client-select').value;
             const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
             const downloadLinksContainer = document.getElementById('download-links-container');
-            downloadLinksContainer.innerHTML = ''; // Clear previous links
+            downloadLinksContainer.innerHTML = '';
 
             if (selectedClient === 'liberty') {
-                // Generate three reports for Liberty
                 const allDataBlob = buildWorkbook(processedClaimsList, `${clientName} Daily Action Report`);
                 const claimsDataBlob = buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'Claims'), `${clientName} Claims - Action Report`, 'Claims');
                 const pvDataBlob = buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'PV'), `${clientName} PV - Action Report`, 'PV');
@@ -483,7 +474,6 @@
                 createDownloadLink(pvDataBlob, `PV - Action Report for ${getFormattedDate()}.xlsx`);
 
             } else {
-                // Generate one report for other clients
                 const allDataBlob = buildWorkbook(processedClaimsList, `${clientName} Daily Action Report`);
                 createDownloadLink(allDataBlob, `${clientName} Daily Action Report for ${getFormattedDate()}.xlsx`);
             }
