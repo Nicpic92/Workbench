@@ -143,14 +143,15 @@
         let fileHeaderRow = [];
         let mainReportHeader = [];
         let yesterdayDataMap = new Map();
+        let yesterdayStats = null;
+        let workflowMovement = { pvToClaims: 0, claimsToPv: 0 };
+        let hasYesterdayFile = false;
 
         function getHardcodedAssignment(noteText) {
             const note = noteText || "";
             if (note === "No Note" || note === "") return null;
-
             const noteLower = note.toLowerCase();
 
-            // --- PV Rules ---
             if (noteLower.includes('rachael notes') || noteLower.includes('rachael response') || noteLower.includes('as per rachael')) return 'PV';
             if (noteLower.includes('red tab')) return 'PV';
             if (noteLower.includes('hold for payer review')) return 'PV';
@@ -161,7 +162,6 @@
             if (noteLower.includes('w9 missing')) return 'PV';
             if (noteLower.includes('issue while getting contract')) return 'PV';
             
-            // --- Claims Rules ---
             if (noteLower.startsWith('error -')) return 'Claims';
             if (noteLower.startsWith('servicelineseq:')) return 'Claims';
             if (noteLower.includes('pv updated')) return 'Claims';
@@ -177,7 +177,7 @@
             if (noteLower.includes('tin is oon')) return 'Claims';
             if (noteLower.includes('sequestration applied')) return 'Claims';
 
-            return null; // No hardcoded rule found
+            return null;
         }
         
         function initializeTool() {
@@ -226,11 +226,13 @@
                 }
             });
             document.getElementById('generateFinalReportsBtn').addEventListener('click', generateFinalReports);
+            document.getElementById('copyEmailBtn').addEventListener('click', copyEmailText);
         }
 
         function resetUI() {
             ['review-container', 'final-downloads-container'].forEach(id => document.getElementById(id).classList.add('hidden'));
             document.getElementById('download-links-container').innerHTML = '';
+            document.getElementById('copyEmailBtn').classList.add('hidden');
             document.getElementById('status').textContent = '';
         }
         
@@ -252,13 +254,49 @@
                 return null;
             }
         }
+
+        function processAndAssignClaims(aoa, config) {
+            const claims = [];
+            const localPrebatch = [];
+
+            for (const row of aoa.slice(1)) {
+                if (row.every(c => c === null)) continue;
+                
+                const claimState = String(row[config.claimStatusIndex] || '').trim().toUpperCase();
+                if (claimState.includes('PREBATCH')) {
+                    localPrebatch.push(row);
+                    continue;
+                }
+                
+                const noteText = String(row[config.notesIndex] || '');
+                const cleanAge = parseInt(row[config.cleanAgeIndex], 10);
+                
+                let owner = getHardcodedAssignment(noteText);
+                if (owner === null) {
+                    const totalCharges = parseFloat(String(row[config.totalChargesIndex]).replace(/[^0-9.-]/g, '')) || 0;
+                    const claimType = String(row[config.claimTypeIndex] || '').toUpperCase();
+                    const isMgmtReview = claimState.includes('MANAGEMENT') && claimState.includes('REVIEW');
+                    const isHighCost = isMgmtReview && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500));
+                    
+                    if (isHighCost) owner = 'Claims';
+                    else if (isMgmtReview || claimState === 'ONHOLD') owner = 'PV';
+                    else if (['PEND', 'APPROVED', 'DENY'].includes(claimState)) owner = 'Claims';
+                    else if (claimState === 'PR') owner = row[config.payerIndex] || '';
+                    else owner = 'PV';
+                }
+                
+                claims.push({ ...config, originalRow: row, noteText, cleanAge, claimState, owner });
+            }
+            return { claimsList: claims, prebatchList: localPrebatch };
+        }
         
         async function performInitialProcessing(mainFile, yesterdayFile, config) {
             displayStatus('Processing... Please wait.', 'info', true);
             resetUI();
             
-            [processedClaimsList, prebatchClaims] = [[], []];
+            [processedClaimsList, prebatchClaims, yesterdayStats] = [[], [], null];
             yesterdayDataMap.clear();
+            hasYesterdayFile = !!yesterdayFile;
 
             const readFileAsAOA = (file) => new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -273,67 +311,48 @@
             });
 
             try {
-                const main_aoa = await readFileAsAOA(mainFile);
-                mainReportHeader = main_aoa[0];
-
-                if (yesterdayFile) {
+                if (hasYesterdayFile) {
                     const yesterday_aoa = await readFileAsAOA(yesterdayFile);
-                    yesterday_aoa.slice(1).forEach(row => {
-                        const claimNumber = row[config.claimNumberIndex];
-                        if (claimNumber) yesterdayDataMap.set(String(claimNumber).trim(), { state: String(row[config.claimStatusIndex] || '').trim().toUpperCase() });
+                    const { claimsList: yestClaims } = processAndAssignClaims(yesterday_aoa, config);
+                    yesterdayStats = calculateStats(yestClaims);
+                    yestClaims.forEach(claim => {
+                        const claimNumber = claim.originalRow[config.claimNumberIndex];
+                        if (claimNumber) yesterdayDataMap.set(String(claimNumber).trim(), { state: claim.claimState, owner: claim.owner });
                     });
                 }
                 
+                const main_aoa = await readFileAsAOA(mainFile);
+                mainReportHeader = main_aoa[0];
+                const { claimsList: todayClaims, prebatchList } = processAndAssignClaims(main_aoa, config);
+                processedClaimsList = todayClaims;
+                prebatchClaims = prebatchList;
+
                 fileHeaderRow = [...mainReportHeader];
-                if (yesterdayFile) fileHeaderRow.splice(config.claimStatusIndex, 0, 'Yest. Claim State');
+                if (hasYesterdayFile) fileHeaderRow.splice(config.claimStatusIndex, 0, 'Yest. Claim State');
                 let daysInsertIndex = config.cleanAgeIndex + 1;
-                if (yesterdayFile && config.cleanAgeIndex >= config.claimStatusIndex) daysInsertIndex++; 
+                if (hasYesterdayFile && config.cleanAgeIndex >= config.claimStatusIndex) daysInsertIndex++; 
                 fileHeaderRow.splice(daysInsertIndex, 0, 'Days Bucket');
                 fileHeaderRow.push('Added (Owner)', 'Due Date');
-
-                for (const originalRow of main_aoa.slice(1)) {
-                    if (originalRow.every(c => c === null)) continue;
-                    
-                    const claimState = String(originalRow[config.claimStatusIndex] || '').trim().toUpperCase();
-                    if (claimState.includes('PREBATCH')) {
-                        prebatchClaims.push(originalRow);
-                        continue;
-                    }
-                    
-                    const noteText = String(originalRow[config.notesIndex] || '');
-                    const cleanAge = parseInt(originalRow[config.cleanAgeIndex], 10);
-                    
-                    let defaultOwner = getHardcodedAssignment(noteText);
-                    if (defaultOwner === null) {
-                        const totalCharges = parseFloat(String(originalRow[config.totalChargesIndex]).replace(/[^0-9.-]/g, '')) || 0;
-                        const claimType = String(originalRow[config.claimTypeIndex] || '').toUpperCase();
-                        const isMgmtReview = claimState.includes('MANAGEMENT') && claimState.includes('REVIEW');
-                        const isHighCost = isMgmtReview && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500));
-                        
-                        if (isHighCost) defaultOwner = 'Claims';
-                        else if (isMgmtReview || claimState === 'ONHOLD') defaultOwner = 'PV';
-                        else if (['PEND', 'APPROVED', 'DENY'].includes(claimState)) defaultOwner = 'Claims';
-                        else if (claimState === 'PR') defaultOwner = originalRow[config.payerIndex] || '';
-                        else defaultOwner = 'PV'; // Default fallback for unassigned notes
-                    }
-                    
-                    const newRow = [...originalRow];
-                    if (yesterdayFile) {
-                        const claimNumber = String(originalRow[config.claimNumberIndex] || '').trim();
+                
+                processedClaimsList.forEach(claim => {
+                    const newRow = [...claim.originalRow];
+                    if (hasYesterdayFile) {
+                        const claimNumber = String(claim.originalRow[config.claimNumberIndex] || '').trim();
                         newRow.splice(config.claimStatusIndex, 0, yesterdayDataMap.get(claimNumber)?.state || 'NEW');
                     }
                     let daysValue = '';
-                    if (!isNaN(cleanAge)) {
-                        if (cleanAge >= 28 && cleanAge <= 29) daysValue = '28-29 days';
-                        else if (cleanAge >= 21 && cleanAge <= 27) daysValue = '21-27 days';
-                        else if (cleanAge >= 30) daysValue = '30+ days';
+                    if (!isNaN(claim.cleanAge)) {
+                        if (claim.cleanAge >= 28 && claim.cleanAge <= 29) daysValue = '28-29 days';
+                        else if (claim.cleanAge >= 21 && claim.cleanAge <= 27) daysValue = '21-27 days';
+                        else if (claim.cleanAge >= 30) daysValue = '30+ days';
                         else daysValue = '0-20 days';
                     }
                     newRow.splice(daysInsertIndex, 0, daysValue);
-                    newRow.push(defaultOwner, (noteText.match(/due\s*by?[:\s]*(\d{1,2}[\/-]\d{1,2}(?:[\/-]\d{2,4})?)/i) || [])[1] || '');
-
-                    processedClaimsList.push({ ...config, originalRow, processedRow: newRow, noteText, cleanAge, claimState, defaultOwner, finalOwner: defaultOwner });
-                }
+                    newRow.push(claim.owner, (claim.noteText.match(/due\s*by?[:\s]*(\d{1,2}[\/-]\d{1,2}(?:[\/-]\d{2,4})?)/i) || [])[1] || '');
+                    claim.processedRow = newRow;
+                    claim.defaultOwner = claim.owner;
+                    claim.finalOwner = claim.owner;
+                });
                 
                 displayStatus('Processing Complete. Please review and finalize.', 'success');
                 displayReviewStep();
@@ -355,7 +374,6 @@
 
             const assignmentEditorBody = document.getElementById('assignment-editor-body');
             assignmentEditorBody.innerHTML = '';
-
             const notesMap = new Map();
             processedClaimsList.forEach(claim => {
                 const note = claim.noteText || "No Note";
@@ -373,15 +391,7 @@
                 const sortedNotes = Array.from(notesMap.entries()).sort((a, b) => b[1].count - a[1].count);
                 sortedNotes.forEach(([note, data]) => {
                     const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td class="px-6 py-4 text-sm text-gray-700 break-words">${note}</td>
-                        <td class="px-6 py-4 text-sm text-gray-700">${data.count}</td>
-                        <td class="px-6 py-4 text-sm font-medium text-gray-900">${data.defaultOwner || 'N/A'}</td>
-                        <td class="px-6 py-4 text-sm text-gray-500">
-                            <select class="p-2 border rounded-md assignment-override" data-note-text="${note}">
-                                <option value="">Keep Default</option><option value="Claims">Claims</option><option value="PV">PV</option>
-                            </select>
-                        </td>`;
+                    row.innerHTML = `<td class="px-6 py-4 text-sm text-gray-700 break-words">${note}</td><td class="px-6 py-4 text-sm text-gray-700">${data.count}</td><td class="px-6 py-4 text-sm font-medium text-gray-900">${data.defaultOwner || 'N/A'}</td><td class="px-6 py-4 text-sm text-gray-500"><select class="p-2 border rounded-md assignment-override" data-note-text="${note}"><option value="">Keep Default</option><option value="Claims">Claims</option><option value="PV">PV</option></select></td>`;
                     assignmentEditorBody.appendChild(row);
                 });
             }
@@ -399,6 +409,7 @@
         function generateFinalReports() {
             displayStatus('Generating final reports...', 'info', true);
             
+            workflowMovement = { pvToClaims: 0, claimsToPv: 0 };
             const noteOverrides = new Map();
             document.querySelectorAll('.assignment-override').forEach(select => {
                 if (select.value) noteOverrides.set(select.dataset.noteText, select.value);
@@ -409,6 +420,16 @@
                 if (override) {
                     claim.finalOwner = override;
                     claim.processedRow[claim.processedRow.length - 2] = override;
+                }
+                if (hasYesterdayFile) {
+                    const claimNumber = String(claim.originalRow[claim.claimNumberIndex] || '').trim();
+                    const yestData = yesterdayDataMap.get(claimNumber);
+                    if (yestData) {
+                        const yestOwner = yestData.owner;
+                        const todayOwner = claim.finalOwner;
+                        if (yestOwner === 'PV' && todayOwner === 'Claims') workflowMovement.pvToClaims++;
+                        if (yestOwner === 'Claims' && todayOwner === 'PV') workflowMovement.claimsToPv++;
+                    }
                 }
             });
             
@@ -425,6 +446,7 @@
             }
             
             document.getElementById('final-downloads-container').classList.remove('hidden');
+            document.getElementById('copyEmailBtn').classList.remove('hidden');
             displayStatus('Reports generated successfully!', 'success');
         }
 
@@ -532,6 +554,68 @@
             });
 
             return new Blob([XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        }
+
+        function calculateStats(claimsList) {
+            const dayBuckets = { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
+            const stats = { 'PEND': { total: 0, ...dayBuckets }, 'ONHOLD': { total: 0, ...dayBuckets }, 'MANAGEMENTREVIEW': { total: 0, ...dayBuckets }, 'DENY': { total: 0, ...dayBuckets } };
+            
+            for(const claim of claimsList) {
+                let finalClaimState = claim.claimState;
+                if (claim.claimState.includes('MANAGEMENT') && claim.claimState.includes('REVIEW')) {
+                    finalClaimState = 'MANAGEMENTREVIEW'; // Normalize for stats
+                }
+                
+                if (stats[finalClaimState]) {
+                    stats[finalClaimState].total++;
+                    let daysValue = '';
+                    if (!isNaN(claim.cleanAge)) {
+                        if (claim.cleanAge >= 28 && claim.cleanAge <= 29) daysValue = '28-29';
+                        else if (claim.cleanAge >= 21 && claim.cleanAge <= 27) daysValue = '21-27';
+                        else if (claim.cleanAge >= 30) daysValue = '30+';
+                        else daysValue = '0-20';
+                        if (stats[finalClaimState][daysValue] !== undefined) stats[finalClaimState][daysValue]++;
+                    }
+                }
+            }
+            return stats;
+        }
+
+        function copyEmailText() {
+            const todayStats = calculateStats(processedClaimsList);
+            const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
+            const intro = hasYesterdayFile 
+                ? `Attached is today's Daily Action Report for ${clientName}. Previous day's counts are in (parenthesis).`
+                : `Attached is today's Daily Action Report for ${clientName}.`;
+            
+            const formatStatLine = (t, y) => hasYesterdayFile ? `${t} (${y ?? 0})` : `${t}`;
+            
+            const createStatBlock = (title, todayBlock, yestBlock) => {
+                const y = yestBlock || { total: 0, '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
+                return `Number of total claims ${title}: ${formatStatLine(todayBlock.total, y.total)}\n` +
+                       `CRITICAL (28-29 Days): ${formatStatLine(todayBlock['28-29'], y['28-29'])}\n` +
+                       `PRIORITY (21-27 Days): ${formatStatLine(todayBlock['21-27'], y['21-27'])}\n` +
+                       `Backlog (30+ Days): ${formatStatLine(todayBlock['30+'], y['30+'])}\n` +
+                       `Queue (0-20 Days): ${formatStatLine(todayBlock['0-20'], y['0-20'])}`;
+            };
+
+            let movementSummary = '';
+            if (hasYesterdayFile) {
+                movementSummary = `\n\n**Workflow Movement Summary:**\n- Claims moved from PV to Claims: ${workflowMovement.pvToClaims}\n- Claims moved from Claims to PV: ${workflowMovement.claimsToPv}`;
+            }
+
+            const emailBody = `Hello Teams,\n\n${intro}\n\nBelow are the detailed highlights from the report:\n\n` +
+                  `${createStatBlock('pending', todayStats['PEND'], yesterdayStats?.['PEND'])}\n\n` +
+                  `${createStatBlock('On Hold', todayStats['ONHOLD'], yesterdayStats?.['ONHOLD'])}\n\n` +
+                  `${createStatBlock('in Management Review', todayStats['MANAGEMENTREVIEW'], yesterdayStats?.['MANAGEMENTREVIEW'])}\n\n` +
+                  `${createStatBlock('in Denied status', todayStats['DENY'], yesterdayStats?.['DENY'])}${movementSummary}\n\nPlease let me know if you have any questions.`;
+            
+            navigator.clipboard.writeText(emailBody).then(() => {
+                const btn = document.getElementById('copyEmailBtn');
+                const originalText = btn.textContent;
+                btn.textContent = 'Copied!';
+                setTimeout(() => { btn.textContent = originalText; }, 2000);
+            }).catch(err => alert('Failed to copy text.'));
         }
         
         function getFormattedDate() {
