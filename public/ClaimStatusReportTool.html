@@ -113,13 +113,14 @@
                         <h3 class="text-xl font-bold text-gray-900 mb-3">Assignment Editor</h3>
                         <p class="text-gray-700 mb-4">Optionally override the default assignments based on the note text. Any un-changed notes will keep their default assignment.</p>
                         <div class="table-container border rounded-lg">
-                            <table class="min-w-full divide-y divide-gray-200">
+                            <!-- MODIFICATION: Added table-fixed and defined column widths -->
+                            <table class="min-w-full divide-y divide-gray-200 table-fixed">
                                 <thead class="bg-gray-100 sticky top-0">
                                     <tr>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Note Text</th>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Count</th>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Default Assignment</th>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">New Assignment (Override)</th>
+                                        <th scope="col" class="w-1/2 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Note Text</th>
+                                        <th scope="col" class="w-1/12 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Count</th>
+                                        <th scope="col" class="w-1/4 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Default Assignment</th>
+                                        <th scope="col" class="w-1/4 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">New Assignment (Override)</th>
                                     </tr>
                                 </thead>
                                 <tbody id="assignment-editor-body" class="bg-white divide-y divide-gray-200">
@@ -152,6 +153,7 @@
         let processedClaimsList = []; // Holds detailed data for each claim row
         let prebatchClaims = []; // Holds rows for prebatch claims
         let fileHeaderRow = []; // Holds the header for new sheets
+        let mainReportHeader = []; // Original header from the uploaded file
         let yesterdayDataMap = new Map();
         
         function initializeTool() {
@@ -265,6 +267,7 @@
             try {
                 const main_aoa = await readFileAsAOA(mainFile);
                 if (main_aoa.length < 1) throw new Error("Main report is empty.");
+                mainReportHeader = main_aoa[0]; // Store original header
 
                 // Process yesterday's report first if it exists
                 if (hasYesterdayReport) {
@@ -281,8 +284,7 @@
                     });
                 }
                 
-                const originalHeader = main_aoa[0];
-                fileHeaderRow = [...originalHeader];
+                fileHeaderRow = [...mainReportHeader];
                 if (hasYesterdayReport) fileHeaderRow.splice(config.claimStatusIndex, 0, 'Yest. Claim State');
                 let daysInsertIndex = config.cleanAgeIndex + 1;
                 if (hasYesterdayReport && config.cleanAgeIndex >= config.claimStatusIndex) daysInsertIndex++; 
@@ -331,13 +333,14 @@
                         defaultOwner = originalRow[config.payerIndex] || ''; 
                     }
 
-                    // W9 note owner logic
                     const noteLower = noteText.toLowerCase();
                     if (noteLower.includes('w9')) {
-                        if (noteLower.includes('requested') || noteLower.includes('req') || noteLower.includes('due')) {
-                           // This doesn't directly set the owner, but will be used for tab creation later
+                         if (noteLower.includes('requested') || noteLower.includes('req') || noteLower.includes('due')) {
+                            defaultOwner = 'Claims';
                         } else if (noteLower.includes('denied') || noteLower.includes('missing') || noteLower.includes('not on file') || noteLower.includes('not received')) {
-                           // This doesn't directly set the owner, but will be used for tab creation later
+                            defaultOwner = 'PV';
+                        } else if (noteLower.includes('received') || noteLower.includes('reprocess') || noteLower.includes('rerun')) {
+                            defaultOwner = 'Claims';
                         }
                     }
                     
@@ -411,8 +414,9 @@
 
             notesMap.forEach((data, note) => {
                 const row = document.createElement('tr');
+                // MODIFICATION: Removed 'whitespace-nowrap' from the first cell and added 'break-words'
                 row.innerHTML = `
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${note}</td>
+                    <td class="px-6 py-4 text-sm text-gray-700 break-words">${note}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${data.count}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${data.defaultOwner || 'N/A'}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -433,7 +437,7 @@
         function downloadPrebatchReport() {
             const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
             const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.aoa_to_sheet([main_aoa[0], ...prebatchClaims]); // Assuming main_aoa[0] is the header
+            const ws = XLSX.utils.aoa_to_sheet([mainReportHeader, ...prebatchClaims]);
             XLSX.utils.book_append_sheet(wb, ws, "Prebatch Claims");
             const fileName = `${clientName} Prebatch Report for ${getFormattedDate()}.xlsx`;
             XLSX.writeFile(wb, fileName);
@@ -447,7 +451,8 @@
             const noteOverrides = new Map();
             overrides.forEach(select => {
                 if (select.value) { // If a new assignment is chosen
-                    noteOverrides.set(select.dataset.noteText, select.value);
+                    const noteText = select.dataset.noteText;
+                    noteOverrides.set(noteText, select.value);
                 }
             });
 
@@ -483,12 +488,7 @@
                 createDownloadLink(allDataBlob, `${clientName} Daily Action Report for ${getFormattedDate()}.xlsx`);
             }
             
-            // TODO: Update `processedReportData` for email generation if needed. For now, it might be complex.
-            // Let's create a simplified version for the email.
-            processedReportData = { /* ... simplified data if needed ... */ };
-
             document.getElementById('final-downloads-container').classList.remove('hidden');
-            //document.getElementById('copyEmailBtn').classList.remove('hidden'); // Enable this when email data is ready
             displayStatus('Reports generated successfully!', 'success');
         }
 
@@ -516,7 +516,6 @@
             };
 
             for (const claim of claimsData) {
-                // Populate summary
                 overallSummary[claim.networkType].total++;
                 if (!isNaN(claim.cleanAge)) {
                     if (claim.cleanAge >= 28 && claim.cleanAge <= 29) { overallSummary[claim.networkType]['28-29']++; }
@@ -530,7 +529,6 @@
                     sheetsData[highDollarSheetName].push(claim.processedRow);
                 }
                 
-                // --- Tab Creation Logic ---
                 if (!claim.isHighCost && (['PEND', 'ONHOLD', 'DENY'].includes(claim.claimState) || claim.isMgmtReview)) {
                     let dsnpStatus = '';
                     if (claim.dsnpRaw.includes('NON DSNP')) { dsnpStatus = 'NonDSNP'; } 
@@ -570,7 +568,6 @@
                 }
             }
 
-            // --- Cover Page Generation ---
             const coverPageData = [
                 [reportTitle],
                 [`Date: ${getFormattedDate()}`],
@@ -580,7 +577,7 @@
                 ["Par Claims", overallSummary.par['28-29'], overallSummary.par['21-27'], overallSummary.par['30+'], overallSummary.par['0-20'], overallSummary.par.total],
                 ["Non-Par Claims", overallSummary.nonpar['28-29'], overallSummary.nonpar['21-27'], overallSummary.nonpar['30+'], overallSummary.nonpar['0-20'], overallSummary.nonpar.total],
                 [],
-                ["Core Strategy:", "This report is built to achieve the 95% compliance target by focusing on claims nearing the 30-day threshold. The primary emphasis is on PAR claims, while NON-PAR claims should be monitored. Work the tabs in the order of priority listed below."],
+                ["Core Strategy:", "This report is built to achieve the 95% compliance target by focusing on claims nearing the 30-day threshold. Work the tabs in the order of priority listed below."],
                 [],
             ];
             
@@ -593,7 +590,6 @@
                     filteredTabs.forEach(key => {
                         const claimCount = sheetsData[key].length - 1;
                         const owner = tabMetadata[key].owner;
-                        // If we are filtering for a specific owner, only show tabs relevant to them
                         if (!ownerFilter || ownerFilter === owner) {
                            coverPageData.push([key, claimCount, owner]);
                         }
@@ -602,13 +598,12 @@
                 }
             };
             const allBreakoutTabs = Object.keys(tabMetadata);
-            addSectionToCover( "Priority 1: CRITICAL (28-29 days)", "WORK THESE FIRST. These claims will breach the 30-day threshold immediately. Clearing them is the top priority to prevent failures.", 1, allBreakoutTabs );
-            addSectionToCover( "Priority 2: PRIORITY (21-27 days)", "WORK THESE SECOND. This is the main focus for proactively reducing the aging pool and improving the KPI percentage.", 2, allBreakoutTabs );
-            addSectionToCover( "Priority 3: Backlog (30+ days)", "WORK THESE THIRD. Chip away at this backlog by addressing a small, limited number of claims daily, especially in response to urgent provider requests.", 3, allBreakoutTabs );
-            addSectionToCover( "Priority 4: Standard Queue (0-20 days)", "WORK THESE LAST. After addressing the higher priorities, work through this queue of new claims to stay ahead.", 4, allBreakoutTabs );
-            addSectionToCover( "W9 and Other Tasks", "These tabs group claims that require specific, non-aging-related actions. Handle as needed.", 5, allBreakoutTabs );
+            addSectionToCover( "Priority 1: CRITICAL (28-29 days)", "WORK THESE FIRST.", 1, allBreakoutTabs );
+            addSectionToCover( "Priority 2: PRIORITY (21-27 days)", "WORK THESE SECOND.", 2, allBreakoutTabs );
+            addSectionToCover( "Priority 3: Backlog (30+ days)", "WORK THESE THIRD.", 3, allBreakoutTabs );
+            addSectionToCover( "Priority 4: Standard Queue (0-20 days)", "WORK THESE LAST.", 4, allBreakoutTabs );
+            addSectionToCover( "W9 and Other Tasks", "Handle as needed.", 5, allBreakoutTabs );
 
-            // --- Workbook Assembly ---
             const newWorkbook = XLSX.utils.book_new();
             const coverWS = XLSX.utils.aoa_to_sheet(coverPageData);
             coverWS['!cols'] = [{ wch: 25 }, { wch: 20 }, { wch: 22 }, { wch: 20 }, { wch: 20 }, { wch: 20 }];
@@ -624,7 +619,6 @@
             const sheetOrder = ["Cover Page", highDollarSheetName, ...sortedBreakoutTabs, masterSheetName];
             sheetOrder.forEach(sheetName => {
                 if (sheetName !== "Cover Page" && sheetsData[sheetName] && sheetsData[sheetName].length > 1) { 
-                    // If filtering, only add tabs relevant to the owner
                     const owner = tabMetadata[sheetName]?.owner;
                     if(!ownerFilter || ownerFilter === owner || [masterSheetName, highDollarSheetName].includes(sheetName)) {
                         const ws = XLSX.utils.aoa_to_sheet(sheetsData[sheetName]);
@@ -649,8 +643,6 @@
             return match ? match[2] : '';
         }
 
-        // NOTE: The copyEmailText function will need to be updated to reflect the new data structures
-        // if you want to use it. It is currently disabled.
         function copyEmailText() {
             alert("Email generation needs to be updated for the new workflow.");
             return; 
