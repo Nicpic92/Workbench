@@ -503,9 +503,12 @@
                     else if (claim.cleanAge >= 30) { priorityLevel = 3; tabKey = `Backlog (30+d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
                     else { priorityLevel = 4; tabKey = `Queue (0-20d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
                     
-                    const truncatedTabKey = tabKey.replace(/[\\\/\?\*\[\]]/g, '').substring(0, 31);
-                    if (!sheetsData[truncatedTabKey]) { sheetsData[truncatedTabKey] = [fileHeaderRow]; tabMetadata[truncatedTabKey] = { owner: tabOwner, priority: priorityLevel }; }
-                    sheetsData[truncatedTabKey].push(claim.processedRow);
+                    // MODIFICATION: Only create a breakout tab if it's NOT a queue tab for a team-specific report
+                    if (!(ownerFilter && priorityLevel === 4)) {
+                        const truncatedTabKey = tabKey.replace(/[\\\/\?\*\[\]]/g, '').substring(0, 31);
+                        if (!sheetsData[truncatedTabKey]) { sheetsData[truncatedTabKey] = [fileHeaderRow]; tabMetadata[truncatedTabKey] = { owner: tabOwner, priority: priorityLevel }; }
+                        sheetsData[truncatedTabKey].push(claim.processedRow);
+                    }
                 }
 
                 const noteLower = claim.noteText.toLowerCase();
