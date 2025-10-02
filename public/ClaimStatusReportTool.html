@@ -143,7 +143,6 @@
             return null;
         }
         
-        // NEW FUNCTION to categorize notes
         function getNoteCategory(noteText) {
             const noteLower = noteText.toLowerCase();
 
@@ -353,7 +352,7 @@
 
             processedClaimsList.forEach(claim => {
                 const note = claim.noteText || "No Note";
-                if (note !== "No Note") { // Process all notes
+                if (note !== "No Note") {
                     const category = getNoteCategory(note);
                     if (!categorizedNotes[category]) {
                         categorizedNotes[category] = {};
@@ -432,12 +431,11 @@
                     assignmentContainer.innerHTML += categoryHtml;
                 });
 
-                // Add event listeners for the new category dropdowns
                 document.querySelectorAll('.category-assign').forEach(select => {
                     select.addEventListener('change', (e) => {
                         const targetCategory = e.target.dataset.categoryTarget;
                         const newAssignment = e.target.value;
-                        if (!newAssignment) return; // Ignore the "-- Bulk Assign --" option
+                        if (!newAssignment) return;
                         
                         document.querySelectorAll(`.assignment-override[data-category="${targetCategory}"]`).forEach(noteSelect => {
                             noteSelect.value = newAssignment;
@@ -484,17 +482,13 @@
                 }
             });
             
-            const selectedClient = document.getElementById('client-select').value;
             const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
             document.getElementById('download-links-container').innerHTML = '';
 
-            if (selectedClient === 'liberty') {
-                createDownloadLink(buildWorkbook(processedClaimsList, `${clientName} Daily Action Report`), `Overall Daily Action Report for ${getFormattedDate()}.xlsx`);
-                createDownloadLink(buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'Claims'), `${clientName} Claims - Action Report`, 'Claims'), `Claims - Action Report for ${getFormattedDate()}.xlsx`);
-                createDownloadLink(buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'PV'), `${clientName} PV - Action Report`, 'PV'), `PV - Action Report for ${getFormattedDate()}.xlsx`);
-            } else {
-                createDownloadLink(buildWorkbook(processedClaimsList, `${clientName} Daily Action Report`), `${clientName} Daily Action Report for ${getFormattedDate()}.xlsx`);
-            }
+            // MODIFICATION: Apply 3-report generation to ALL clients
+            createDownloadLink(buildWorkbook(processedClaimsList, `${clientName} Daily Action Report`), `Overall Daily Action Report for ${getFormattedDate()}.xlsx`);
+            createDownloadLink(buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'Claims'), `${clientName} Claims - Action Report`, 'Claims'), `Claims - Action Report for ${getFormattedDate()}.xlsx`);
+            createDownloadLink(buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'PV'), `${clientName} PV - Action Report`, 'PV'), `PV - Action Report for ${getFormattedDate()}.xlsx`);
             
             document.getElementById('final-downloads-container').classList.remove('hidden');
             document.getElementById('copyEmailBtn').classList.remove('hidden');
@@ -551,6 +545,8 @@
                 else if (claim.claimState === 'ONHOLD') { statusTab = 'OnHold'; tabOwner = 'PV'; }
                 else if (claim.claimState === 'PEND') { statusTab = 'Pend'; tabOwner = 'Claims'; }
                 else if (claim.claimState === 'DENY') { statusTab = 'Deny'; tabOwner = 'Claims'; }
+                // MODIFICATION: Add PR to breakout tabs
+                else if (claim.claimState === 'PR') { statusTab = 'PayerRev'; tabOwner = 'Claims'; }
                 
                 if (dsnpStatus && tabOwner && networkType && (ownerFilter === 'PV' || !isHighCost)) {
                     let tabKey = '', priorityLevel = 0;
@@ -637,7 +633,8 @@
 
         function calculateStats(claimsList) {
             const dayBuckets = { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
-            const stats = { 'PEND': { total: 0, ...dayBuckets }, 'ONHOLD': { total: 0, ...dayBuckets }, 'MANAGEMENTREVIEW': { total: 0, ...dayBuckets }, 'DENY': { total: 0, ...dayBuckets } };
+            // MODIFICATION: Add PR to the stats object
+            const stats = { 'PEND': { total: 0, ...dayBuckets }, 'ONHOLD': { total: 0, ...dayBuckets }, 'MANAGEMENTREVIEW': { total: 0, ...dayBuckets }, 'DENY': { total: 0, ...dayBuckets }, 'PR': { total: 0, ...dayBuckets } };
             
             for(const claim of claimsList) {
                 let finalClaimState = claim.claimState.includes('MANAGEMENT') ? 'MANAGEMENTREVIEW' : claim.claimState;
@@ -679,10 +676,12 @@
                 movementSummary = `\n\n**Workflow Movement Summary:**\n- Claims moved from PV to Claims: ${workflowMovement.pvToClaims}\n- Claims moved from Claims to PV: ${workflowMovement.claimsToPv}`;
             }
 
+            // MODIFICATION: Add PR stats block to the email body
             const emailBody = `Hello Teams,\n\n${intro}\n\nBelow are the detailed highlights from the report:\n\n` +
                   `${createStatBlock('pending', todayStats['PEND'], yesterdayStats?.['PEND'])}\n\n` +
                   `${createStatBlock('On Hold', todayStats['ONHOLD'], yesterdayStats?.['ONHOLD'])}\n\n` +
                   `${createStatBlock('in Management Review', todayStats['MANAGEMENTREVIEW'], yesterdayStats?.['MANAGEMENTREVIEW'])}\n\n` +
+                  `${createStatBlock('in Payer Review (PR)', todayStats['PR'], yesterdayStats?.['PR'])}\n\n` +
                   `${createStatBlock('in Denied status', todayStats['DENY'], yesterdayStats?.['DENY'])}${movementSummary}\n\nPlease let me know if you have any questions.`;
             
             navigator.clipboard.writeText(emailBody).then(() => {
