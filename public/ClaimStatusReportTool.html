@@ -99,7 +99,7 @@
                 <div id="review-container" class="hidden space-y-8 border-t pt-8">
                     <div class="text-center">
                         <h2 class="text-3xl font-extrabold text-gray-900">4. Review & Finalize</h2>
-                        <p class="mt-2 text-lg text-gray-600">Review assignments for un-coded notes and download reports.</p>
+                        <p class="mt-2 text-lg text-gray-600">Review assignments for all notes and download reports.</p>
                     </div>
 
                     <div id="prebatch-container" class="hidden bg-gray-50 p-6 rounded-lg">
@@ -109,7 +109,7 @@
                     </div>
 
                     <div id="assignment-editor-container" class="space-y-4">
-                        <h3 class="text-xl font-bold text-gray-900 mb-3">Assignment Editor (Exceptions Only)</h3>
+                        <h3 class="text-xl font-bold text-gray-900 mb-3">Assignment Editor</h3>
                         <p id="assignment-editor-description" class="text-gray-700 mb-4"></p>
                         <!-- Categories will be injected here -->
                     </div>
@@ -138,57 +138,8 @@
         let hasYesterdayFile = false;
 
         function getHardcodedAssignment(noteText) {
-            const note = noteText || "";
-            if (note === "No Note" || note === "") return null;
-            const noteLower = note.toLowerCase();
-
-            // --- ASSIGN TO PV ---
-            // Keywords: Rachael, Payer Review, Hold, Red Tab
-            if (noteLower.includes('rachael notes') || noteLower.includes('rachael response') || noteLower.includes('as per rachael')) return 'PV';
-            if (noteLower.includes('payer review') || noteLower.includes('move to pr')) return 'PV';
-            if (noteLower.includes('hold for')) return 'PV';
-            if (noteLower.includes('red tab')) return 'PV';
-
-            // Keywords: Contract & Provider Data Issues
-            if (noteLower.includes('no matching contract') || noteLower.includes('contract not found') || noteLower.includes('missing contract')) return 'PV';
-            if (noteLower.includes('pay to name mismatch')) return 'PV';
-            if (noteLower.includes('provider not found') || noteLower.includes('no data for the rendering provider') || noteLower.includes('provider type not found')) return 'PV';
-            if (noteLower.includes('issue while getting contract')) return 'PV';
-            if (noteLower.includes('invalid entry')) return 'PV';
-
-            // Keywords: W9 Issues (Missing / Past Due)
-            if (noteLower.includes('w9 missing') || noteLower.includes('w9 past due')) return 'PV';
-            
-            // --- ASSIGN TO CLAIMS ---
-            // Keywords: Specific Errors & Adjudication Corrections
-            if (noteLower.startsWith('error -') || noteLower.startsWith('error-')) return 'Claims';
-            if (noteLower.includes('incorrectly applied') || noteLower.includes('missed to apply') || noteLower.includes('missed to capture')) return 'Claims';
-            if (noteLower.includes('copay') || noteLower.includes('coinsurance') || noteLower.includes('coinsuance')) return 'Claims'; // Misspelling included
-            if (noteLower.includes('eligible amount')) return 'Claims';
-            if (noteLower.includes('should be paid') || noteLower.includes('should be denied')) return 'Claims';
-
-            // Keywords: System Actions (Remap, Rerun, Reprocess)
-            if (noteLower.startsWith('servicelineseq:')) return 'Claims';
-            if (noteLower.includes('pv updated')) return 'Claims';
-            if (noteLower.includes('remap')) return 'Claims';
-            if (noteLower.includes('rerun')) return 'Claims';
-            if (noteLower.includes('reprocess')) return 'Claims';
-
-            // Keywords: W9 Follow-up (Requested / Received)
-            if (noteLower.includes('w9 req') || noteLower.includes('w9 requested') || noteLower.includes('w9 recvd') || noteLower.includes('w9 recieved')) return 'Claims';
-
-            // Keywords: High Dollar / Payment Amount
-            if (noteLower.includes('payment >') || noteLower.includes('net pay >') || noteLower.includes('>$10000') || noteLower.includes('> 10000') || noteLower.includes('exceeds total payment') || noteLower.includes('greater then 10k') || noteLower.includes('allowed amount 10k') || noteLower.includes('payment is more than 10k')) return 'Claims';
-
-            // Keywords: Authorization & Duplicate Issues
-            if (noteLower.includes('no auth on file') || noteLower.includes('denied for authorization') || noteLower.includes('required authorization is not found') || noteLower.includes('frequency limit')) return 'Claims';
-            if (noteLower.includes('duplicate')) return 'Claims';
-            
-            // Keywords: Miscellaneous Claim-related issues
-            if (noteLower.includes('pay-to-provider id updated')) return 'Claims';
-            if (noteLower.includes('tin is oon')) return 'Claims';
-            if (noteLower.includes('sequestration applied')) return 'Claims';
-
+            // All automatic assignments are disabled by design.
+            // This ensures every note appears in the categorized review step for manual assignment.
             return null;
         }
         
@@ -384,7 +335,6 @@
             }
         }
         
-        // REWRITTEN FUNCTION to display categorized notes
         function displayReviewStep() {
             const prebatchContainer = document.getElementById('prebatch-container');
             if (prebatchClaims.length > 0) {
@@ -396,31 +346,31 @@
             }
 
             const assignmentContainer = document.getElementById('assignment-editor-container');
-            assignmentContainer.innerHTML = `<h3 class="text-xl font-bold text-gray-900 mb-3">Assignment Editor (Exceptions Only)</h3><p id="assignment-editor-description" class="text-gray-700 mb-4"></p>`;
+            assignmentContainer.innerHTML = `<h3 class="text-xl font-bold text-gray-900 mb-3">Assignment Editor</h3><p id="assignment-editor-description" class="text-gray-700 mb-4"></p>`;
 
             const categorizedNotes = {};
-            let exceptionCount = 0;
+            let uniqueNoteCount = 0;
 
             processedClaimsList.forEach(claim => {
                 const note = claim.noteText || "No Note";
-                if (note !== "No Note" && !getHardcodedAssignment(note)) {
+                if (note !== "No Note") { // Process all notes
                     const category = getNoteCategory(note);
                     if (!categorizedNotes[category]) {
                         categorizedNotes[category] = {};
                     }
                     if (!categorizedNotes[category][note]) {
                         categorizedNotes[category][note] = { count: 0, defaultOwner: claim.defaultOwner };
-                        exceptionCount++;
+                        uniqueNoteCount++;
                     }
                     categorizedNotes[category][note].count++;
                 }
             });
 
-            if (exceptionCount === 0) {
-                document.getElementById('assignment-editor-description').textContent = "All notes were assigned automatically. No exceptions to review.";
-                assignmentContainer.innerHTML += `<div class="text-center py-4 text-gray-500">No un-coded notes found.</div>`;
+            if (uniqueNoteCount === 0) {
+                document.getElementById('assignment-editor-description').textContent = "No notes were found in the report to assign.";
+                assignmentContainer.innerHTML += `<div class="text-center py-4 text-gray-500">No notes found.</div>`;
             } else {
-                document.getElementById('assignment-editor-description').textContent = `Found ${exceptionCount} unique notes that were not automatically assigned. Please review the categories below.`;
+                document.getElementById('assignment-editor-description').textContent = `Found ${uniqueNoteCount} unique notes. Please review the categories below to assign an owner.`;
                 
                 const sortedCategories = Object.keys(categorizedNotes).sort();
 
