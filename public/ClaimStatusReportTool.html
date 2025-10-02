@@ -17,6 +17,8 @@
         #loader { display: none; border: 5px solid #f3f3f3; border-top: 5px solid #4f46e5; border-radius: 50%; width: 50px; height: 50px; animation: spin 1.5s linear infinite; margin: 20px auto; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .table-container { max-height: 400px; overflow-y: auto; }
+        details > summary { list-style: none; cursor: pointer; }
+        details > summary::-webkit-details-marker { display: none; }
     </style>
 </head>
 <body class="text-gray-800">
@@ -106,22 +108,10 @@
                         <button id="downloadPrebatchBtn" class="bg-teal-600 text-white font-bold text-lg rounded-lg py-3 px-8 hover:bg-teal-700">Download Prebatch Report</button>
                     </div>
 
-                    <div id="assignment-editor">
+                    <div id="assignment-editor-container" class="space-y-4">
                         <h3 class="text-xl font-bold text-gray-900 mb-3">Assignment Editor (Exceptions Only)</h3>
                         <p id="assignment-editor-description" class="text-gray-700 mb-4"></p>
-                        <div class="table-container border rounded-lg">
-                            <table class="min-w-full divide-y divide-gray-200 table-fixed">
-                                <thead class="bg-gray-100 sticky top-0">
-                                    <tr>
-                                        <th scope="col" class="w-1/2 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Note Text</th>
-                                        <th scope="col" class="w-1/12 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Count</th>
-                                        <th scope="col" class="w-1/4 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Default Assignment</th>
-                                        <th scope="col" class="w-1/4 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">New Assignment (Override)</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="assignment-editor-body" class="bg-white divide-y divide-gray-200"></tbody>
-                            </table>
-                        </div>
+                        <!-- Categories will be injected here -->
                     </div>
 
                     <div class="text-center pt-6">
@@ -152,34 +142,71 @@
             if (note === "No Note" || note === "") return null;
             const noteLower = note.toLowerCase();
 
+            // --- ASSIGN TO PV ---
+            // Keywords: Rachael, Payer Review, Hold, Red Tab
             if (noteLower.includes('rachael notes') || noteLower.includes('rachael response') || noteLower.includes('as per rachael')) return 'PV';
+            if (noteLower.includes('payer review') || noteLower.includes('move to pr')) return 'PV';
+            if (noteLower.includes('hold for')) return 'PV';
             if (noteLower.includes('red tab')) return 'PV';
-            if (noteLower.includes('hold for payer review')) return 'PV';
+
+            // Keywords: Contract & Provider Data Issues
             if (noteLower.includes('no matching contract') || noteLower.includes('contract not found') || noteLower.includes('missing contract')) return 'PV';
             if (noteLower.includes('pay to name mismatch')) return 'PV';
-            if (noteLower.includes('provider type not found') || noteLower.includes('no data for the rendering provider')) return 'PV';
-            if (noteLower.includes('missing/incomplete/invalid pay-to')) return 'PV';
-            if (noteLower.includes('w9 missing')) return 'PV';
+            if (noteLower.includes('provider not found') || noteLower.includes('no data for the rendering provider') || noteLower.includes('provider type not found')) return 'PV';
             if (noteLower.includes('issue while getting contract')) return 'PV';
+            if (noteLower.includes('invalid entry')) return 'PV';
+
+            // Keywords: W9 Issues (Missing / Past Due)
+            if (noteLower.includes('w9 missing') || noteLower.includes('w9 past due')) return 'PV';
             
-            if (noteLower.startsWith('error -')) return 'Claims';
+            // --- ASSIGN TO CLAIMS ---
+            // Keywords: Specific Errors & Adjudication Corrections
+            if (noteLower.startsWith('error -') || noteLower.startsWith('error-')) return 'Claims';
+            if (noteLower.includes('incorrectly applied') || noteLower.includes('missed to apply') || noteLower.includes('missed to capture')) return 'Claims';
+            if (noteLower.includes('copay') || noteLower.includes('coinsurance') || noteLower.includes('coinsuance')) return 'Claims'; // Misspelling included
+            if (noteLower.includes('eligible amount')) return 'Claims';
+            if (noteLower.includes('should be paid') || noteLower.includes('should be denied')) return 'Claims';
+
+            // Keywords: System Actions (Remap, Rerun, Reprocess)
             if (noteLower.startsWith('servicelineseq:')) return 'Claims';
             if (noteLower.includes('pv updated')) return 'Claims';
             if (noteLower.includes('remap')) return 'Claims';
             if (noteLower.includes('rerun')) return 'Claims';
-            if (noteLower.includes('w9 req') || noteLower.includes('w9 requested')) return 'Claims';
-            if (noteLower.includes('to be priced at')) return 'Claims';
-            if (noteLower.includes('payment >') || noteLower.includes('net pay >') || noteLower.includes('>$10000') || noteLower.includes('exceeds total payment') || noteLower.includes('greater then 10k') || noteLower.includes('allowed amount 10k')) return 'Claims';
-            if (noteLower.includes('no auth on file') || noteLower.includes('denied for authorization') || noteLower.includes('required authorization is not found')) return 'Claims';
+            if (noteLower.includes('reprocess')) return 'Claims';
+
+            // Keywords: W9 Follow-up (Requested / Received)
+            if (noteLower.includes('w9 req') || noteLower.includes('w9 requested') || noteLower.includes('w9 recvd') || noteLower.includes('w9 recieved')) return 'Claims';
+
+            // Keywords: High Dollar / Payment Amount
+            if (noteLower.includes('payment >') || noteLower.includes('net pay >') || noteLower.includes('>$10000') || noteLower.includes('> 10000') || noteLower.includes('exceeds total payment') || noteLower.includes('greater then 10k') || noteLower.includes('allowed amount 10k') || noteLower.includes('payment is more than 10k')) return 'Claims';
+
+            // Keywords: Authorization & Duplicate Issues
+            if (noteLower.includes('no auth on file') || noteLower.includes('denied for authorization') || noteLower.includes('required authorization is not found') || noteLower.includes('frequency limit')) return 'Claims';
             if (noteLower.includes('duplicate')) return 'Claims';
+            
+            // Keywords: Miscellaneous Claim-related issues
             if (noteLower.includes('pay-to-provider id updated')) return 'Claims';
-            if (noteLower.includes('paid as per pv updated')) return 'Claims';
             if (noteLower.includes('tin is oon')) return 'Claims';
             if (noteLower.includes('sequestration applied')) return 'Claims';
 
             return null;
         }
         
+        // NEW FUNCTION to categorize notes
+        function getNoteCategory(noteText) {
+            const noteLower = noteText.toLowerCase();
+
+            if (noteLower.includes('w9 req') || noteLower.includes('w9 requested') || noteLower.includes('w9 recvd') || noteLower.includes('w9 past due')) return 'W9 Form Management';
+            if (noteLower.includes('rachael') || noteLower.includes('payer review') || noteLower.includes('hold for') || noteLower.includes('red tab') || noteLower.includes('move to pr')) return 'Manual Review (Rachael/Payer)';
+            if (noteLower.startsWith('error -') || noteLower.startsWith('error-') || noteLower.includes('incorrectly') || noteLower.includes('missed to')) return 'Adjudication & Processing Errors';
+            if (noteLower.includes('payment >') || noteLower.includes('net pay >') || noteLower.includes('>$10000') || noteLower.includes('exceeds total payment') || noteLower.includes('10k')) return 'High-Dollar Amount Review';
+            if (noteLower.includes('contract') || noteLower.includes('provider not found') || noteLower.includes('no data for') || noteLower.includes('pay to name mismatch')) return 'Contract & Provider Data Issues';
+            if (noteLower.includes('remap') || noteLower.includes('rerun') || noteLower.includes('reprocess') || noteLower.includes('pv updated')) return 'System Actions & Reprocessing';
+            if (noteLower.includes('auth') || noteLower.includes('duplicate')) return 'Authorization & Duplicate Issues';
+
+            return 'Miscellaneous';
+        }
+
         function initializeTool() {
             const clientSelect = document.getElementById('client-select');
             const configContainer = document.getElementById('configuration-container');
@@ -357,6 +384,7 @@
             }
         }
         
+        // REWRITTEN FUNCTION to display categorized notes
         function displayReviewStep() {
             const prebatchContainer = document.getElementById('prebatch-container');
             if (prebatchClaims.length > 0) {
@@ -367,29 +395,107 @@
                 prebatchContainer.classList.add('hidden');
             }
 
-            const assignmentEditorBody = document.getElementById('assignment-editor-body');
-            assignmentEditorBody.innerHTML = '';
-            const notesMap = new Map();
+            const assignmentContainer = document.getElementById('assignment-editor-container');
+            assignmentContainer.innerHTML = `<h3 class="text-xl font-bold text-gray-900 mb-3">Assignment Editor (Exceptions Only)</h3><p id="assignment-editor-description" class="text-gray-700 mb-4"></p>`;
+
+            const categorizedNotes = {};
+            let exceptionCount = 0;
+
             processedClaimsList.forEach(claim => {
                 const note = claim.noteText || "No Note";
                 if (note !== "No Note" && !getHardcodedAssignment(note)) {
-                    if (!notesMap.has(note)) notesMap.set(note, { count: 0, defaultOwner: claim.defaultOwner });
-                    notesMap.get(note).count++;
+                    const category = getNoteCategory(note);
+                    if (!categorizedNotes[category]) {
+                        categorizedNotes[category] = {};
+                    }
+                    if (!categorizedNotes[category][note]) {
+                        categorizedNotes[category][note] = { count: 0, defaultOwner: claim.defaultOwner };
+                        exceptionCount++;
+                    }
+                    categorizedNotes[category][note].count++;
                 }
             });
 
-            if (notesMap.size === 0) {
+            if (exceptionCount === 0) {
                 document.getElementById('assignment-editor-description').textContent = "All notes were assigned automatically. No exceptions to review.";
-                assignmentEditorBody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-gray-500">No un-coded notes found.</td></tr>`;
+                assignmentContainer.innerHTML += `<div class="text-center py-4 text-gray-500">No un-coded notes found.</div>`;
             } else {
-                document.getElementById('assignment-editor-description').textContent = "The following notes were not automatically assigned. Please review and assign them below.";
-                const sortedNotes = Array.from(notesMap.entries()).sort((a, b) => b[1].count - a[1].count);
-                sortedNotes.forEach(([note, data]) => {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `<td class="px-6 py-4 text-sm text-gray-700 break-words">${note}</td><td class="px-6 py-4 text-sm text-gray-700">${data.count}</td><td class="px-6 py-4 text-sm font-medium text-gray-900">${data.defaultOwner || 'N/A'}</td><td class="px-6 py-4 text-sm text-gray-500"><select class="p-2 border rounded-md assignment-override" data-note-text="${note}"><option value="">Keep Default</option><option value="Claims">Claims</option><option value="PV">PV</option></select></td>`;
-                    assignmentEditorBody.appendChild(row);
+                document.getElementById('assignment-editor-description').textContent = `Found ${exceptionCount} unique notes that were not automatically assigned. Please review the categories below.`;
+                
+                const sortedCategories = Object.keys(categorizedNotes).sort();
+
+                sortedCategories.forEach(category => {
+                    const notes = categorizedNotes[category];
+                    const categoryId = category.replace(/\s|&/g, '-');
+                    
+                    let tableRowsHtml = '';
+                    const sortedNotes = Object.keys(notes).sort((a, b) => notes[b].count - notes[a].count);
+                    
+                    sortedNotes.forEach(noteText => {
+                        const data = notes[noteText];
+                        tableRowsHtml += `
+                            <tr class="bg-white">
+                                <td class="px-6 py-4 text-sm text-gray-700 break-words">${noteText}</td>
+                                <td class="px-6 py-4 text-sm text-gray-700">${data.count}</td>
+                                <td class="px-6 py-4 text-sm font-medium text-gray-900">${data.defaultOwner || 'N/A'}</td>
+                                <td class="px-6 py-4 text-sm text-gray-500">
+                                    <select class="p-2 border rounded-md w-full assignment-override" data-note-text="${noteText.replace(/"/g, '&quot;')}" data-category="${categoryId}">
+                                        <option value="">Keep Default</option>
+                                        <option value="Claims">Claims</option>
+                                        <option value="PV">PV</option>
+                                    </select>
+                                </td>
+                            </tr>
+                        `;
+                    });
+
+                    const categoryHtml = `
+                        <details class="bg-gray-50 border rounded-lg overflow-hidden" open>
+                            <summary class="p-4 bg-gray-100 hover:bg-gray-200 flex justify-between items-center">
+                                <h4 class="text-lg font-bold text-gray-800">${category} (${sortedNotes.length} notes)</h4>
+                                <div class="flex items-center space-x-2">
+                                    <label class="text-sm font-medium">Assign All to:</label>
+                                    <select class="p-2 border rounded-md category-assign" data-category-target="${categoryId}">
+                                        <option value="">-- Bulk Assign --</option>
+                                        <option value="Claims">Claims</option>
+                                        <option value="PV">PV</option>
+                                    </select>
+                                </div>
+                            </summary>
+                            <div class="p-2">
+                                <div class="table-container border rounded-lg">
+                                    <table class="min-w-full divide-y divide-gray-200 table-fixed">
+                                        <thead class="bg-white sticky top-0">
+                                            <tr>
+                                                <th scope="col" class="w-1/2 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Note Text</th>
+                                                <th scope="col" class="w-1/12 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Count</th>
+                                                <th scope="col" class="w-1/4 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Default Assignment</th>
+                                                <th scope="col" class="w-1/4 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">New Assignment</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-200">${tableRowsHtml}</tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </details>
+                    `;
+                    assignmentContainer.innerHTML += categoryHtml;
+                });
+
+                // Add event listeners for the new category dropdowns
+                document.querySelectorAll('.category-assign').forEach(select => {
+                    select.addEventListener('change', (e) => {
+                        const targetCategory = e.target.dataset.categoryTarget;
+                        const newAssignment = e.target.value;
+                        if (!newAssignment) return; // Ignore the "-- Bulk Assign --" option
+                        
+                        document.querySelectorAll(`.assignment-override[data-category="${targetCategory}"]`).forEach(noteSelect => {
+                            noteSelect.value = newAssignment;
+                        });
+                    });
                 });
             }
+
             document.getElementById('review-container').classList.remove('hidden');
         }
 
@@ -503,7 +609,6 @@
                     else if (claim.cleanAge >= 30) { priorityLevel = 3; tabKey = `Backlog (30+d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
                     else { priorityLevel = 4; tabKey = `Queue (0-20d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
                     
-                    // MODIFICATION: Only create a breakout tab if it's NOT a queue tab for a team-specific report
                     if (!(ownerFilter && priorityLevel === 4)) {
                         const truncatedTabKey = tabKey.replace(/[\\\/\?\*\[\]]/g, '').substring(0, 31);
                         if (!sheetsData[truncatedTabKey]) { sheetsData[truncatedTabKey] = [fileHeaderRow]; tabMetadata[truncatedTabKey] = { owner: tabOwner, priority: priorityLevel }; }
@@ -532,7 +637,23 @@
                 const filteredTabs = allBreakoutTabs.filter(key => tabMetadata[key]?.priority === priority && (!ownerFilter || tabMetadata[key].owner === ownerFilter)).sort();
                 if (filteredTabs.length > 0) {
                     coverPageData.push([title], ["Tab Name", "Claim Count", "Assigned Owner"]);
-                    filteredTabs.forEach(key => coverPageData.push([key, sheetsData[key].length - 1, tabMetadata[key].owner]));
+                    
+                    filteredTabs.forEach(key => {
+                        const tabDataRows = sheetsData[key].slice(1);
+                        const totalCount = tabDataRows.length;
+                        const ownerColumnIndex = fileHeaderRow.length - 2;
+
+                        let pvCount = 0;
+                        let claimsCount = 0;
+                        for (const row of tabDataRows) {
+                            if (row[ownerColumnIndex] === 'PV') pvCount++;
+                            else if (row[ownerColumnIndex] === 'Claims') claimsCount++;
+                        }
+                        
+                        const ownerDisplayString = `PV (${pvCount}) Claims (${claimsCount})`;
+                        coverPageData.push([key, totalCount, ownerDisplayString]);
+                    });
+
                     coverPageData.push([]);
                 }
             };
