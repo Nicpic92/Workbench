@@ -232,9 +232,6 @@
             }
         }
 
-        // =================================================================
-        // ===== MODIFIED FUNCTION: Now considers yesterday's assignments =====
-        // =================================================================
         function processAndAssignClaims(aoa, config, yesterdayDataMap) {
             const claims = [];
             const claimNumberIndex = config.claimNumberIndex;
@@ -251,14 +248,12 @@
                 let owner = null;
                 const claimNumber = String(row[claimNumberIndex] || '').trim();
 
-                // ** NEW LOGIC **: Prioritize yesterday's assignment
                 if (claimNumber && yesterdayDataMap.has(claimNumber)) {
                     owner = yesterdayDataMap.get(claimNumber).owner;
                 }
 
-                // ** FALLBACK LOGIC **: If it's a new claim or had no owner yesterday, apply rules
                 if (!owner) {
-                    owner = getHardcodedAssignment(noteText); // This returns null
+                    owner = getHardcodedAssignment(noteText);
                     if (owner === null) {
                         const totalCharges = parseFloat(String(row[config.totalChargesIndex]).replace(/[^0-9.-]/g, '')) || 0;
                         const claimType = String(row[config.claimTypeIndex] || '').toUpperCase();
@@ -341,7 +336,7 @@
                         yesterdayDataMap = yestData.dataMap;
                     } catch (e) {
                         displayStatus(`Warning: ${e.message}. Attempting to process as a raw report.`, 'info');
-                        const yestClaims = processAndAssignClaims(yesterday_aoa, config, new Map()); // Pass empty map for raw file
+                        const yestClaims = processAndAssignClaims(yesterday_aoa, config, new Map());
                         yesterdayStats = calculateStats(yestClaims);
                         yestClaims.forEach(claim => {
                             const claimNumber = claim.originalRow[config.claimNumberIndex];
@@ -355,9 +350,6 @@
                 
                 prebatchClaims = main_aoa.slice(1).filter(row => String(row[config.claimStatusIndex] || '').toUpperCase().includes('PREBATCH'));
                 
-                // =================================================================
-                // ===== MODIFIED CALL: Pass yesterdayDataMap into the function =====
-                // =================================================================
                 processedClaimsList = processAndAssignClaims(main_aoa, config, yesterdayDataMap);
 
                 fileHeaderRow = [...mainReportHeader];
@@ -546,9 +538,12 @@
             const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
             document.getElementById('download-links-container').innerHTML = '';
 
-            createDownloadLink(buildWorkbook(processedClaimsList, `${clientName} Daily Action Report`), `Overall Daily Action Report for ${getFormattedDate()}.xlsx`);
-            createDownloadLink(buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'Claims'), `${clientName} Claims - Action Report`, 'Claims'), `Claims - Action Report for ${getFormattedDate()}.xlsx`);
-            createDownloadLink(buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'PV'), `${clientName} PV - Action Report`, 'PV'), `PV - Action Report for ${getFormattedDate()}.xlsx`);
+            // =================================================================
+            // ===== MODIFIED FILENAME LOGIC: Prepending client name =====
+            // =================================================================
+            createDownloadLink(buildWorkbook(processedClaimsList, `${clientName} Daily Action Report`), `${clientName} Overall Daily Action Report for ${getFormattedDate()}.xlsx`);
+            createDownloadLink(buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'Claims'), `${clientName} Claims - Action Report`, 'Claims'), `${clientName} Claims - Action Report for ${getFormattedDate()}.xlsx`);
+            createDownloadLink(buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'PV'), `${clientName} PV - Action Report`, 'PV'), `${clientName} PV - Action Report for ${getFormattedDate()}.xlsx`);
             
             document.getElementById('final-downloads-container').classList.remove('hidden');
             document.getElementById('copyEmailBtn').classList.remove('hidden');
