@@ -232,8 +232,13 @@
             }
         }
 
-        function processAndAssignClaims(aoa, config) {
+        // =================================================================
+        // ===== MODIFIED FUNCTION: Now considers yesterday's assignments =====
+        // =================================================================
+        function processAndAssignClaims(aoa, config, yesterdayDataMap) {
             const claims = [];
+            const claimNumberIndex = config.claimNumberIndex;
+
             for (const row of aoa.slice(1)) {
                 if (row.every(c => c === null)) continue;
                 
@@ -243,18 +248,29 @@
                 const noteText = String(row[config.notesIndex] || '');
                 const cleanAge = parseInt(row[config.cleanAgeIndex], 10);
                 
-                let owner = getHardcodedAssignment(noteText);
-                if (owner === null) {
-                    const totalCharges = parseFloat(String(row[config.totalChargesIndex]).replace(/[^0-9.-]/g, '')) || 0;
-                    const claimType = String(row[config.claimTypeIndex] || '').toUpperCase();
-                    const isMgmtReview = claimState.includes('MANAGEMENT') && claimState.includes('REVIEW');
-                    const isHighCost = isMgmtReview && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500));
-                    
-                    if (isHighCost) owner = 'Claims';
-                    else if (isMgmtReview || claimState === 'ONHOLD') owner = 'PV';
-                    else if (['PEND', 'APPROVED', 'DENY'].includes(claimState)) owner = 'Claims';
-                    else if (claimState === 'PR') owner = row[config.payerIndex] || '';
-                    else owner = 'PV';
+                let owner = null;
+                const claimNumber = String(row[claimNumberIndex] || '').trim();
+
+                // ** NEW LOGIC **: Prioritize yesterday's assignment
+                if (claimNumber && yesterdayDataMap.has(claimNumber)) {
+                    owner = yesterdayDataMap.get(claimNumber).owner;
+                }
+
+                // ** FALLBACK LOGIC **: If it's a new claim or had no owner yesterday, apply rules
+                if (!owner) {
+                    owner = getHardcodedAssignment(noteText); // This returns null
+                    if (owner === null) {
+                        const totalCharges = parseFloat(String(row[config.totalChargesIndex]).replace(/[^0-9.-]/g, '')) || 0;
+                        const claimType = String(row[config.claimTypeIndex] || '').toUpperCase();
+                        const isMgmtReview = claimState.includes('MANAGEMENT') && claimState.includes('REVIEW');
+                        const isHighCost = isMgmtReview && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500));
+                        
+                        if (isHighCost) owner = 'Claims';
+                        else if (isMgmtReview || claimState === 'ONHOLD') owner = 'PV';
+                        else if (['PEND', 'APPROVED', 'DENY'].includes(claimState)) owner = 'Claims';
+                        else if (claimState === 'PR') owner = row[config.payerIndex] || '';
+                        else owner = 'PV';
+                    }
                 }
                 
                 claims.push({ ...config, originalRow: row, noteText, cleanAge, claimState, owner });
@@ -262,9 +278,6 @@
             return claims;
         }
         
-        // =================================================================
-        // ===== NEW FUNCTION TO PROCESS YESTERDAY'S GENERATED REPORT ======
-        // =================================================================
         function processYesterdayReport(aoa) {
             const headers = (aoa[0] || []).map(h => String(h || '').trim());
             const claimNumIndex = headers.indexOf('Claim Number');
@@ -291,7 +304,6 @@
                     dataMap.set(claimNumber, { state: claimState, owner: owner });
                 }
                 
-                // Create a simplified claim object for statistics calculation
                 claimsList.push({ claimState, cleanAge, owner });
             }
 
@@ -312,7 +324,6 @@
                 reader.onload = e => {
                     try {
                         const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-                        // Find the "All Processed Data" sheet if it exists, otherwise use the first sheet
                         const sheetName = wb.SheetNames.includes('All Processed Data') ? 'All Processed Data' : wb.SheetNames[0];
                         resolve(XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: null }));
                     } catch (err) { reject(err); }
@@ -324,17 +335,13 @@
             try {
                 if (hasYesterdayFile) {
                     const yesterday_aoa = await readFileAsAOA(yesterdayFile);
-                    // =================================================================
-                    // ===== MODIFIED LOGIC: Use the new function for yesterday's file =====
-                    // =================================================================
                     try {
                         const yestData = processYesterdayReport(yesterday_aoa);
                         yesterdayStats = yestData.stats;
                         yesterdayDataMap = yestData.dataMap;
                     } catch (e) {
-                        // Fallback to old method if it's not a generated report
                         displayStatus(`Warning: ${e.message}. Attempting to process as a raw report.`, 'info');
-                        const yestClaims = processAndAssignClaims(yesterday_aoa, config);
+                        const yestClaims = processAndAssignClaims(yesterday_aoa, config, new Map()); // Pass empty map for raw file
                         yesterdayStats = calculateStats(yestClaims);
                         yestClaims.forEach(claim => {
                             const claimNumber = claim.originalRow[config.claimNumberIndex];
@@ -347,7 +354,11 @@
                 mainReportHeader = main_aoa[0];
                 
                 prebatchClaims = main_aoa.slice(1).filter(row => String(row[config.claimStatusIndex] || '').toUpperCase().includes('PREBATCH'));
-                processedClaimsList = processAndAssignClaims(main_aoa, config);
+                
+                // =================================================================
+                // ===== MODIFIED CALL: Pass yesterdayDataMap into the function =====
+                // =================================================================
+                processedClaimsList = processAndAssignClaims(main_aoa, config, yesterdayDataMap);
 
                 fileHeaderRow = [...mainReportHeader];
                 if (hasYesterdayFile) fileHeaderRow.splice(config.claimStatusIndex, 0, 'Yest. Claim State');
@@ -419,7 +430,7 @@
                 document.getElementById('assignment-editor-description').textContent = "No notes were found in the report to assign.";
                 assignmentContainer.innerHTML += `<div class="text-center py-4 text-gray-500">No notes found.</div>`;
             } else {
-                document.getElementById('assignment-editor-description').textContent = `Found ${uniqueNoteCount} unique notes. Please review the categories below to assign an owner.`;
+                document.getElementById('assignment-editor-description').textContent = `Found ${uniqueNoteCount} unique notes. The 'Default Assignment' now reflects yesterday's final assignment. Please review.`;
                 
                 const sortedCategories = Object.keys(categorizedNotes).sort();
 
@@ -535,7 +546,6 @@
             const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
             document.getElementById('download-links-container').innerHTML = '';
 
-            // MODIFICATION: Apply 3-report generation to ALL clients
             createDownloadLink(buildWorkbook(processedClaimsList, `${clientName} Daily Action Report`), `Overall Daily Action Report for ${getFormattedDate()}.xlsx`);
             createDownloadLink(buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'Claims'), `${clientName} Claims - Action Report`, 'Claims'), `Claims - Action Report for ${getFormattedDate()}.xlsx`);
             createDownloadLink(buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'PV'), `${clientName} PV - Action Report`, 'PV'), `PV - Action Report for ${getFormattedDate()}.xlsx`);
@@ -595,7 +605,6 @@
                 else if (claim.claimState === 'ONHOLD') { statusTab = 'OnHold'; tabOwner = 'PV'; }
                 else if (claim.claimState === 'PEND') { statusTab = 'Pend'; tabOwner = 'Claims'; }
                 else if (claim.claimState === 'DENY') { statusTab = 'Deny'; tabOwner = 'Claims'; }
-                // MODIFICATION: Add PR to breakout tabs
                 else if (claim.claimState === 'PR') { statusTab = 'PayerRev'; tabOwner = 'Claims'; }
                 
                 if (dsnpStatus && tabOwner && networkType && (ownerFilter === 'PV' || !isHighCost)) {
@@ -683,7 +692,6 @@
 
         function calculateStats(claimsList) {
             const dayBuckets = { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
-            // MODIFICATION: Add PR to the stats object
             const stats = { 'PEND': { total: 0, ...dayBuckets }, 'ONHOLD': { total: 0, ...dayBuckets }, 'MANAGEMENTREVIEW': { total: 0, ...dayBuckets }, 'DENY': { total: 0, ...dayBuckets }, 'PR': { total: 0, ...dayBuckets } };
             
             for(const claim of claimsList) {
@@ -726,7 +734,6 @@
                 movementSummary = `\n\n**Workflow Movement Summary:**\n- Claims moved from PV to Claims: ${workflowMovement.pvToClaims}\n- Claims moved from Claims to PV: ${workflowMovement.claimsToPv}`;
             }
 
-            // MODIFICATION: Add PR stats block to the email body
             const emailBody = `Hello Teams,\n\n${intro}\n\nBelow are the detailed highlights from the report:\n\n` +
                   `${createStatBlock('pending', todayStats['PEND'], yesterdayStats?.['PEND'])}\n\n` +
                   `${createStatBlock('On Hold', todayStats['ONHOLD'], yesterdayStats?.['ONHOLD'])}\n\n` +
