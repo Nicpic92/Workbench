@@ -102,17 +102,15 @@
                         <p class="mt-2 text-lg text-gray-600">Review assignments for all notes and download reports.</p>
                     </div>
 
-                    <!-- ===== NEW MOVEMENT SUMMARY CONTAINER ===== -->
                     <div id="movement-summary-container" class="hidden bg-blue-50 p-6 rounded-lg">
                         <h3 class="text-xl font-bold text-gray-900 mb-3">Workflow & Aging Movement Summary</h3>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-700">
                             <p>Claims moved from PV to Claims: <strong id="pv-to-claims-count" class="text-blue-800">0</strong></p>
                             <p>Claims moved from Claims to PV: <strong id="claims-to-pv-count" class="text-blue-800">0</strong></p>
                             <p>Critical claims moved to Backlog: <strong id="critical-to-backlog-count" class="text-red-600">0</strong></p>
-                            <p>Critical claims worked (moved to other buckets): <strong id="critical-worked-count" class="text-green-600">0</strong></p>
+                            <p>Critical claims worked/removed: <strong id="critical-worked-count" class="text-green-600">0</strong></p>
                         </div>
                     </div>
-                    <!-- ======================================= -->
 
                     <div id="prebatch-container" class="hidden bg-gray-50 p-6 rounded-lg">
                         <h3 class="text-xl font-bold text-gray-900 mb-3">Prebatch Claims</h3>
@@ -123,7 +121,6 @@
                     <div id="assignment-editor-container" class="space-y-4">
                         <h3 class="text-xl font-bold text-gray-900 mb-3">Assignment Editor</h3>
                         <p id="assignment-editor-description" class="text-gray-700 mb-4"></p>
-                        <!-- Categories will be injected here -->
                     </div>
 
                     <div class="text-center pt-6">
@@ -146,25 +143,22 @@
         let mainReportHeader = [];
         let yesterdayDataMap = new Map();
         let yesterdayStats = null;
-        // ===== EXPANDED MOVEMENT TRACKING OBJECT =====
         let workflowMovement = { 
             pvToClaims: 0, 
             claimsToPv: 0,
             criticalToBacklog: 0,
             criticalWorked: 0
         };
-        // ============================================
+        // ===== NEW: OBJECT TO TRACK MOVEMENT TO PREBATCH =====
+        let prebatchMovementStats = {}; 
         let hasYesterdayFile = false;
 
         function getHardcodedAssignment(noteText) {
-            // All automatic assignments are disabled by design.
-            // This ensures every note appears in the categorized review step for manual assignment.
             return null;
         }
         
         function getNoteCategory(noteText) {
             const noteLower = noteText.toLowerCase();
-
             if (noteLower.includes('w9 req') || noteLower.includes('w9 requested') || noteLower.includes('w9 recvd') || noteLower.includes('w9 past due')) return 'W9 Form Management';
             if (noteLower.includes('rachael') || noteLower.includes('payer review') || noteLower.includes('hold for') || noteLower.includes('red tab') || noteLower.includes('move to pr')) return 'Manual Review (Rachael/Payer)';
             if (noteLower.startsWith('error -') || noteLower.startsWith('error-') || noteLower.includes('incorrectly') || noteLower.includes('missed to')) return 'Adjudication & Processing Errors';
@@ -172,7 +166,6 @@
             if (noteLower.includes('contract') || noteLower.includes('provider not found') || noteLower.includes('no data for') || noteLower.includes('pay to name mismatch')) return 'Contract & Provider Data Issues';
             if (noteLower.includes('remap') || noteLower.includes('rerun') || noteLower.includes('reprocess') || noteLower.includes('pv updated')) return 'System Actions & Reprocessing';
             if (noteLower.includes('auth') || noteLower.includes('duplicate')) return 'Authorization & Duplicate Issues';
-
             return 'Miscellaneous';
         }
 
@@ -197,9 +190,7 @@
                 if (selectedClient) {
                     const preset = clientPresets[selectedClient];
                     document.getElementById('cleanAgeCol-label').textContent = preset.label;
-                    Object.keys(preset).forEach(key => {
-                        if (key !== 'label') document.getElementById(key).value = preset[key];
-                    });
+                    Object.keys(preset).forEach(key => { if (key !== 'label') document.getElementById(key).value = preset[key]; });
                     configContainer.classList.remove('hidden');
                     uploadContainer.classList.remove('hidden');
                 } else {
@@ -216,11 +207,7 @@
 
             fileInput.addEventListener('change', checkFiles);
             yesterdayFileInput.addEventListener('change', checkFiles);
-            processBtn.addEventListener('click', () => {
-                if (fileInput.files[0] && gatherConfig()) {
-                    performInitialProcessing(fileInput.files[0], yesterdayFileInput.files[0], gatherConfig());
-                }
-            });
+            processBtn.addEventListener('click', () => { if (fileInput.files[0] && gatherConfig()) performInitialProcessing(fileInput.files[0], yesterdayFileInput.files[0], gatherConfig()); });
             document.getElementById('generateFinalReportsBtn').addEventListener('click', generateFinalReports);
             document.getElementById('copyEmailBtn').addEventListener('click', copyEmailText);
         }
@@ -267,9 +254,7 @@
                 let owner = null;
                 const claimNumber = String(row[claimNumberIndex] || '').trim();
 
-                if (claimNumber && yesterdayDataMap.has(claimNumber)) {
-                    owner = yesterdayDataMap.get(claimNumber).owner;
-                }
+                if (claimNumber && yesterdayDataMap.has(claimNumber)) owner = yesterdayDataMap.get(claimNumber).owner;
 
                 if (!owner) {
                     owner = getHardcodedAssignment(noteText);
@@ -286,32 +271,26 @@
                         else owner = 'PV';
                     }
                 }
-                
-                claims.push({ ...config, originalRow: row, noteText, cleanAge, claimState, owner });
+                claims.push({ ...config, originalRow: row, noteText, cleanAge, claimState, owner, claimNumber });
             }
             return claims;
         }
         
-        // ===== MODIFIED TO CAPTURE CLEAN AGE =====
         function processYesterdayReport(aoa) {
             const headers = (aoa[0] || []).map(h => String(h || '').trim());
             const claimNumIndex = headers.indexOf('Claim Number');
             const ownerIndex = headers.indexOf('Added (Owner)');
             const stateIndex = headers.indexOf('Claim State');
             
-            // Find Clean Age by checking potential names used by presets
             const cleanAgeHeaderNames = ['Clean Age', 'Age']; 
             let cleanAgeIndex = -1;
             for (const name of cleanAgeHeaderNames) {
                 const idx = headers.findIndex(h => h.startsWith(name));
-                if (idx !== -1) {
-                    cleanAgeIndex = idx;
-                    break;
-                }
+                if (idx !== -1) { cleanAgeIndex = idx; break; }
             }
 
             if (claimNumIndex === -1 || ownerIndex === -1 || cleanAgeIndex === -1) {
-                throw new Error("Yesterday's report must contain 'Claim Number', 'Added (Owner)', and a 'Clean Age' or 'Age' column.");
+                throw new Error("Yesterday's report must contain 'Claim Number', 'Added (Owner)', and a 'Clean Age'/'Age' column.");
             }
 
             const dataMap = new Map();
@@ -319,16 +298,12 @@
 
             for (const row of aoa.slice(1)) {
                 if (row.every(c => c === null)) continue;
-
                 const claimNumber = String(row[claimNumIndex] || '').trim();
                 const owner = String(row[ownerIndex] || '').trim();
                 const claimState = String(row[stateIndex] || '').trim().toUpperCase();
                 const cleanAge = parseInt(row[cleanAgeIndex], 10);
                 
-                if (claimNumber && owner) {
-                    dataMap.set(claimNumber, { state: claimState, owner: owner, cleanAge: cleanAge });
-                }
-                
+                if (claimNumber && owner) dataMap.set(claimNumber, { state: claimState, owner: owner, cleanAge: cleanAge });
                 claimsList.push({ claimState, cleanAge, owner });
             }
 
@@ -360,32 +335,47 @@
             try {
                 if (hasYesterdayFile) {
                     const yesterday_aoa = await readFileAsAOA(yesterdayFile);
-                    try {
-                        const yestData = processYesterdayReport(yesterday_aoa);
-                        yesterdayStats = yestData.stats;
-                        yesterdayDataMap = yestData.dataMap;
-                    } catch (e) {
-                        displayStatus(`Warning: ${e.message}. Attempting to process as a raw report.`, 'info');
-                        const yestClaims = processAndAssignClaims(yesterday_aoa, config, new Map());
-                        yesterdayStats = calculateStats(yestClaims);
-                        yestClaims.forEach(claim => {
-                            const claimNumber = claim.originalRow[config.claimNumberIndex];
-                            if (claimNumber) yesterdayDataMap.set(String(claimNumber).trim(), { state: claim.claimState, owner: claim.owner, cleanAge: claim.cleanAge });
-                        });
-                    }
+                    const yestData = processYesterdayReport(yesterday_aoa);
+                    yesterdayStats = yestData.stats;
+                    yesterdayDataMap = yestData.dataMap;
                 }
                 
                 const main_aoa = await readFileAsAOA(mainFile);
                 mainReportHeader = main_aoa[0];
                 
+                // ===== REVISED: PROCESS PREBATCH AND CALCULATE MOVEMENT =====
                 prebatchClaims = main_aoa.slice(1).filter(row => String(row[config.claimStatusIndex] || '').toUpperCase().includes('PREBATCH'));
                 
+                // Initialize prebatch movement stats structure
+                const dayBuckets = { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
+                prebatchMovementStats = { 'PEND': { total: 0, ...dayBuckets }, 'ONHOLD': { total: 0, ...dayBuckets }, 'MANAGEMENTREVIEW': { total: 0, ...dayBuckets }, 'DENY': { total: 0, ...dayBuckets }, 'PR': { total: 0, ...dayBuckets } };
+                
+                if(hasYesterdayFile) {
+                    prebatchClaims.forEach(row => {
+                        const claimNumber = String(row[config.claimNumberIndex] || '').trim();
+                        if(yesterdayDataMap.has(claimNumber)){
+                            const yestClaim = yesterdayDataMap.get(claimNumber);
+                            let yestState = yestClaim.state.includes('MANAGEMENT') ? 'MANAGEMENTREVIEW' : yestClaim.state;
+                            if(prebatchMovementStats[yestState]){
+                                prebatchMovementStats[yestState].total++;
+                                const yestAge = yestClaim.cleanAge;
+                                let daysValue = '';
+                                if (!isNaN(yestAge)) {
+                                    if (yestAge >= 28 && yestAge <= 29) daysValue = '28-29';
+                                    else if (yestAge >= 21 && yestAge <= 27) daysValue = '21-27';
+                                    else if (yestAge >= 30) daysValue = '30+';
+                                    else daysValue = '0-20';
+                                    if (prebatchMovementStats[yestState][daysValue] !== undefined) prebatchMovementStats[yestState][daysValue]++;
+                                }
+                            }
+                        }
+                    });
+                }
+                // =========================================================
+
                 processedClaimsList = processAndAssignClaims(main_aoa, config, yesterdayDataMap);
 
-                // ===== INJECT CLEAN AGE HEADER DYNAMICALLY =====
-                const cleanAgeHeader = document.getElementById('cleanAgeCol-label').textContent.replace(':', '');
                 fileHeaderRow = [...mainReportHeader];
-
                 if (hasYesterdayFile) fileHeaderRow.splice(config.claimStatusIndex, 0, 'Yest. Claim State');
                 let daysInsertIndex = config.cleanAgeIndex + 1;
                 if (hasYesterdayFile && config.cleanAgeIndex >= config.claimStatusIndex) daysInsertIndex++; 
@@ -398,7 +388,6 @@
                         const claimNumber = String(claim.originalRow[config.claimNumberIndex] || '').trim();
                         newRow.splice(config.claimStatusIndex, 0, yesterdayDataMap.get(claimNumber)?.state || 'NEW');
                     }
-
                     const getDaysBucket = (age) => {
                          if (isNaN(age)) return '';
                          if (age >= 28 && age <= 29) return '28-29 days';
@@ -406,7 +395,6 @@
                          if (age >= 30) return '30+ days';
                          return '0-20 days';
                     };
-                    
                     newRow.splice(daysInsertIndex, 0, getDaysBucket(claim.cleanAge));
                     newRow.push(claim.owner, (claim.noteText.match(/due\s*by?[:\s]*(\d{1,2}[\/-]\d{1,2}(?:[\/-]\d{2,4})?)/i) || [])[1] || '');
                     claim.processedRow = newRow;
@@ -442,9 +430,7 @@
                 const note = claim.noteText || "No Note";
                 if (note !== "No Note") {
                     const category = getNoteCategory(note);
-                    if (!categorizedNotes[category]) {
-                        categorizedNotes[category] = {};
-                    }
+                    if (!categorizedNotes[category]) categorizedNotes[category] = {};
                     if (!categorizedNotes[category][note]) {
                         categorizedNotes[category][note] = { count: 0, defaultOwner: claim.defaultOwner };
                         uniqueNoteCount++;
@@ -459,63 +445,15 @@
             } else {
                 document.getElementById('assignment-editor-description').textContent = `Found ${uniqueNoteCount} unique notes. The 'Default Assignment' now reflects yesterday's final assignment. Please review.`;
                 
-                const sortedCategories = Object.keys(categorizedNotes).sort();
-
-                sortedCategories.forEach(category => {
+                Object.keys(categorizedNotes).sort().forEach(category => {
                     const notes = categorizedNotes[category];
                     const categoryId = category.replace(/\s|&/g, '-');
-                    
                     let tableRowsHtml = '';
-                    const sortedNotes = Object.keys(notes).sort((a, b) => notes[b].count - notes[a].count);
-                    
-                    sortedNotes.forEach(noteText => {
+                    Object.keys(notes).sort((a, b) => notes[b].count - notes[a].count).forEach(noteText => {
                         const data = notes[noteText];
-                        tableRowsHtml += `
-                            <tr class="bg-white">
-                                <td class="px-6 py-4 text-sm text-gray-700 break-words">${noteText}</td>
-                                <td class="px-6 py-4 text-sm text-gray-700">${data.count}</td>
-                                <td class="px-6 py-4 text-sm font-medium text-gray-900">${data.defaultOwner || 'N/A'}</td>
-                                <td class="px-6 py-4 text-sm text-gray-500">
-                                    <select class="p-2 border rounded-md w-full assignment-override" data-note-text="${noteText.replace(/"/g, '&quot;')}" data-category="${categoryId}">
-                                        <option value="">Keep Default</option>
-                                        <option value="Claims">Claims</option>
-                                        <option value="PV">PV</option>
-                                    </select>
-                                </td>
-                            </tr>
-                        `;
+                        tableRowsHtml += `<tr class="bg-white"><td class="px-6 py-4 text-sm text-gray-700 break-words">${noteText}</td><td class="px-6 py-4 text-sm text-gray-700">${data.count}</td><td class="px-6 py-4 text-sm font-medium text-gray-900">${data.defaultOwner || 'N/A'}</td><td class="px-6 py-4 text-sm text-gray-500"><select class="p-2 border rounded-md w-full assignment-override" data-note-text="${noteText.replace(/"/g, '&quot;')}" data-category="${categoryId}"><option value="">Keep Default</option><option value="Claims">Claims</option><option value="PV">PV</option></select></td></tr>`;
                     });
-
-                    const categoryHtml = `
-                        <details class="bg-gray-50 border rounded-lg overflow-hidden" open>
-                            <summary class="p-4 bg-gray-100 hover:bg-gray-200 flex justify-between items-center">
-                                <h4 class="text-lg font-bold text-gray-800">${category} (${sortedNotes.length} notes)</h4>
-                                <div class="flex items-center space-x-2">
-                                    <label class="text-sm font-medium">Assign All to:</label>
-                                    <select class="p-2 border rounded-md category-assign" data-category-target="${categoryId}">
-                                        <option value="">-- Bulk Assign --</option>
-                                        <option value="Claims">Claims</option>
-                                        <option value="PV">PV</option>
-                                    </select>
-                                </div>
-                            </summary>
-                            <div class="p-2">
-                                <div class="table-container border rounded-lg">
-                                    <table class="min-w-full divide-y divide-gray-200 table-fixed">
-                                        <thead class="bg-white sticky top-0">
-                                            <tr>
-                                                <th scope="col" class="w-1/2 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Note Text</th>
-                                                <th scope="col" class="w-1/12 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Count</th>
-                                                <th scope="col" class="w-1/4 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Default Assignment</th>
-                                                <th scope="col" class="w-1/4 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">New Assignment</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody class="divide-y divide-gray-200">${tableRowsHtml}</tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </details>
-                    `;
+                    const categoryHtml = `<details class="bg-gray-50 border rounded-lg overflow-hidden" open><summary class="p-4 bg-gray-100 hover:bg-gray-200 flex justify-between items-center"><h4 class="text-lg font-bold text-gray-800">${category} (${Object.keys(notes).length} notes)</h4><div class="flex items-center space-x-2"><label class="text-sm font-medium">Assign All to:</label><select class="p-2 border rounded-md category-assign" data-category-target="${categoryId}"><option value="">-- Bulk Assign --</option><option value="Claims">Claims</option><option value="PV">PV</option></select></div></summary><div class="p-2"><div class="table-container border rounded-lg"><table class="min-w-full divide-y divide-gray-200 table-fixed"><thead class="bg-white sticky top-0"><tr><th scope="col" class="w-1/2 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Note Text</th><th scope="col" class="w-1/12 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Count</th><th scope="col" class="w-1/4 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Default Assignment</th><th scope="col" class="w-1/4 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">New Assignment</th></tr></thead><tbody class="divide-y divide-gray-200">${tableRowsHtml}</tbody></table></div></div></details>`;
                     assignmentContainer.innerHTML += categoryHtml;
                 });
 
@@ -524,14 +462,10 @@
                         const targetCategory = e.target.dataset.categoryTarget;
                         const newAssignment = e.target.value;
                         if (!newAssignment) return;
-                        
-                        document.querySelectorAll(`.assignment-override[data-category="${targetCategory}"]`).forEach(noteSelect => {
-                            noteSelect.value = newAssignment;
-                        });
+                        document.querySelectorAll(`.assignment-override[data-category="${targetCategory}"]`).forEach(noteSelect => { noteSelect.value = newAssignment; });
                     });
                 });
             }
-
             document.getElementById('review-container').classList.remove('hidden');
         }
 
@@ -546,48 +480,48 @@
         function generateFinalReports() {
             displayStatus('Generating final reports...', 'info', true);
             
-            // ===== RESET AND RECALCULATE MOVEMENT STATS =====
             workflowMovement = { pvToClaims: 0, claimsToPv: 0, criticalToBacklog: 0, criticalWorked: 0 };
             const noteOverrides = new Map();
-            document.querySelectorAll('.assignment-override').forEach(select => {
-                if (select.value) noteOverrides.set(select.dataset.noteText, select.value);
-            });
+            document.querySelectorAll('.assignment-override').forEach(select => { if (select.value) noteOverrides.set(select.dataset.noteText, select.value); });
             
-            const getDaysBucket = (age) => {
-                if (isNaN(age)) return null;
-                if (age >= 28 && age <= 29) return 'Critical';
-                if (age >= 30) return 'Backlog';
-                return 'Other';
-            };
-
             processedClaimsList.forEach(claim => {
                 const override = noteOverrides.get(claim.noteText || "No Note");
                 if (override) {
                     claim.finalOwner = override;
                     claim.processedRow[claim.processedRow.length - 2] = override;
                 }
-                if (hasYesterdayFile) {
-                    const claimNumber = String(claim.originalRow[claim.claimNumberIndex] || '').trim();
-                    const yestData = yesterdayDataMap.get(claimNumber);
-                    if (yestData) {
+            });
+
+            // ===== REVISED & ACCURATE MOVEMENT CALCULATION =====
+            if (hasYesterdayFile) {
+                const todayClaimsMap = new Map(processedClaimsList.map(c => [c.claimNumber, c]));
+
+                for (const [claimNumber, yestData] of yesterdayDataMap.entries()) {
+                    // --- Calculate PV/Claims Movement ---
+                    if (todayClaimsMap.has(claimNumber)) {
+                        const todayOwner = todayClaimsMap.get(claimNumber).finalOwner;
                         const yestOwner = yestData.owner;
-                        const todayOwner = claim.finalOwner;
                         if (yestOwner === 'PV' && todayOwner === 'Claims') workflowMovement.pvToClaims++;
                         if (yestOwner === 'Claims' && todayOwner === 'PV') workflowMovement.claimsToPv++;
+                    }
 
-                        const yestBucket = getDaysBucket(yestData.cleanAge);
-                        const todayBucket = getDaysBucket(claim.cleanAge);
-                        
-                        if (yestBucket === 'Critical' && todayBucket === 'Backlog') {
-                            workflowMovement.criticalToBacklog++;
-                        } else if (yestBucket === 'Critical' && todayBucket === 'Other') {
-                            workflowMovement.criticalWorked++;
+                    // --- Calculate Critical -> Backlog/Worked Movement ---
+                    const yestAge = yestData.cleanAge;
+                    if (!isNaN(yestAge) && yestAge >= 28 && yestAge <= 29) { // Was critical yesterday
+                        if (todayClaimsMap.has(claimNumber)) {
+                            const todayAge = todayClaimsMap.get(claimNumber).cleanAge;
+                            if (!isNaN(todayAge) && todayAge >= 30) {
+                                workflowMovement.criticalToBacklog++;
+                            } else {
+                                workflowMovement.criticalWorked++; // Moved to another bucket (e.g., 0-20)
+                            }
+                        } else {
+                            workflowMovement.criticalWorked++; // Disappeared from report (paid, etc.)
                         }
                     }
                 }
-            });
+            }
             
-            // ===== DISPLAY MOVEMENT ON-SCREEN =====
             if (hasYesterdayFile) {
                 document.getElementById('pv-to-claims-count').textContent = workflowMovement.pvToClaims;
                 document.getElementById('claims-to-pv-count').textContent = workflowMovement.claimsToPv;
@@ -595,7 +529,6 @@
                 document.getElementById('critical-worked-count').textContent = workflowMovement.criticalWorked;
                 document.getElementById('movement-summary-container').classList.remove('hidden');
             }
-            // =====================================
             
             const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
             document.getElementById('download-links-container').innerHTML = '';
@@ -619,17 +552,11 @@
         }
 
         function buildWorkbook(claimsData, reportTitle, ownerFilter = null) {
-            const masterSheetName = "All Processed Data", highDollarSheetName = "High Dollar";
+             const masterSheetName = "All Processed Data", highDollarSheetName = "High Dollar";
             const sheetsData = { [masterSheetName]: [fileHeaderRow] };
-            if (ownerFilter !== 'PV') {
-                sheetsData[highDollarSheetName] = [fileHeaderRow];
-            }
+            if (ownerFilter !== 'PV') sheetsData[highDollarSheetName] = [fileHeaderRow];
             const tabMetadata = {};
-
-            const overallSummary = {
-                par: { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0, total: 0 },
-                nonpar: { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0, total: 0 }
-            };
+            const overallSummary = { par: { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0, total: 0 }, nonpar: { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0, total: 0 } };
 
             for (const claim of claimsData) {
                 const networkType = String(claim.originalRow[claim.networkStatusIndex] || '').toUpperCase().includes('OUT') ? 'nonpar' : 'par';
@@ -640,18 +567,12 @@
                     else if (claim.cleanAge >= 30) overallSummary[networkType]['30+']++;
                     else overallSummary[networkType]['0-20']++;
                 }
-
                 sheetsData[masterSheetName].push(claim.processedRow);
-                
                 const totalCharges = parseFloat(String(claim.originalRow[claim.totalChargesIndex]).replace(/[^0-9.-]/g, '')) || 0;
                 const claimType = String(claim.originalRow[claim.claimTypeIndex] || '').toUpperCase();
                 const isMgmtReview = claim.claimState.includes('MANAGEMENT') && claim.claimState.includes('REVIEW');
                 const isHighCost = isMgmtReview && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500));
-                
-                if (isHighCost && ownerFilter !== 'PV') {
-                    sheetsData[highDollarSheetName].push(claim.processedRow);
-                }
-                
+                if (isHighCost && ownerFilter !== 'PV') sheetsData[highDollarSheetName].push(claim.processedRow);
                 const dsnpRaw = String(claim.originalRow[claim.dsnpIndex] || '').toUpperCase();
                 const dsnpStatus = dsnpRaw.includes('NON DSNP') ? 'NonDSNP' : (dsnpRaw.includes('DSNP') || dsnpRaw === 'Y' ? 'DSNP' : '');
                 let statusTab = '', tabOwner = '';
@@ -660,94 +581,63 @@
                 else if (claim.claimState === 'PEND') { statusTab = 'Pend'; tabOwner = 'Claims'; }
                 else if (claim.claimState === 'DENY') { statusTab = 'Deny'; tabOwner = 'Claims'; }
                 else if (claim.claimState === 'PR') { statusTab = 'PayerRev'; tabOwner = 'Claims'; }
-                
                 if (dsnpStatus && tabOwner && networkType && (ownerFilter === 'PV' || !isHighCost)) {
                     let tabKey = '', priorityLevel = 0;
                     if (claim.cleanAge >= 28 && claim.cleanAge <= 29) { priorityLevel = 1; tabKey = `CRITICAL (28-29d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
                     else if (claim.cleanAge >= 21 && claim.cleanAge <= 27) { priorityLevel = 2; tabKey = `PRIORITY (21-27d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
                     else if (claim.cleanAge >= 30) { priorityLevel = 3; tabKey = `Backlog (30+d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
                     else { priorityLevel = 4; tabKey = `Queue (0-20d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
-                    
                     if (!(ownerFilter && priorityLevel === 4)) {
                         const truncatedTabKey = tabKey.replace(/[\\\/\?\*\[\]]/g, '').substring(0, 31);
                         if (!sheetsData[truncatedTabKey]) { sheetsData[truncatedTabKey] = [fileHeaderRow]; tabMetadata[truncatedTabKey] = { owner: tabOwner, priority: priorityLevel }; }
                         sheetsData[truncatedTabKey].push(claim.processedRow);
                     }
                 }
-
                 const noteLower = claim.noteText.toLowerCase();
                 if (noteLower.includes('w9')) {
                     let w9SheetName = '', w9Owner = '';
                     if (noteLower.includes('req')) { w9SheetName = 'W9 Follow-Up'; w9Owner = 'Claims'; }
                     else if (noteLower.includes('denied') || noteLower.includes('missing')) { w9SheetName = 'W9 Letter Needed'; w9Owner = 'PV'; }
                     else if (noteLower.includes('received') || noteLower.includes('reprocess')) { w9SheetName = 'W9 Received - Reprocess'; w9Owner = 'Claims'; }
-
                     if (w9SheetName) {
                         if (!sheetsData[w9SheetName]) { sheetsData[w9SheetName] = [fileHeaderRow]; tabMetadata[w9SheetName] = { owner: w9Owner, priority: 5 }; }
                         sheetsData[w9SheetName].push(claim.processedRow);
                     }
                 }
             }
-
             const coverPageData = [[reportTitle], [`Date: ${getFormattedDate()}`], [], ["Overall Claim Summary"], ["Category", "28-29 Days (Critical)", "21-27 Days (Priority)", "30+ Days (Backlog)", "0-20 Days (Queue)", "Total Active Claims"], ["Par Claims", overallSummary.par['28-29'], overallSummary.par['21-27'], overallSummary.par['30+'], overallSummary.par['0-20'], overallSummary.par.total], ["Non-Par Claims", overallSummary.nonpar['28-29'], overallSummary.nonpar['21-27'], overallSummary.nonpar['30+'], overallSummary.nonpar['0-20'], overallSummary.nonpar.total], [], ["Core Strategy: Focus on claims nearing the 30-day threshold. Work tabs in priority order."], []];
-            
             const allBreakoutTabs = Object.keys(tabMetadata);
             const addSectionToCover = (title, priority) => {
                 const filteredTabs = allBreakoutTabs.filter(key => tabMetadata[key]?.priority === priority && (!ownerFilter || tabMetadata[key].owner === ownerFilter)).sort();
                 if (filteredTabs.length > 0) {
                     coverPageData.push([title], ["Tab Name", "Claim Count", "Assigned Owner"]);
-                    
                     filteredTabs.forEach(key => {
-                        const tabDataRows = sheetsData[key].slice(1);
-                        const totalCount = tabDataRows.length;
-                        const ownerColumnIndex = fileHeaderRow.length - 2;
-
-                        let pvCount = 0;
-                        let claimsCount = 0;
-                        for (const row of tabDataRows) {
-                            if (row[ownerColumnIndex] === 'PV') pvCount++;
-                            else if (row[ownerColumnIndex] === 'Claims') claimsCount++;
+                        const totalCount = sheetsData[key].length - 1;
+                        let pvCount = 0, claimsCount = 0;
+                        for (const row of sheetsData[key].slice(1)) {
+                            if (row[fileHeaderRow.length - 2] === 'PV') pvCount++;
+                            else if (row[fileHeaderRow.length - 2] === 'Claims') claimsCount++;
                         }
-                        
-                        const ownerDisplayString = `PV (${pvCount}) Claims (${claimsCount})`;
-                        coverPageData.push([key, totalCount, ownerDisplayString]);
+                        coverPageData.push([key, totalCount, `PV (${pvCount}) Claims (${claimsCount})`]);
                     });
-
                     coverPageData.push([]);
                 }
             };
-            addSectionToCover("Priority 1: CRITICAL (28-29 days)", 1);
-            addSectionToCover("Priority 2: PRIORITY (21-27 days)", 2);
-            addSectionToCover("Priority 3: Backlog (30+ days)", 3);
-            addSectionToCover("Priority 4: Standard Queue (0-20 days)", 4);
-            addSectionToCover("W9 and Other Tasks", 5);
-
+            addSectionToCover("Priority 1: CRITICAL (28-29 days)", 1); addSectionToCover("Priority 2: PRIORITY (21-27 days)", 2); addSectionToCover("Priority 3: Backlog (30+ days)", 3); addSectionToCover("Priority 4: Standard Queue (0-20 days)", 4); addSectionToCover("W9 and Other Tasks", 5);
             const wb = XLSX.utils.book_new();
             const coverWS = XLSX.utils.aoa_to_sheet(coverPageData);
             coverWS['!cols'] = [{ wch: 35 }, { wch: 20 }, { wch: 22 }];
             XLSX.utils.book_append_sheet(wb, coverWS, "Cover Page");
-            
             let sheetOrder = ["Cover Page"];
-            if (ownerFilter !== 'PV') {
-                sheetOrder.push(highDollarSheetName);
-            }
+            if (ownerFilter !== 'PV') sheetOrder.push(highDollarSheetName);
             sheetOrder.push(...allBreakoutTabs.sort((a,b) => (tabMetadata[a].priority - tabMetadata[b].priority) || a.localeCompare(b)), masterSheetName);
-
-            sheetOrder.forEach(sheetName => {
-                if (sheetsData[sheetName] && sheetsData[sheetName].length > 1) {
-                    const ws = XLSX.utils.aoa_to_sheet(sheetsData[sheetName]);
-                    ws['!autofilter'] = { ref: ws['!ref'] };
-                    XLSX.utils.book_append_sheet(wb, ws, sheetName);
-                }
-            });
-
+            sheetOrder.forEach(sheetName => { if (sheetsData[sheetName] && sheetsData[sheetName].length > 1) { const ws = XLSX.utils.aoa_to_sheet(sheetsData[sheetName]); ws['!autofilter'] = { ref: ws['!ref'] }; XLSX.utils.book_append_sheet(wb, ws, sheetName); } });
             return new Blob([XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         }
 
         function calculateStats(claimsList) {
             const dayBuckets = { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
             const stats = { 'PEND': { total: 0, ...dayBuckets }, 'ONHOLD': { total: 0, ...dayBuckets }, 'MANAGEMENTREVIEW': { total: 0, ...dayBuckets }, 'DENY': { total: 0, ...dayBuckets }, 'PR': { total: 0, ...dayBuckets } };
-            
             for(const claim of claimsList) {
                 let finalClaimState = claim.claimState.includes('MANAGEMENT') ? 'MANAGEMENTREVIEW' : claim.claimState;
                 if (stats[finalClaimState]) {
@@ -765,37 +655,42 @@
             return stats;
         }
 
-        // ===== UPDATED TO INCLUDE NEW MOVEMENT DATA =====
         function copyEmailText() {
             const todayStats = calculateStats(processedClaimsList);
             const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
-            const intro = hasYesterdayFile 
-                ? `Attached is today's Daily Action Report for ${clientName}. Previous day's counts are in (parenthesis).`
-                : `Attached is today's Daily Action Report for ${clientName}.`;
+            const intro = hasYesterdayFile ? `Attached is today's Daily Action Report for ${clientName}.` : `Attached is today's Daily Action Report for ${clientName}.`;
             
-            const formatStatLine = (t, y) => hasYesterdayFile ? `${t} (${y ?? 0})` : `${t}`;
+            // ===== NEW: ADVANCED STAT FORMATTING FUNCTION =====
+            const formatStatLine = (today, yesterday, prebatch) => {
+                if (hasYesterdayFile) {
+                    const prebatchText = (prebatch > 0) ? ` - ${prebatch} moved to prebatch` : '';
+                    return `${today} (Yest. ${yesterday ?? 0}${prebatchText})`;
+                }
+                return `${today}`;
+            };
             
-            const createStatBlock = (title, todayBlock, yestBlock) => {
+            const createStatBlock = (title, statusKey, todayBlock, yestBlock, prebatchBlock) => {
                 const y = yestBlock || { total: 0, '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
-                return `Number of total claims ${title}: ${formatStatLine(todayBlock.total, y.total)}\n` +
-                       `CRITICAL (28-29 Days): ${formatStatLine(todayBlock['28-29'], y['28-29'])}\n` +
-                       `PRIORITY (21-27 Days): ${formatStatLine(todayBlock['21-27'], y['21-27'])}\n` +
-                       `Backlog (30+ Days): ${formatStatLine(todayBlock['30+'], y['30+'])}\n` +
-                       `Queue (0-20 Days): ${formatStatLine(todayBlock['0-20'], y['0-20'])}`;
+                const p = prebatchBlock?.[statusKey] || { total: 0, '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
+                return `Number of total claims ${title}: ${formatStatLine(todayBlock.total, y.total, p.total)}\n` +
+                       `CRITICAL (28-29 Days): ${formatStatLine(todayBlock['28-29'], y['28-29'], p['28-29'])}\n` +
+                       `PRIORITY (21-27 Days): ${formatStatLine(todayBlock['21-27'], y['21-27'], p['21-27'])}\n` +
+                       `Backlog (30+ Days): ${formatStatLine(todayBlock['30+'], y['30+'], p['30+'])}\n` +
+                       `Queue (0-20 Days): ${formatStatLine(todayBlock['0-20'], y['0-20'], p['0-20'])}`;
             };
 
             let movementSummary = '';
             if (hasYesterdayFile) {
                 movementSummary = `\n\n**Workflow Movement Summary:**\n- Claims moved from PV to Claims: ${workflowMovement.pvToClaims}\n- Claims moved from Claims to PV: ${workflowMovement.claimsToPv}\n\n` +
-                                  `**Aging Movement Summary (from Yesterday's Critical Claims):**\n- Moved to Backlog (Unworked): ${workflowMovement.criticalToBacklog}\n- Moved to Other Buckets (Worked): ${workflowMovement.criticalWorked}`;
+                                  `**Aging Movement Summary (from Yesterday's Critical Claims):**\n- Moved to Backlog (Unworked): ${workflowMovement.criticalToBacklog}\n- Moved to Other Buckets or Removed (Worked): ${workflowMovement.criticalWorked}`;
             }
 
             const emailBody = `Hello Teams,\n\n${intro}\n\nBelow are the detailed highlights from the report:\n\n` +
-                  `${createStatBlock('pending', todayStats['PEND'], yesterdayStats?.['PEND'])}\n\n` +
-                  `${createStatBlock('On Hold', todayStats['ONHOLD'], yesterdayStats?.['ONHOLD'])}\n\n` +
-                  `${createStatBlock('in Management Review', todayStats['MANAGEMENTREVIEW'], yesterdayStats?.['MANAGEMENTREVIEW'])}\n\n` +
-                  `${createStatBlock('in Payer Review (PR)', todayStats['PR'], yesterdayStats?.['PR'])}\n\n` +
-                  `${createStatBlock('in Denied status', todayStats['DENY'], yesterdayStats?.['DENY'])}${movementSummary}\n\nPlease let me know if you have any questions.`;
+                  `${createStatBlock('pending', 'PEND', todayStats['PEND'], yesterdayStats?.['PEND'], prebatchMovementStats)}\n\n` +
+                  `${createStatBlock('On Hold', 'ONHOLD', todayStats['ONHOLD'], yesterdayStats?.['ONHOLD'], prebatchMovementStats)}\n\n` +
+                  `${createStatBlock('in Management Review', 'MANAGEMENTREVIEW', todayStats['MANAGEMENTREVIEW'], yesterdayStats?.['MANAGEMENTREVIEW'], prebatchMovementStats)}\n\n` +
+                  `${createStatBlock('in Payer Review (PR)', 'PR', todayStats['PR'], yesterdayStats?.['PR'], prebatchMovementStats)}\n\n` +
+                  `${createStatBlock('in Denied status', 'DENY', todayStats['DENY'], yesterdayStats?.['DENY'], prebatchMovementStats)}${movementSummary}\n\nPlease let me know if you have any questions.`;
             
             navigator.clipboard.writeText(emailBody).then(() => {
                 const btn = document.getElementById('copyEmailBtn');
