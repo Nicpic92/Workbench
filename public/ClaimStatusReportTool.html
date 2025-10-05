@@ -10,7 +10,13 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
+    <!-- Core Spreadsheet Library -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+    <!-- NEW: PDF and Charting Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
@@ -19,6 +25,8 @@
         .table-container { max-height: 400px; overflow-y: auto; }
         details > summary { list-style: none; cursor: pointer; }
         details > summary::-webkit-details-marker { display: none; }
+        /* For off-screen chart rendering */
+        .chart-container { position: absolute; left: -9999px; top: -9999px; }
     </style>
 </head>
 <body class="text-gray-800">
@@ -99,7 +107,7 @@
                 <div id="review-container" class="hidden space-y-8 border-t pt-8">
                     <div class="text-center">
                         <h2 class="text-3xl font-extrabold text-gray-900">4. Review & Finalize</h2>
-                        <p class="mt-2 text-lg text-gray-600">Review assignments for all notes and download reports.</p>
+                        <p class="mt-2 text-lg text-gray-600">Review assignments for all notes and download your reports.</p>
                     </div>
 
                     <div id="movement-summary-container" class="hidden bg-blue-50 p-6 rounded-lg">
@@ -111,10 +119,6 @@
                             <p>Critical claims worked/removed: <strong id="critical-worked-count" class="text-green-600">0</strong></p>
                         </div>
                     </div>
-
-                    <!-- ===== NEW DETAILED COHORT BREAKDOWN CONTAINER ===== -->
-                    <div id="detailed-breakdown-container" class="hidden"></div>
-                    <!-- ====================================================== -->
 
                     <div id="prebatch-container" class="hidden bg-gray-50 p-6 rounded-lg">
                         <h3 class="text-xl font-bold text-gray-900 mb-3">Prebatch Claims</h3>
@@ -139,22 +143,22 @@
             </div>
         </div>
     </main>
+
+    <!-- Container for off-screen chart rendering -->
+    <div id="chart-render-container" class="chart-container"></div>
     
     <script>
+        const { jsPDF } = window.jspdf;
+
+        // Global state variables
         let processedClaimsList = [];
         let prebatchClaims = [];
         let fileHeaderRow = [];
         let mainReportHeader = [];
         let yesterdayDataMap = new Map();
         let yesterdayStats = null;
-        let workflowMovement = { 
-            pvToClaims: 0, 
-            claimsToPv: 0,
-            criticalToBacklog: 0,
-            criticalWorked: 0
-        };
+        let workflowMovement = { pvToClaims: 0, claimsToPv: 0, criticalToBacklog: 0, criticalWorked: 0 };
         let prebatchMovementStats = {}; 
-        // ===== NEW: DETAILED COHORT TRACKING OBJECT =====
         let detailedMovementStats = {};
         let hasYesterdayFile = false;
 
@@ -216,7 +220,7 @@
         }
 
         function resetUI() {
-            ['review-container', 'final-downloads-container', 'movement-summary-container', 'detailed-breakdown-container'].forEach(id => document.getElementById(id).classList.add('hidden'));
+            ['review-container', 'final-downloads-container', 'movement-summary-container'].forEach(id => document.getElementById(id).classList.add('hidden'));
             document.getElementById('download-links-container').innerHTML = '';
             document.getElementById('copyEmailBtn').classList.add('hidden');
             document.getElementById('status').textContent = '';
@@ -441,7 +445,7 @@
             XLSX.writeFile(wb, `${clientName} Prebatch Report for ${getFormattedDate()}.xlsx`);
         }
 
-        function generateFinalReports() {
+        async function generateFinalReports() {
             displayStatus('Generating final reports...', 'info', true);
             
             const noteOverrides = new Map();
@@ -455,23 +459,37 @@
             });
 
             if (hasYesterdayFile) {
-                // ===== RUN NEW COHORT ANALYSIS =====
                 runDetailedCohortAnalysis();
-                // ===================================
             }
             
             const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
-            document.getElementById('download-links-container').innerHTML = '';
-            createDownloadLink(buildWorkbook(processedClaimsList, `${clientName} Daily Action Report`), `${clientName} Overall Daily Action Report for ${getFormattedDate()}.xlsx`);
-            createDownloadLink(buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'Claims'), `${clientName} Claims - Action Report`, 'Claims'), `${clientName} Claims - Action Report for ${getFormattedDate()}.xlsx`);
-            createDownloadLink(buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'PV'), `${clientName} PV - Action Report`, 'PV'), `${clientName} PV - Action Report for ${getFormattedDate()}.xlsx`);
+            const downloadsContainer = document.getElementById('download-links-container');
+            downloadsContainer.innerHTML = '';
             
+            // Generate standard Excel reports
+            createDownloadLink(buildWorkbook(processedClaimsList, `${clientName} Daily Action Report`), `${clientName} Overall Daily Action Report for ${getFormattedDate()}.xlsx`, downloadsContainer);
+            createDownloadLink(buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'Claims'), `${clientName} Claims - Action Report`, 'Claims'), `${clientName} Claims - Action Report for ${getFormattedDate()}.xlsx`, downloadsContainer);
+            createDownloadLink(buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'PV'), `${clientName} PV - Action Report`, 'PV'), `${clientName} PV - Action Report for ${getFormattedDate()}.xlsx`, downloadsContainer);
+            
+            // NEW: Add button to generate PDF report
+            if (hasYesterdayFile) {
+                const pdfButton = document.createElement('button');
+                pdfButton.id = 'downloadPdfReportBtn';
+                pdfButton.className = 'bg-red-600 text-white font-bold text-lg rounded-lg py-3 px-6 hover:bg-red-700';
+                pdfButton.textContent = 'Download PDF Analysis';
+                pdfButton.onclick = async () => {
+                    displayStatus('Generating PDF report...', 'info', true);
+                    await generatePdfReport(); // This is the new function
+                    displayStatus('PDF Report generated!', 'success');
+                };
+                downloadsContainer.appendChild(pdfButton);
+            }
+
             document.getElementById('final-downloads-container').classList.remove('hidden');
             document.getElementById('copyEmailBtn').classList.remove('hidden');
-            displayStatus('Reports generated successfully!', 'success');
+            displayStatus('Excel reports generated successfully!', 'success');
         }
-
-        // ===== NEW: DETAILED COHORT ANALYSIS FUNCTION =====
+        
         function runDetailedCohortAnalysis() {
             workflowMovement = { pvToClaims: 0, claimsToPv: 0, criticalToBacklog: 0, criticalWorked: 0 };
             detailedMovementStats = {};
@@ -487,9 +505,8 @@
                 if (age >= 21 && age <= 27) return 'Priority';
                 return 'Queue';
             };
-            const getStateKey = (stateStr) => stateStr.includes('MANAGEMENT') ? 'MANAGEMENTREVIEW' : stateStr;
+            const getStateKey = (stateStr) => (stateStr || '').includes('MANAGEMENT') ? 'MANAGEMENTREVIEW' : (stateStr || '');
             
-            // 1. Group yesterday's claims into cohorts
             const yestCohorts = {};
             for (const [claimNumber, yestData] of yesterdayDataMap.entries()) {
                 const yestState = getStateKey(yestData.state);
@@ -498,7 +515,6 @@
                 if (!yestCohorts[yestState][yestBucket]) yestCohorts[yestState][yestBucket] = [];
                 yestCohorts[yestState][yestBucket].push(claimNumber);
 
-                // Calculate simple PV/Claims movement
                 if(todayClaimsMap.has(claimNumber)){
                     const todayOwner = todayClaimsMap.get(claimNumber).finalOwner;
                     if(yestData.owner === 'PV' && todayOwner === 'Claims') workflowMovement.pvToClaims++;
@@ -506,16 +522,12 @@
                 }
             }
 
-            // 2. Analyze each cohort
             for(const yestState in yestCohorts){
                 detailedMovementStats[yestState] = {};
                 for(const yestBucket in yestCohorts[yestState]){
                     const claimNumbersInCohort = yestCohorts[yestState][yestBucket];
                     const breakdown = {
-                        totalYesterday: claimNumbersInCohort.length,
-                        movedToPrebatch: 0,
-                        resolvedOrRemoved: 0,
-                        movedTo: {}
+                        totalYesterday: claimNumbersInCohort.length, movedToPrebatch: 0, resolvedOrRemoved: 0, movedTo: {}
                     };
                     
                     for(const claimNumber of claimNumbersInCohort){
@@ -535,74 +547,39 @@
                 }
             }
 
-            // 3. Calculate simplified critical movement for top-level summary
             if(detailedMovementStats.PEND && detailedMovementStats.PEND.Critical){
                  const critPend = detailedMovementStats.PEND.Critical;
-                 workflowMovement.criticalWorked = critPend.resolvedOrRemoved + critPend.movedToPrebatch;
+                 workflowMovement.criticalWorked = (critPend.resolvedOrRemoved || 0) + (critPend.movedToPrebatch || 0);
                  workflowMovement.criticalToBacklog = 0;
                  for(const dest in critPend.movedTo){
                      if(dest.includes('Backlog')) workflowMovement.criticalToBacklog += critPend.movedTo[dest];
-                     else workflowMovement.criticalWorked += critPend.movedTo[dest];
+                     else {
+                        // Consider any move out of critical (that isn't to backlog) as "worked"
+                        const [newState, newBucket] = dest.split('_');
+                        if (newBucket !== 'Critical') {
+                            workflowMovement.criticalWorked += critPend.movedTo[dest];
+                        }
+                     }
                  }
             }
              
-            // 4. Display results on screen
             document.getElementById('pv-to-claims-count').textContent = workflowMovement.pvToClaims;
             document.getElementById('claims-to-pv-count').textContent = workflowMovement.claimsToPv;
             document.getElementById('critical-to-backlog-count').textContent = workflowMovement.criticalToBacklog;
             document.getElementById('critical-worked-count').textContent = workflowMovement.criticalWorked;
             document.getElementById('movement-summary-container').classList.remove('hidden');
-
-            displayDetailedMovementOnScreen();
         }
 
-        function displayDetailedMovementOnScreen() {
-            const container = document.getElementById('detailed-breakdown-container');
-            let html = `<details class="bg-gray-50 border rounded-lg overflow-hidden">
-                <summary class="p-4 bg-gray-100 hover:bg-gray-200">
-                    <h3 class="text-xl font-bold text-gray-800">Detailed Cohort Breakdown</h3>
-                </summary>
-                <div class="p-4 space-y-4">`;
-
-            for(const state in detailedMovementStats){
-                for(const bucket in detailedMovementStats[state]){
-                    const data = detailedMovementStats[state][bucket];
-                    if(data.totalYesterday === 0) continue;
-
-                    html += `<div class="p-3 border rounded-md bg-white">
-                        <h4 class="font-bold text-lg text-indigo-700">Yesterday's ${state} - ${bucket} (${data.totalYesterday} claims)</h4>
-                        <ul class="list-disc list-inside mt-2 text-gray-700">
-                           <li><strong class="text-green-600">${data.resolvedOrRemoved}</strong> Resolved or Removed from report</li>
-                           <li><strong class="text-teal-600">${data.movedToPrebatch}</strong> Moved to Prebatch</li>`;
-                    
-                    const sortedDestinations = Object.entries(data.movedTo).sort((a,b) => b[1] - a[1]);
-                    sortedDestinations.forEach(([dest, count]) => {
-                         const [newState, newBucket] = dest.split('_');
-                         html += `<li><strong class="text-red-600">${count}</strong> Moved to: ${newState} - ${newBucket}</li>`;
-                    });
-
-                    html += `</ul></div>`;
-                }
-            }
-
-            html += `</div></details>`;
-            container.innerHTML = html;
-            container.classList.remove('hidden');
-        }
-
-        function createDownloadLink(blob, fileName) {
+        function createDownloadLink(blob, fileName, container) {
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
             link.download = fileName;
             link.textContent = `Download ${fileName.split(' for')[0]}`;
             link.className = 'inline-block bg-indigo-600 text-white font-bold text-lg rounded-lg py-3 px-6 hover:bg-indigo-700';
-            document.getElementById('download-links-container').appendChild(link);
+            container.appendChild(link);
         }
 
         function buildWorkbook(claimsData, reportTitle, ownerFilter = null) {
-            // This function remains large and unchanged from the previous version, so it is elided for brevity.
-            // It correctly builds the Excel files based on the processed data.
-            // ... (Full function code is identical to previous version)
             const masterSheetName = "All Processed Data", highDollarSheetName = "High Dollar";
             const sheetsData = { [masterSheetName]: [fileHeaderRow] };
             if (ownerFilter !== 'PV') sheetsData[highDollarSheetName] = [fileHeaderRow];
@@ -684,9 +661,9 @@
 
         function calculateStats(claimsList) {
             const dayBuckets = { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
-            const stats = { 'PEND': { total: 0, ...dayBuckets }, 'ONHOLD': { total: 0, ...dayBuckets }, 'MANAGEMENTREVIEW': { total: 0, ...dayBuckets }, 'DENY': { total: 0, ...dayBuckets }, 'PR': { total: 0, ...dayBuckets } };
+            const stats = { 'PEND': { total: 0, ...dayBuckets }, 'ONHOLD': { total: 0, ...dayBuckets }, 'MANAGEMENTREVIEW': { total: 0, ...dayBuckets }, 'DENY': { total: 0, ...dayBuckets }, 'PR': { total: 0, ...dayBuckets }, 'APPROVED': { total: 0, ...dayBuckets} };
             for(const claim of claimsList) {
-                let finalClaimState = claim.claimState.includes('MANAGEMENT') ? 'MANAGEMENTREVIEW' : claim.claimState;
+                let finalClaimState = (claim.claimState || '').includes('MANAGEMENT') ? 'MANAGEMENTREVIEW' : (claim.claimState || '');
                 if (stats[finalClaimState]) {
                     stats[finalClaimState].total++;
                     let daysValue = '';
@@ -703,63 +680,29 @@
         }
 
         function copyEmailText() {
-            const todayStats = calculateStats(processedClaimsList);
             const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
-            const intro = hasYesterdayFile ? `Attached is today's Daily Action Report for ${clientName}.` : `Attached is today's Daily Action Report for ${clientName}.`;
-            
-            const formatStatLine = (today, yesterday, prebatch) => {
-                if (hasYesterdayFile) {
-                    const prebatchText = (prebatch > 0) ? ` - ${prebatch} moved to prebatch` : '';
-                    return `${today} (Yest. ${yesterday ?? 0}${prebatchText})`;
-                }
-                return `${today}`;
-            };
-            
-            const createStatBlock = (title, statusKey, todayBlock, yestBlock, prebatchBlock) => {
-                const y = yestBlock || { total: 0, '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
-                const p = prebatchBlock?.[statusKey] || { total: 0, '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
-                return `Number of total claims ${title}: ${formatStatLine(todayBlock.total, y.total, p.total)}\n` +
-                       `CRITICAL (28-29 Days): ${formatStatLine(todayBlock['28-29'], y['28-29'], p['28-29'])}\n` +
-                       `PRIORITY (21-27 Days): ${formatStatLine(todayBlock['21-27'], y['21-27'], p['21-27'])}\n` +
-                       `Backlog (30+ Days): ${formatStatLine(todayBlock['30+'], y['30+'], p['30+'])}\n` +
-                       `Queue (0-20 Days): ${formatStatLine(todayBlock['0-20'], y['0-20'], p['0-20'])}`;
-            };
+            let emailBody = `Hello Teams,\n\nAttached is today's Daily Action Report for ${clientName}.`;
 
-            // ===== NEW: DETAILED BREAKDOWN FOR EMAIL =====
-            let detailedBreakdownText = '';
-            if(hasYesterdayFile && Object.keys(detailedMovementStats).length > 0){
-                detailedBreakdownText += '\n\n**Detailed Cohort Breakdown (What happened to yesterday\'s claims):**\n';
-                 for(const state in detailedMovementStats){
-                    for(const bucket in detailedMovementStats[state]){
-                        const data = detailedMovementStats[state][bucket];
-                        if(data.totalYesterday === 0) continue;
-                        
-                        detailedBreakdownText += `\n- Of the ${data.totalYesterday} claims in **${state} - ${bucket}** yesterday:\n`;
-                        if(data.resolvedOrRemoved > 0) detailedBreakdownText += `  - ${data.resolvedOrRemoved} were resolved or removed from the report.\n`;
-                        if(data.movedToPrebatch > 0) detailedBreakdownText += `  - ${data.movedToPrebatch} were moved to Prebatch.\n`;
-                        
-                        const sortedDestinations = Object.entries(data.movedTo).sort((a,b) => b[1] - a[1]);
-                        sortedDestinations.forEach(([dest, count]) => {
-                             const [newState, newBucket] = dest.split('_');
-                             detailedBreakdownText += `  - ${count} moved to ${newState} - ${newBucket}.\n`;
-                        });
-                    }
-                }
-            }
-
-            let movementSummary = '';
             if (hasYesterdayFile) {
-                movementSummary = `\n\n**Workflow Movement Summary:**\n- Claims moved from PV to Claims: ${workflowMovement.pvToClaims}\n- Claims moved from Claims to PV: ${workflowMovement.claimsToPv}`;
+                const todayStats = calculateStats(processedClaimsList);
+                const formatStatLine = (today, yesterday) => `${today} (Yest. ${yesterday ?? 0})`;
+                const createStatBlock = (title, statusKey) => {
+                    const yestBlock = yesterdayStats?.[statusKey] || { total: 0, '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
+                    const todayBlock = todayStats?.[statusKey] || { total: 0, '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
+                    return `Number of total claims ${title}: ${formatStatLine(todayBlock.total, yestBlock.total)}\n` +
+                       `CRITICAL (28-29 Days): ${formatStatLine(todayBlock['28-29'], yestBlock['28-29'])}\n` +
+                       `PRIORITY (21-27 Days): ${formatStatLine(todayBlock['21-27'], yestBlock['21-27'])}\n` +
+                       `Backlog (30+ Days): ${formatStatLine(todayBlock['30+'], yestBlock['30+'])}\n` +
+                       `Queue (0-20 Days): ${formatStatLine(todayBlock['0-20'], yestBlock['0-20'])}`;
+                };
+                
+                emailBody += `\n\nBelow are the detailed highlights from the report. For a full visual breakdown of claim movement, please see the attached 'Daily Claim-Flow Analysis' PDF.\n\n` +
+                      `${createStatBlock('pending', 'PEND')}\n\n` +
+                      `${createStatBlock('On Hold', 'ONHOLD')}\n\n` +
+                      `${createStatBlock('in Management Review', 'MANAGEMENTREVIEW')}`;
             }
 
-            const emailBody = `Hello Teams,\n\n${intro}\n\nBelow are the detailed highlights from the report:\n\n` +
-                  `${createStatBlock('pending', 'PEND', todayStats['PEND'], yesterdayStats?.['PEND'], prebatchMovementStats)}\n\n` +
-                  `${createStatBlock('On Hold', 'ONHOLD', todayStats['ONHOLD'], yesterdayStats?.['ONHOLD'], prebatchMovementStats)}\n\n` +
-                  `${createStatBlock('in Management Review', 'MANAGEMENTREVIEW', todayStats['MANAGEMENTREVIEW'], yesterdayStats?.['MANAGEMENTREVIEW'], prebatchMovementStats)}\n\n` +
-                  `${createStatBlock('in Payer Review (PR)', 'PR', todayStats['PR'], yesterdayStats?.['PR'], prebatchMovementStats)}\n\n` +
-                  `${createStatBlock('in Denied status', 'DENY', todayStats['DENY'], yesterdayStats?.['DENY'], prebatchMovementStats)}` +
-                  `${detailedBreakdownText}` +
-                  `${movementSummary}\n\nPlease let me know if you have any questions.`;
+            emailBody += `\n\nPlease let me know if you have any questions.`;
             
             navigator.clipboard.writeText(emailBody).then(() => {
                 const btn = document.getElementById('copyEmailBtn');
@@ -782,6 +725,295 @@
             document.getElementById('processBtn').disabled = !!showLoader;
         }
 
+        // ===================================================================
+        // NEW PDF GENERATION LOGIC
+        // ===================================================================
+
+        async function generatePdfReport() {
+            const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+            
+            // Page 1: Title and Summary
+            await createTitlePage(doc);
+            
+            doc.addPage();
+            
+            // Page 2: Charts
+            await createChartsPage(doc);
+
+            doc.addPage();
+
+            // Page 3: Detailed Tables
+            await createDetailedTablesPage(doc);
+
+            // Add footers to all pages
+            const pageCount = doc.internal.getNumberOfPages();
+            for (let i = 1; i <= pageCount; i++) {
+                doc.setPage(i);
+                doc.setFontSize(8);
+                doc.setTextColor(150);
+                doc.text('Spreadsheet Simplicity - Confidential & Proprietary', 14, 290);
+                doc.text(`Page ${i} of ${pageCount}`, 190, 290);
+            }
+
+            const clientName = document.getElementById('client-select').value;
+            doc.save(`${clientName.toUpperCase()}_Daily_Claim-Flow_Analysis_${getFormattedDate()}.pdf`);
+        }
+
+        function generateNarrativeSummary() {
+            const totalPrebatched = Object.values(detailedMovementStats).flatMap(Object.values).reduce((sum, cohort) => sum + cohort.movedToPrebatch, 0);
+            
+            let criticalFocusText = "No critical claims were processed yesterday.";
+            if(detailedMovementStats.PEND && detailedMovementStats.PEND.Critical){
+                const crit = detailedMovementStats.PEND.Critical;
+                const totalCritical = crit.totalYesterday;
+                const criticalPrebatched = crit.movedToPrebatch;
+                const criticalApproved = (Object.entries(crit.movedTo).filter(([k,v]) => k.startsWith('APPROVED')).reduce((s, a) => s + a[1], 0));
+                const totalResolved = criticalPrebatched + criticalApproved;
+                const agedToBacklog = workflowMovement.criticalToBacklog;
+
+                criticalFocusText = `The most notable activity occurred within the PEND - Critical (28-29 days) cohort. Of the ${totalCritical} claims in this high-priority bucket, ${criticalPrebatched} (${(criticalPrebatched/totalCritical*100).toFixed(0)}%) were moved to Prebatch and another ${criticalApproved} (${(criticalApproved/totalCritical*100).toFixed(0)}%) were approved, demonstrating a successful and aggressive effort to prevent aging into the Backlog. However, a small but notable number of these critical claims (${agedToBacklog}) did age into the Backlog, a key area for root cause analysis.`;
+            }
+
+            let queueFocusText = "";
+            if(detailedMovementStats.PEND && detailedMovementStats.PEND.Queue){
+                const queue = detailedMovementStats.PEND.Queue;
+                const queuePrebatched = queue.movedToPrebatch;
+                const queueApproved = (Object.entries(queue.movedTo).filter(([k,v]) => k.startsWith('APPROVED')).reduce((s, a) => s + a[1], 0));
+                const queueOnhold = (Object.entries(queue.movedTo).filter(([k,v]) => k.startsWith('ONHOLD')).reduce((s, a) => s + a[1], 0));
+                
+                queueFocusText = `In the largest inventory pool, PEND - Queue, proactive measures resulted in ${queuePrebatched} claims moving to Prebatch and nearly ${queueApproved + queueOnhold} being either approved or transitioned to an ONHOLD status for further review.`;
+            }
+
+            return [
+                `Yesterday's claim inventory was characterized by significant forward momentum, with a primary focus on clearing aged claims. A total of ${totalPrebatched} claims were successfully advanced to the "Prebatch" stage, indicating they are ready for final processing.`,
+                criticalFocusText,
+                queueFocusText,
+                "Overall, today's data reflects a healthy operational tempo with a strong emphasis on resolving high-priority, time-sensitive claims. Key performance indicators are positive, but continued focus is required on the small percentage of claims aging into the Backlog."
+            ];
+        }
+
+        async function createTitlePage(doc) {
+            const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
+            
+            // Header
+            doc.setFontSize(22);
+            doc.setFont('helvetica', 'bold');
+            doc.text('Daily Claim-Flow Analysis', 14, 20);
+
+            doc.setFontSize(14);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Prepared for: ${clientName}`, 14, 28);
+            doc.text(`Date: ${getFormattedDate()}`, 14, 34);
+
+            // Executive Summary
+            doc.setFontSize(16);
+            doc.setFont('helvetica', 'bold');
+            doc.text('Executive Summary', 14, 50);
+            doc.setLineWidth(0.5);
+            doc.line(14, 52, 60, 52);
+
+            const narrative = generateNarrativeSummary();
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'normal');
+            const summaryText = doc.splitTextToSize(narrative.join('\n\n'), 182);
+            doc.text(summaryText, 14, 60);
+
+            // KPIs
+            const totalYesterday = Object.values(detailedMovementStats).flatMap(Object.values).reduce((s,c) => s + c.totalYesterday, 0);
+            const totalPrebatched = Object.values(detailedMovementStats).flatMap(Object.values).reduce((sum, cohort) => sum + cohort.movedToPrebatch, 0);
+            const critResolved = workflowMovement.criticalWorked;
+            const critTotal = detailedMovementStats.PEND?.Critical?.totalYesterday || 0;
+            const critToBacklogRate = critTotal > 0 ? ((workflowMovement.criticalToBacklog / critTotal) * 100).toFixed(1) + '%' : 'N/A';
+            
+            const kpis = [
+                { label: 'Total Claims Processed Yesterday', value: totalYesterday.toLocaleString() },
+                { label: 'Claims Moved to Prebatch', value: totalPrebatched.toLocaleString() },
+                { label: 'Critical Claims Resolved', value: critResolved.toLocaleString() },
+                { label: 'Critical-to-Backlog Aging Rate', value: critToBacklogRate }
+            ];
+
+            const kpiStartY = 140;
+            doc.setFontSize(16);
+            doc.setFont('helvetica', 'bold');
+            doc.text('Key Performance Indicators', 14, kpiStartY);
+            doc.line(14, kpiStartY + 2, 70, kpiStartY + 2);
+
+            let currentX = 14;
+            const rectWidth = 45;
+            const rectHeight = 30;
+
+            kpis.forEach(kpi => {
+                doc.setFillColor(240, 240, 255);
+                doc.roundedRect(currentX, kpiStartY + 10, rectWidth, rectHeight, 3, 3, 'F');
+                doc.setFontSize(18);
+                doc.setFont('helvetica', 'bold');
+                doc.text(kpi.value, currentX + rectWidth/2, kpiStartY + 25, { align: 'center'});
+                doc.setFontSize(9);
+                doc.setFont('helvetica', 'normal');
+                const label = doc.splitTextToSize(kpi.label, rectWidth - 5);
+                doc.text(label, currentX + rectWidth/2, kpiStartY + 33, { align: 'center'});
+                currentX += rectWidth + 5;
+            });
+        }
+        
+        async function createChartsPage(doc) {
+            doc.setFontSize(18);
+            doc.setFont('helvetica', 'bold');
+            doc.text("Graphical Analysis - The Big Picture", 14, 20);
+
+            // Helper to render a chart and return its image data
+            const renderChartToImage = async (canvasId, config, width, height) => {
+                const container = document.getElementById('chart-render-container');
+                const canvas = document.createElement('canvas');
+                canvas.id = canvasId;
+                canvas.width = width;
+                canvas.height = height;
+                container.appendChild(canvas);
+                
+                return new Promise((resolve) => {
+                    config.options.animation = {
+                        onComplete: () => {
+                            const imgData = canvas.toDataURL('image/png');
+                            container.innerHTML = ''; // Clean up
+                            resolve(imgData);
+                        }
+                    };
+                    new Chart(canvas, config);
+                });
+            };
+
+            // Chart 1: Stacked Bar Chart for Claim Flow
+            const flowData = {};
+            const destinations = new Set(['Prebatch', 'Resolved/Removed']);
+            for(const state in detailedMovementStats) {
+                for(const bucket in detailedMovementStats[state]) {
+                    const cohort = detailedMovementStats[state][bucket];
+                    const cohortName = `${state} - ${bucket}`;
+                    flowData[cohortName] = { total: cohort.totalYesterday, 'Prebatch': cohort.movedToPrebatch, 'Resolved/Removed': cohort.resolvedOrRemoved };
+                    for(const dest in cohort.movedTo) {
+                        destinations.add(dest);
+                        flowData[cohortName][dest] = cohort.movedTo[dest];
+                    }
+                }
+            }
+            const sortedDestinations = [...destinations].sort();
+            const flowChartConfig = {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(flowData),
+                    datasets: sortedDestinations.map((dest, i) => ({
+                        label: dest.replace(/_/g, ' - '),
+                        data: Object.values(flowData).map(d => d[dest] || 0),
+                        backgroundColor: `hsl(${i * 360 / sortedDestinations.length}, 70%, 50%)`
+                    }))
+                },
+                options: { indexAxis: 'y', scales: { x: { stacked: true }, y: { stacked: true } }, responsive: false, plugins: { title: { display: true, text: "Yesterday's Claim Flow by Destination" } } }
+            };
+            const flowChartImg = await renderChartToImage('flowChart', flowChartConfig, 1000, 800);
+            doc.addImage(flowChartImg, 'PNG', 14, 25, 180, 100);
+
+            // Chart 2: Donut Chart for PEND inventory
+            const pendData = { Queue: 0, Priority: 0, Critical: 0, Backlog: 0 };
+            let totalPend = 0;
+            if (detailedMovementStats.PEND) {
+                for (const bucket in detailedMovementStats.PEND) {
+                    pendData[bucket] = detailedMovementStats.PEND[bucket].totalYesterday;
+                    totalPend += pendData[bucket];
+                }
+            }
+            const pendChartConfig = {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(pendData),
+                    datasets: [{ data: Object.values(pendData), backgroundColor: ['#36A2EB', '#FFCE56', '#FF6384', '#4BC0C0'] }]
+                },
+                options: { responsive: false, plugins: { title: { display: true, text: `Composition of Yesterday's PEND Inventory (Total: ${totalPend})` } } }
+            };
+            const pendChartImg = await renderChartToImage('pendChart', pendChartConfig, 400, 400);
+            doc.addImage(pendChartImg, 'PNG', 14, 135, 80, 80);
+
+            // Chart 3: Bar Chart for Critical outcomes
+            const critOutcomes = { 'Moved to Prebatch': 0, 'Approved': 0, 'Remained Critical': 0, 'Aged to Backlog': 0, 'Denied': 0 };
+            if (detailedMovementStats.PEND && detailedMovementStats.PEND.Critical) {
+                const crit = detailedMovementStats.PEND.Critical;
+                critOutcomes['Moved to Prebatch'] = crit.movedToPrebatch;
+                critOutcomes['Aged to Backlog'] = workflowMovement.criticalToBacklog;
+                for(const [dest, count] of Object.entries(crit.movedTo)) {
+                    const [newState, newBucket] = dest.split('_');
+                    if(newState === 'APPROVED') critOutcomes['Approved'] += count;
+                    else if(newState === 'DENY') critOutcomes['Denied'] += count;
+                    else if(newBucket === 'Critical') critOutcomes['Remained Critical'] += count;
+                }
+            }
+            const critChartConfig = {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(critOutcomes),
+                    datasets: [{ label: 'Number of Claims', data: Object.values(critOutcomes), backgroundColor: '#FF6384' }]
+                },
+                options: { responsive: false, plugins: { title: { display: true, text: "Outcomes of Yesterday's Critical Claims" } } }
+            };
+            const critChartImg = await renderChartToImage('critChart', critChartConfig, 600, 400);
+            doc.addImage(critChartImg, 'PNG', 105, 135, 90, 60);
+        }
+
+        async function createDetailedTablesPage(doc) {
+            doc.setFontSize(18);
+            doc.setFont('helvetica', 'bold');
+            doc.text("Detailed Cohort Movement Analysis", 14, 20);
+            
+            let finalY = 25; // Keep track of where the last table ended
+
+            for(const state in detailedMovementStats) {
+                for(const bucket in detailedMovementStats[state]) {
+                    const data = detailedMovementStats[state][bucket];
+                    if (data.totalYesterday === 0) continue;
+
+                    const tableBody = [];
+                    if (data.resolvedOrRemoved > 0) {
+                        tableBody.push(['Resolved/Removed from report', data.resolvedOrRemoved, `${(data.resolvedOrRemoved / data.totalYesterday * 100).toFixed(1)}%`, 'Positive']);
+                    }
+                    if (data.movedToPrebatch > 0) {
+                        tableBody.push(['Moved to Prebatch', data.movedToPrebatch, `${(data.movedToPrebatch / data.totalYesterday * 100).toFixed(1)}%`, 'Positive']);
+                    }
+                    
+                    const sortedDestinations = Object.entries(data.movedTo).sort((a,b) => b[1] - a[1]);
+                    sortedDestinations.forEach(([dest, count]) => {
+                         const [newState, newBucket] = dest.split('_');
+                         let impact = 'Neutral';
+                         if (newBucket === 'Backlog' && bucket !== 'Backlog') impact = 'Negative';
+                         if (newState.startsWith('APPROVED')) impact = 'Positive';
+                         tableBody.push([`Moved to: ${newState} - ${newBucket}`, count, `${(count/data.totalYesterday*100).toFixed(1)}%`, impact]);
+                    });
+
+                    doc.autoTable({
+                        startY: finalY + 5,
+                        head: [['Destination', 'Count', 'Percentage', 'Impact']],
+                        body: tableBody,
+                        // Add a title for each table
+                        didDrawPage: (data) => {
+                            doc.setFontSize(12);
+                            doc.setFont('helvetica', 'bold');
+                            doc.text(`From: ${state} - ${bucket} (Yesterday's Total: ${data.totalYesterday})`, data.settings.margin.left, finalY + 2);
+                        },
+                        // Style the impact column
+                        willDrawCell: (data) => {
+                            if (data.column.dataKey === 'Impact' && data.cell.section === 'body') {
+                                if (data.cell.text[0] === 'Positive') doc.setTextColor(0, 128, 0); // Green
+                                else if (data.cell.text[0] === 'Negative') doc.setTextColor(255, 0, 0); // Red
+                            }
+                        },
+                        didDrawCell: (data) => {
+                            doc.setTextColor(0, 0, 0); // Reset color
+                        },
+                        margin: { top: 30 }
+                    });
+
+                    finalY = doc.autoTable.previous.finalY;
+                }
+            }
+        }
+        
         document.addEventListener('DOMContentLoaded', initializeTool);
     </script>
 </body>
