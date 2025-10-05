@@ -112,6 +112,10 @@
                         </div>
                     </div>
 
+                    <!-- ===== NEW DETAILED COHORT BREAKDOWN CONTAINER ===== -->
+                    <div id="detailed-breakdown-container" class="hidden"></div>
+                    <!-- ====================================================== -->
+
                     <div id="prebatch-container" class="hidden bg-gray-50 p-6 rounded-lg">
                         <h3 class="text-xl font-bold text-gray-900 mb-3">Prebatch Claims</h3>
                         <p id="prebatch-summary" class="text-gray-700 mb-4"></p>
@@ -149,13 +153,12 @@
             criticalToBacklog: 0,
             criticalWorked: 0
         };
-        // ===== NEW: OBJECT TO TRACK MOVEMENT TO PREBATCH =====
         let prebatchMovementStats = {}; 
+        // ===== NEW: DETAILED COHORT TRACKING OBJECT =====
+        let detailedMovementStats = {};
         let hasYesterdayFile = false;
 
-        function getHardcodedAssignment(noteText) {
-            return null;
-        }
+        function getHardcodedAssignment(noteText) { return null; }
         
         function getNoteCategory(noteText) {
             const noteLower = noteText.toLowerCase();
@@ -213,7 +216,7 @@
         }
 
         function resetUI() {
-            ['review-container', 'final-downloads-container', 'movement-summary-container'].forEach(id => document.getElementById(id).classList.add('hidden'));
+            ['review-container', 'final-downloads-container', 'movement-summary-container', 'detailed-breakdown-container'].forEach(id => document.getElementById(id).classList.add('hidden'));
             document.getElementById('download-links-container').innerHTML = '';
             document.getElementById('copyEmailBtn').classList.add('hidden');
             document.getElementById('status').textContent = '';
@@ -240,22 +243,15 @@
 
         function processAndAssignClaims(aoa, config, yesterdayDataMap) {
             const claims = [];
-            const claimNumberIndex = config.claimNumberIndex;
-
             for (const row of aoa.slice(1)) {
                 if (row.every(c => c === null)) continue;
-                
                 const claimState = String(row[config.claimStatusIndex] || '').trim().toUpperCase();
                 if (claimState.includes('PREBATCH')) continue;
-                
                 const noteText = String(row[config.notesIndex] || '');
                 const cleanAge = parseInt(row[config.cleanAgeIndex], 10);
-                
                 let owner = null;
-                const claimNumber = String(row[claimNumberIndex] || '').trim();
-
+                const claimNumber = String(row[config.claimNumberIndex] || '').trim();
                 if (claimNumber && yesterdayDataMap.has(claimNumber)) owner = yesterdayDataMap.get(claimNumber).owner;
-
                 if (!owner) {
                     owner = getHardcodedAssignment(noteText);
                     if (owner === null) {
@@ -263,7 +259,6 @@
                         const claimType = String(row[config.claimTypeIndex] || '').toUpperCase();
                         const isMgmtReview = claimState.includes('MANAGEMENT') && claimState.includes('REVIEW');
                         const isHighCost = isMgmtReview && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500));
-                        
                         if (isHighCost) owner = 'Claims';
                         else if (isMgmtReview || claimState === 'ONHOLD') owner = 'PV';
                         else if (['PEND', 'APPROVED', 'DENY'].includes(claimState)) owner = 'Claims';
@@ -281,40 +276,30 @@
             const claimNumIndex = headers.indexOf('Claim Number');
             const ownerIndex = headers.indexOf('Added (Owner)');
             const stateIndex = headers.indexOf('Claim State');
-            
             const cleanAgeHeaderNames = ['Clean Age', 'Age']; 
             let cleanAgeIndex = -1;
             for (const name of cleanAgeHeaderNames) {
                 const idx = headers.findIndex(h => h.startsWith(name));
                 if (idx !== -1) { cleanAgeIndex = idx; break; }
             }
-
-            if (claimNumIndex === -1 || ownerIndex === -1 || cleanAgeIndex === -1) {
-                throw new Error("Yesterday's report must contain 'Claim Number', 'Added (Owner)', and a 'Clean Age'/'Age' column.");
-            }
-
+            if (claimNumIndex === -1 || ownerIndex === -1 || cleanAgeIndex === -1) throw new Error("Yesterday's report must contain 'Claim Number', 'Added (Owner)', and a 'Clean Age'/'Age' column.");
             const dataMap = new Map();
             const claimsList = [];
-
             for (const row of aoa.slice(1)) {
                 if (row.every(c => c === null)) continue;
                 const claimNumber = String(row[claimNumIndex] || '').trim();
                 const owner = String(row[ownerIndex] || '').trim();
                 const claimState = String(row[stateIndex] || '').trim().toUpperCase();
                 const cleanAge = parseInt(row[cleanAgeIndex], 10);
-                
                 if (claimNumber && owner) dataMap.set(claimNumber, { state: claimState, owner: owner, cleanAge: cleanAge });
                 claimsList.push({ claimState, cleanAge, owner });
             }
-
-            const stats = calculateStats(claimsList);
-            return { stats, dataMap };
+            return { stats: calculateStats(claimsList), dataMap };
         }
 
         async function performInitialProcessing(mainFile, yesterdayFile, config) {
             displayStatus('Processing... Please wait.', 'info', true);
             resetUI();
-            
             [processedClaimsList, prebatchClaims, yesterdayStats] = [[], [], null];
             yesterdayDataMap.clear();
             hasYesterdayFile = !!yesterdayFile;
@@ -339,17 +324,12 @@
                     yesterdayStats = yestData.stats;
                     yesterdayDataMap = yestData.dataMap;
                 }
-                
                 const main_aoa = await readFileAsAOA(mainFile);
                 mainReportHeader = main_aoa[0];
-                
-                // ===== REVISED: PROCESS PREBATCH AND CALCULATE MOVEMENT =====
                 prebatchClaims = main_aoa.slice(1).filter(row => String(row[config.claimStatusIndex] || '').toUpperCase().includes('PREBATCH'));
                 
-                // Initialize prebatch movement stats structure
                 const dayBuckets = { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
                 prebatchMovementStats = { 'PEND': { total: 0, ...dayBuckets }, 'ONHOLD': { total: 0, ...dayBuckets }, 'MANAGEMENTREVIEW': { total: 0, ...dayBuckets }, 'DENY': { total: 0, ...dayBuckets }, 'PR': { total: 0, ...dayBuckets } };
-                
                 if(hasYesterdayFile) {
                     prebatchClaims.forEach(row => {
                         const claimNumber = String(row[config.claimNumberIndex] || '').trim();
@@ -371,61 +351,48 @@
                         }
                     });
                 }
-                // =========================================================
-
                 processedClaimsList = processAndAssignClaims(main_aoa, config, yesterdayDataMap);
-
                 fileHeaderRow = [...mainReportHeader];
                 if (hasYesterdayFile) fileHeaderRow.splice(config.claimStatusIndex, 0, 'Yest. Claim State');
                 let daysInsertIndex = config.cleanAgeIndex + 1;
                 if (hasYesterdayFile && config.cleanAgeIndex >= config.claimStatusIndex) daysInsertIndex++; 
                 fileHeaderRow.splice(daysInsertIndex, 0, 'Days Bucket');
                 fileHeaderRow.push('Added (Owner)', 'Due Date');
-                
+                const getDaysBucketText = (age) => {
+                     if (isNaN(age)) return '';
+                     if (age >= 28 && age <= 29) return '28-29 days';
+                     if (age >= 21 && age <= 27) return '21-27 days';
+                     if (age >= 30) return '30+ days';
+                     return '0-20 days';
+                };
                 processedClaimsList.forEach(claim => {
                     const newRow = [...claim.originalRow];
-                    if (hasYesterdayFile) {
-                        const claimNumber = String(claim.originalRow[config.claimNumberIndex] || '').trim();
-                        newRow.splice(config.claimStatusIndex, 0, yesterdayDataMap.get(claimNumber)?.state || 'NEW');
-                    }
-                    const getDaysBucket = (age) => {
-                         if (isNaN(age)) return '';
-                         if (age >= 28 && age <= 29) return '28-29 days';
-                         if (age >= 21 && age <= 27) return '21-27 days';
-                         if (age >= 30) return '30+ days';
-                         return '0-20 days';
-                    };
-                    newRow.splice(daysInsertIndex, 0, getDaysBucket(claim.cleanAge));
+                    if (hasYesterdayFile) newRow.splice(config.claimStatusIndex, 0, yesterdayDataMap.get(claim.claimNumber)?.state || 'NEW');
+                    newRow.splice(daysInsertIndex, 0, getDaysBucketText(claim.cleanAge));
                     newRow.push(claim.owner, (claim.noteText.match(/due\s*by?[:\s]*(\d{1,2}[\/-]\d{1,2}(?:[\/-]\d{2,4})?)/i) || [])[1] || '');
                     claim.processedRow = newRow;
                     claim.defaultOwner = claim.owner;
                     claim.finalOwner = claim.owner;
                 });
-                
                 displayStatus('Processing Complete. Please review and finalize.', 'success');
                 displayReviewStep();
-
             } catch (error) {
                 displayStatus(`Error: ${error.message}`, 'error');
             }
         }
         
         function displayReviewStep() {
-            const prebatchContainer = document.getElementById('prebatch-container');
             if (prebatchClaims.length > 0) {
                 document.getElementById('prebatch-summary').textContent = `Found ${prebatchClaims.length} claims in Prebatch status.`;
                 document.getElementById('downloadPrebatchBtn').onclick = downloadPrebatchReport;
-                prebatchContainer.classList.remove('hidden');
+                document.getElementById('prebatch-container').classList.remove('hidden');
             } else {
-                prebatchContainer.classList.add('hidden');
+                document.getElementById('prebatch-container').classList.add('hidden');
             }
-
             const assignmentContainer = document.getElementById('assignment-editor-container');
             assignmentContainer.innerHTML = `<h3 class="text-xl font-bold text-gray-900 mb-3">Assignment Editor</h3><p id="assignment-editor-description" class="text-gray-700 mb-4"></p>`;
-
             const categorizedNotes = {};
             let uniqueNoteCount = 0;
-
             processedClaimsList.forEach(claim => {
                 const note = claim.noteText || "No Note";
                 if (note !== "No Note") {
@@ -438,13 +405,11 @@
                     categorizedNotes[category][note].count++;
                 }
             });
-
             if (uniqueNoteCount === 0) {
                 document.getElementById('assignment-editor-description').textContent = "No notes were found in the report to assign.";
                 assignmentContainer.innerHTML += `<div class="text-center py-4 text-gray-500">No notes found.</div>`;
             } else {
                 document.getElementById('assignment-editor-description').textContent = `Found ${uniqueNoteCount} unique notes. The 'Default Assignment' now reflects yesterday's final assignment. Please review.`;
-                
                 Object.keys(categorizedNotes).sort().forEach(category => {
                     const notes = categorizedNotes[category];
                     const categoryId = category.replace(/\s|&/g, '-');
@@ -456,7 +421,6 @@
                     const categoryHtml = `<details class="bg-gray-50 border rounded-lg overflow-hidden" open><summary class="p-4 bg-gray-100 hover:bg-gray-200 flex justify-between items-center"><h4 class="text-lg font-bold text-gray-800">${category} (${Object.keys(notes).length} notes)</h4><div class="flex items-center space-x-2"><label class="text-sm font-medium">Assign All to:</label><select class="p-2 border rounded-md category-assign" data-category-target="${categoryId}"><option value="">-- Bulk Assign --</option><option value="Claims">Claims</option><option value="PV">PV</option></select></div></summary><div class="p-2"><div class="table-container border rounded-lg"><table class="min-w-full divide-y divide-gray-200 table-fixed"><thead class="bg-white sticky top-0"><tr><th scope="col" class="w-1/2 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Note Text</th><th scope="col" class="w-1/12 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Count</th><th scope="col" class="w-1/4 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Default Assignment</th><th scope="col" class="w-1/4 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">New Assignment</th></tr></thead><tbody class="divide-y divide-gray-200">${tableRowsHtml}</tbody></table></div></div></details>`;
                     assignmentContainer.innerHTML += categoryHtml;
                 });
-
                 document.querySelectorAll('.category-assign').forEach(select => {
                     select.addEventListener('change', (e) => {
                         const targetCategory = e.target.dataset.categoryTarget;
@@ -480,10 +444,8 @@
         function generateFinalReports() {
             displayStatus('Generating final reports...', 'info', true);
             
-            workflowMovement = { pvToClaims: 0, claimsToPv: 0, criticalToBacklog: 0, criticalWorked: 0 };
             const noteOverrides = new Map();
             document.querySelectorAll('.assignment-override').forEach(select => { if (select.value) noteOverrides.set(select.dataset.noteText, select.value); });
-            
             processedClaimsList.forEach(claim => {
                 const override = noteOverrides.get(claim.noteText || "No Note");
                 if (override) {
@@ -492,47 +454,14 @@
                 }
             });
 
-            // ===== REVISED & ACCURATE MOVEMENT CALCULATION =====
             if (hasYesterdayFile) {
-                const todayClaimsMap = new Map(processedClaimsList.map(c => [c.claimNumber, c]));
-
-                for (const [claimNumber, yestData] of yesterdayDataMap.entries()) {
-                    // --- Calculate PV/Claims Movement ---
-                    if (todayClaimsMap.has(claimNumber)) {
-                        const todayOwner = todayClaimsMap.get(claimNumber).finalOwner;
-                        const yestOwner = yestData.owner;
-                        if (yestOwner === 'PV' && todayOwner === 'Claims') workflowMovement.pvToClaims++;
-                        if (yestOwner === 'Claims' && todayOwner === 'PV') workflowMovement.claimsToPv++;
-                    }
-
-                    // --- Calculate Critical -> Backlog/Worked Movement ---
-                    const yestAge = yestData.cleanAge;
-                    if (!isNaN(yestAge) && yestAge >= 28 && yestAge <= 29) { // Was critical yesterday
-                        if (todayClaimsMap.has(claimNumber)) {
-                            const todayAge = todayClaimsMap.get(claimNumber).cleanAge;
-                            if (!isNaN(todayAge) && todayAge >= 30) {
-                                workflowMovement.criticalToBacklog++;
-                            } else {
-                                workflowMovement.criticalWorked++; // Moved to another bucket (e.g., 0-20)
-                            }
-                        } else {
-                            workflowMovement.criticalWorked++; // Disappeared from report (paid, etc.)
-                        }
-                    }
-                }
-            }
-            
-            if (hasYesterdayFile) {
-                document.getElementById('pv-to-claims-count').textContent = workflowMovement.pvToClaims;
-                document.getElementById('claims-to-pv-count').textContent = workflowMovement.claimsToPv;
-                document.getElementById('critical-to-backlog-count').textContent = workflowMovement.criticalToBacklog;
-                document.getElementById('critical-worked-count').textContent = workflowMovement.criticalWorked;
-                document.getElementById('movement-summary-container').classList.remove('hidden');
+                // ===== RUN NEW COHORT ANALYSIS =====
+                runDetailedCohortAnalysis();
+                // ===================================
             }
             
             const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
             document.getElementById('download-links-container').innerHTML = '';
-
             createDownloadLink(buildWorkbook(processedClaimsList, `${clientName} Daily Action Report`), `${clientName} Overall Daily Action Report for ${getFormattedDate()}.xlsx`);
             createDownloadLink(buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'Claims'), `${clientName} Claims - Action Report`, 'Claims'), `${clientName} Claims - Action Report for ${getFormattedDate()}.xlsx`);
             createDownloadLink(buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'PV'), `${clientName} PV - Action Report`, 'PV'), `${clientName} PV - Action Report for ${getFormattedDate()}.xlsx`);
@@ -540,6 +469,125 @@
             document.getElementById('final-downloads-container').classList.remove('hidden');
             document.getElementById('copyEmailBtn').classList.remove('hidden');
             displayStatus('Reports generated successfully!', 'success');
+        }
+
+        // ===== NEW: DETAILED COHORT ANALYSIS FUNCTION =====
+        function runDetailedCohortAnalysis() {
+            workflowMovement = { pvToClaims: 0, claimsToPv: 0, criticalToBacklog: 0, criticalWorked: 0 };
+            detailedMovementStats = {};
+
+            const todayClaimsMap = new Map(processedClaimsList.map(c => [c.claimNumber, c]));
+            const config = gatherConfig();
+            const prebatchClaimNumbers = new Set(prebatchClaims.map(row => String(row[config.claimNumberIndex] || '').trim()));
+
+            const getBucketFromAge = (age) => {
+                if (isNaN(age)) return 'UNKNOWN';
+                if (age >= 28 && age <= 29) return 'Critical';
+                if (age >= 30) return 'Backlog';
+                if (age >= 21 && age <= 27) return 'Priority';
+                return 'Queue';
+            };
+            const getStateKey = (stateStr) => stateStr.includes('MANAGEMENT') ? 'MANAGEMENTREVIEW' : stateStr;
+            
+            // 1. Group yesterday's claims into cohorts
+            const yestCohorts = {};
+            for (const [claimNumber, yestData] of yesterdayDataMap.entries()) {
+                const yestState = getStateKey(yestData.state);
+                const yestBucket = getBucketFromAge(yestData.cleanAge);
+                if (!yestCohorts[yestState]) yestCohorts[yestState] = {};
+                if (!yestCohorts[yestState][yestBucket]) yestCohorts[yestState][yestBucket] = [];
+                yestCohorts[yestState][yestBucket].push(claimNumber);
+
+                // Calculate simple PV/Claims movement
+                if(todayClaimsMap.has(claimNumber)){
+                    const todayOwner = todayClaimsMap.get(claimNumber).finalOwner;
+                    if(yestData.owner === 'PV' && todayOwner === 'Claims') workflowMovement.pvToClaims++;
+                    if(yestData.owner === 'Claims' && todayOwner === 'PV') workflowMovement.claimsToPv++;
+                }
+            }
+
+            // 2. Analyze each cohort
+            for(const yestState in yestCohorts){
+                detailedMovementStats[yestState] = {};
+                for(const yestBucket in yestCohorts[yestState]){
+                    const claimNumbersInCohort = yestCohorts[yestState][yestBucket];
+                    const breakdown = {
+                        totalYesterday: claimNumbersInCohort.length,
+                        movedToPrebatch: 0,
+                        resolvedOrRemoved: 0,
+                        movedTo: {}
+                    };
+                    
+                    for(const claimNumber of claimNumbersInCohort){
+                        if(prebatchClaimNumbers.has(claimNumber)){
+                            breakdown.movedToPrebatch++;
+                        } else if (todayClaimsMap.has(claimNumber)){
+                            const todayClaim = todayClaimsMap.get(claimNumber);
+                            const todayState = getStateKey(todayClaim.claimState);
+                            const todayBucket = getBucketFromAge(todayClaim.cleanAge);
+                            const destinationKey = `${todayState}_${todayBucket}`;
+                            breakdown.movedTo[destinationKey] = (breakdown.movedTo[destinationKey] || 0) + 1;
+                        } else {
+                            breakdown.resolvedOrRemoved++;
+                        }
+                    }
+                    detailedMovementStats[yestState][yestBucket] = breakdown;
+                }
+            }
+
+            // 3. Calculate simplified critical movement for top-level summary
+            if(detailedMovementStats.PEND && detailedMovementStats.PEND.Critical){
+                 const critPend = detailedMovementStats.PEND.Critical;
+                 workflowMovement.criticalWorked = critPend.resolvedOrRemoved + critPend.movedToPrebatch;
+                 workflowMovement.criticalToBacklog = 0;
+                 for(const dest in critPend.movedTo){
+                     if(dest.includes('Backlog')) workflowMovement.criticalToBacklog += critPend.movedTo[dest];
+                     else workflowMovement.criticalWorked += critPend.movedTo[dest];
+                 }
+            }
+             
+            // 4. Display results on screen
+            document.getElementById('pv-to-claims-count').textContent = workflowMovement.pvToClaims;
+            document.getElementById('claims-to-pv-count').textContent = workflowMovement.claimsToPv;
+            document.getElementById('critical-to-backlog-count').textContent = workflowMovement.criticalToBacklog;
+            document.getElementById('critical-worked-count').textContent = workflowMovement.criticalWorked;
+            document.getElementById('movement-summary-container').classList.remove('hidden');
+
+            displayDetailedMovementOnScreen();
+        }
+
+        function displayDetailedMovementOnScreen() {
+            const container = document.getElementById('detailed-breakdown-container');
+            let html = `<details class="bg-gray-50 border rounded-lg overflow-hidden">
+                <summary class="p-4 bg-gray-100 hover:bg-gray-200">
+                    <h3 class="text-xl font-bold text-gray-800">Detailed Cohort Breakdown</h3>
+                </summary>
+                <div class="p-4 space-y-4">`;
+
+            for(const state in detailedMovementStats){
+                for(const bucket in detailedMovementStats[state]){
+                    const data = detailedMovementStats[state][bucket];
+                    if(data.totalYesterday === 0) continue;
+
+                    html += `<div class="p-3 border rounded-md bg-white">
+                        <h4 class="font-bold text-lg text-indigo-700">Yesterday's ${state} - ${bucket} (${data.totalYesterday} claims)</h4>
+                        <ul class="list-disc list-inside mt-2 text-gray-700">
+                           <li><strong class="text-green-600">${data.resolvedOrRemoved}</strong> Resolved or Removed from report</li>
+                           <li><strong class="text-teal-600">${data.movedToPrebatch}</strong> Moved to Prebatch</li>`;
+                    
+                    const sortedDestinations = Object.entries(data.movedTo).sort((a,b) => b[1] - a[1]);
+                    sortedDestinations.forEach(([dest, count]) => {
+                         const [newState, newBucket] = dest.split('_');
+                         html += `<li><strong class="text-red-600">${count}</strong> Moved to: ${newState} - ${newBucket}</li>`;
+                    });
+
+                    html += `</ul></div>`;
+                }
+            }
+
+            html += `</div></details>`;
+            container.innerHTML = html;
+            container.classList.remove('hidden');
         }
 
         function createDownloadLink(blob, fileName) {
@@ -552,12 +600,14 @@
         }
 
         function buildWorkbook(claimsData, reportTitle, ownerFilter = null) {
-             const masterSheetName = "All Processed Data", highDollarSheetName = "High Dollar";
+            // This function remains large and unchanged from the previous version, so it is elided for brevity.
+            // It correctly builds the Excel files based on the processed data.
+            // ... (Full function code is identical to previous version)
+            const masterSheetName = "All Processed Data", highDollarSheetName = "High Dollar";
             const sheetsData = { [masterSheetName]: [fileHeaderRow] };
             if (ownerFilter !== 'PV') sheetsData[highDollarSheetName] = [fileHeaderRow];
             const tabMetadata = {};
             const overallSummary = { par: { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0, total: 0 }, nonpar: { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0, total: 0 } };
-
             for (const claim of claimsData) {
                 const networkType = String(claim.originalRow[claim.networkStatusIndex] || '').toUpperCase().includes('OUT') ? 'nonpar' : 'par';
                 overallSummary[networkType].total++;
@@ -614,10 +664,7 @@
                     filteredTabs.forEach(key => {
                         const totalCount = sheetsData[key].length - 1;
                         let pvCount = 0, claimsCount = 0;
-                        for (const row of sheetsData[key].slice(1)) {
-                            if (row[fileHeaderRow.length - 2] === 'PV') pvCount++;
-                            else if (row[fileHeaderRow.length - 2] === 'Claims') claimsCount++;
-                        }
+                        for (const row of sheetsData[key].slice(1)) { if (row[fileHeaderRow.length - 2] === 'PV') pvCount++; else if (row[fileHeaderRow.length - 2] === 'Claims') claimsCount++; }
                         coverPageData.push([key, totalCount, `PV (${pvCount}) Claims (${claimsCount})`]);
                     });
                     coverPageData.push([]);
@@ -660,7 +707,6 @@
             const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
             const intro = hasYesterdayFile ? `Attached is today's Daily Action Report for ${clientName}.` : `Attached is today's Daily Action Report for ${clientName}.`;
             
-            // ===== NEW: ADVANCED STAT FORMATTING FUNCTION =====
             const formatStatLine = (today, yesterday, prebatch) => {
                 if (hasYesterdayFile) {
                     const prebatchText = (prebatch > 0) ? ` - ${prebatch} moved to prebatch` : '';
@@ -679,10 +725,31 @@
                        `Queue (0-20 Days): ${formatStatLine(todayBlock['0-20'], y['0-20'], p['0-20'])}`;
             };
 
+            // ===== NEW: DETAILED BREAKDOWN FOR EMAIL =====
+            let detailedBreakdownText = '';
+            if(hasYesterdayFile && Object.keys(detailedMovementStats).length > 0){
+                detailedBreakdownText += '\n\n**Detailed Cohort Breakdown (What happened to yesterday\'s claims):**\n';
+                 for(const state in detailedMovementStats){
+                    for(const bucket in detailedMovementStats[state]){
+                        const data = detailedMovementStats[state][bucket];
+                        if(data.totalYesterday === 0) continue;
+                        
+                        detailedBreakdownText += `\n- Of the ${data.totalYesterday} claims in **${state} - ${bucket}** yesterday:\n`;
+                        if(data.resolvedOrRemoved > 0) detailedBreakdownText += `  - ${data.resolvedOrRemoved} were resolved or removed from the report.\n`;
+                        if(data.movedToPrebatch > 0) detailedBreakdownText += `  - ${data.movedToPrebatch} were moved to Prebatch.\n`;
+                        
+                        const sortedDestinations = Object.entries(data.movedTo).sort((a,b) => b[1] - a[1]);
+                        sortedDestinations.forEach(([dest, count]) => {
+                             const [newState, newBucket] = dest.split('_');
+                             detailedBreakdownText += `  - ${count} moved to ${newState} - ${newBucket}.\n`;
+                        });
+                    }
+                }
+            }
+
             let movementSummary = '';
             if (hasYesterdayFile) {
-                movementSummary = `\n\n**Workflow Movement Summary:**\n- Claims moved from PV to Claims: ${workflowMovement.pvToClaims}\n- Claims moved from Claims to PV: ${workflowMovement.claimsToPv}\n\n` +
-                                  `**Aging Movement Summary (from Yesterday's Critical Claims):**\n- Moved to Backlog (Unworked): ${workflowMovement.criticalToBacklog}\n- Moved to Other Buckets or Removed (Worked): ${workflowMovement.criticalWorked}`;
+                movementSummary = `\n\n**Workflow Movement Summary:**\n- Claims moved from PV to Claims: ${workflowMovement.pvToClaims}\n- Claims moved from Claims to PV: ${workflowMovement.claimsToPv}`;
             }
 
             const emailBody = `Hello Teams,\n\n${intro}\n\nBelow are the detailed highlights from the report:\n\n` +
@@ -690,7 +757,9 @@
                   `${createStatBlock('On Hold', 'ONHOLD', todayStats['ONHOLD'], yesterdayStats?.['ONHOLD'], prebatchMovementStats)}\n\n` +
                   `${createStatBlock('in Management Review', 'MANAGEMENTREVIEW', todayStats['MANAGEMENTREVIEW'], yesterdayStats?.['MANAGEMENTREVIEW'], prebatchMovementStats)}\n\n` +
                   `${createStatBlock('in Payer Review (PR)', 'PR', todayStats['PR'], yesterdayStats?.['PR'], prebatchMovementStats)}\n\n` +
-                  `${createStatBlock('in Denied status', 'DENY', todayStats['DENY'], yesterdayStats?.['DENY'], prebatchMovementStats)}${movementSummary}\n\nPlease let me know if you have any questions.`;
+                  `${createStatBlock('in Denied status', 'DENY', todayStats['DENY'], yesterdayStats?.['DENY'], prebatchMovementStats)}` +
+                  `${detailedBreakdownText}` +
+                  `${movementSummary}\n\nPlease let me know if you have any questions.`;
             
             navigator.clipboard.writeText(emailBody).then(() => {
                 const btn = document.getElementById('copyEmailBtn');
