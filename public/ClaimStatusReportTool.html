@@ -75,7 +75,8 @@
                         <div><label for="claimTypeCol">Claim Type:</label><input type="text" id="claimTypeCol" class="mt-1 w-full p-2 border rounded-md uppercase"></div>
                         <div><label for="totalChargesCol">Total Charges:</label><input type="text" id="totalChargesCol" class="mt-1 w-full p-2 border rounded-md uppercase"></div>
                         <div><label for="notesCol">W9/Notes Column:</label><input type="text" id="notesCol" class="mt-1 w-full p-2 border rounded-md uppercase"></div>
-                        <div class="md:col-span-3"><label for="dateCols">Date Columns:</label><input type="text" id="dateCols" class="mt-1 w-full p-2 border rounded-md uppercase"></div>
+                        <div><label for="activityUserCol">Activity User:</label><input type="text" id="activityUserCol" class="mt-1 w-full p-2 border rounded-md uppercase"></div>
+                        <div class="md:col-span-2"><label for="dateCols">Date Columns:</label><input type="text" id="dateCols" class="mt-1 w-full p-2 border rounded-md uppercase"></div>
                     </div>
                 </div>
                 
@@ -185,10 +186,10 @@
             const processBtn = document.getElementById('processBtn');
 
             const clientPresets = {
-                solis: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'V', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
-                liberty: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'V', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
-                secur: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'U', dsnpCol: 'Y', claimTypeCol: 'D', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
-                csh: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'U', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' }
+                solis: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'V', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C', activityUserCol: 'AC' },
+                liberty: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'V', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C', activityUserCol: 'AC' },
+                secur: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'U', dsnpCol: 'Y', claimTypeCol: 'D', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C', activityUserCol: 'AC' },
+                csh: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'U', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C', activityUserCol: 'AC' }
             };
 
             clientSelect.addEventListener('change', () => {
@@ -235,7 +236,7 @@
                     return col - 1;
                 };
                 const config = {};
-                const ids = ['cleanAge', 'claimStatus', 'claimNumber', 'payer', 'networkStatus', 'dsnp', 'claimType', 'totalCharges', 'notes'];
+                const ids = ['cleanAge', 'claimStatus', 'claimNumber', 'payer', 'networkStatus', 'dsnp', 'claimType', 'totalCharges', 'notes', 'activityUser'];
                 ids.forEach(id => config[`${id}Index`] = colLetterToIndex(document.getElementById(`${id}Col`).value));
                 if (Object.values(config).some(val => val === -1)) throw new Error("Invalid column letter entered.");
                 return config;
@@ -255,6 +256,7 @@
                 const cleanAge = parseInt(row[config.cleanAgeIndex], 10);
                 let owner = null;
                 const claimNumber = String(row[config.claimNumberIndex] || '').trim();
+                const user = String(row[config.activityUserIndex] || 'Unassigned').trim();
                 if (claimNumber && yesterdayDataMap.has(claimNumber)) owner = yesterdayDataMap.get(claimNumber).owner;
                 if (!owner) {
                     owner = getHardcodedAssignment(noteText);
@@ -270,7 +272,7 @@
                         else owner = 'PV';
                     }
                 }
-                claims.push({ ...config, originalRow: row, noteText, cleanAge, claimState, owner, claimNumber });
+                claims.push({ ...config, originalRow: row, noteText, cleanAge, claimState, owner, claimNumber, user });
             }
             return claims;
         }
@@ -350,7 +352,7 @@
                                     else if (yestAge >= 30) daysValue = '30+';
                                     else daysValue = '0-20';
                                     if (prebatchMovementStats[yestState][daysValue] !== undefined) prebatchMovementStats[yestState][daysValue]++;
-                                }
+                                 }
                             }
                         }
                     });
@@ -479,7 +481,7 @@
                 pdfButton.textContent = 'Download PDF Analysis';
                 pdfButton.onclick = async () => {
                     displayStatus('Generating PDF report...', 'info', true);
-                    await generatePdfReport(); // This is the new function
+                    await generatePdfReport();
                     displayStatus('PDF Report generated!', 'success');
                 };
                 downloadsContainer.appendChild(pdfButton);
@@ -554,7 +556,6 @@
                  for(const dest in critPend.movedTo){
                      if(dest.includes('Backlog')) workflowMovement.criticalToBacklog += critPend.movedTo[dest];
                      else {
-                        // Consider any move out of critical (that isn't to backlog) as "worked"
                         const [newState, newBucket] = dest.split('_');
                         if (newBucket !== 'Critical') {
                             workflowMovement.criticalWorked += critPend.movedTo[dest];
@@ -647,7 +648,7 @@
                     coverPageData.push([]);
                 }
             };
-            addSectionToCover("Priority 1: CRITICAL (28-29 days)", 1); addSectionToCover("Priority 2: PRIORITY (21-27 days)", 2); addSectionToCover("Priority 3: Backlog (30+ days)", 3); addSectionToCover("Priority 4: Standard Queue (0-20 days)", 4); addSectionToCover("W9 and Other Tasks", 5);
+            addSectionToCover("Priority 1: CRITICAL (28-29 days)", 1); addSectionToCover("Priority 2: PRIORITY (21-27 days)", 2); addSectionToCover("Priority 3: Backlog (30+ days)", 3); addSectionToCover("W9 and Other Tasks", 5);
             const wb = XLSX.utils.book_new();
             const coverWS = XLSX.utils.aoa_to_sheet(coverPageData);
             coverWS['!cols'] = [{ wch: 35 }, { wch: 20 }, { wch: 22 }];
@@ -726,24 +727,19 @@
         }
 
         // ===================================================================
-        // NEW PDF GENERATION LOGIC
+        // NEW AND UPDATED PDF GENERATION LOGIC
         // ===================================================================
 
         async function generatePdfReport() {
             const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
             
-            // Page 1: Title and Summary
             await createTitlePage(doc);
-            
             doc.addPage();
-            
-            // Page 2: Charts
             await createChartsPage(doc);
-
             doc.addPage();
-
-            // Page 3: Detailed Tables
             await createDetailedTablesPage(doc);
+            doc.addPage();
+            await createProductivityPage(doc);
 
             // Add footers to all pages
             const pageCount = doc.internal.getNumberOfPages();
@@ -759,39 +755,6 @@
             doc.save(`${clientName.toUpperCase()}_Daily_Claim-Flow_Analysis_${getFormattedDate()}.pdf`);
         }
 
-        function generateNarrativeSummary() {
-            const totalPrebatched = Object.values(detailedMovementStats).flatMap(Object.values).reduce((sum, cohort) => sum + cohort.movedToPrebatch, 0);
-            
-            let criticalFocusText = "No critical claims were processed yesterday.";
-            if(detailedMovementStats.PEND && detailedMovementStats.PEND.Critical){
-                const crit = detailedMovementStats.PEND.Critical;
-                const totalCritical = crit.totalYesterday;
-                const criticalPrebatched = crit.movedToPrebatch;
-                const criticalApproved = (Object.entries(crit.movedTo).filter(([k,v]) => k.startsWith('APPROVED')).reduce((s, a) => s + a[1], 0));
-                const totalResolved = criticalPrebatched + criticalApproved;
-                const agedToBacklog = workflowMovement.criticalToBacklog;
-
-                criticalFocusText = `The most notable activity occurred within the PEND - Critical (28-29 days) cohort. Of the ${totalCritical} claims in this high-priority bucket, ${criticalPrebatched} (${(criticalPrebatched/totalCritical*100).toFixed(0)}%) were moved to Prebatch and another ${criticalApproved} (${(criticalApproved/totalCritical*100).toFixed(0)}%) were approved, demonstrating a successful and aggressive effort to prevent aging into the Backlog. However, a small but notable number of these critical claims (${agedToBacklog}) did age into the Backlog, a key area for root cause analysis.`;
-            }
-
-            let queueFocusText = "";
-            if(detailedMovementStats.PEND && detailedMovementStats.PEND.Queue){
-                const queue = detailedMovementStats.PEND.Queue;
-                const queuePrebatched = queue.movedToPrebatch;
-                const queueApproved = (Object.entries(queue.movedTo).filter(([k,v]) => k.startsWith('APPROVED')).reduce((s, a) => s + a[1], 0));
-                const queueOnhold = (Object.entries(queue.movedTo).filter(([k,v]) => k.startsWith('ONHOLD')).reduce((s, a) => s + a[1], 0));
-                
-                queueFocusText = `In the largest inventory pool, PEND - Queue, proactive measures resulted in ${queuePrebatched} claims moving to Prebatch and nearly ${queueApproved + queueOnhold} being either approved or transitioned to an ONHOLD status for further review.`;
-            }
-
-            return [
-                `Yesterday's claim inventory was characterized by significant forward momentum, with a primary focus on clearing aged claims. A total of ${totalPrebatched} claims were successfully advanced to the "Prebatch" stage, indicating they are ready for final processing.`,
-                criticalFocusText,
-                queueFocusText,
-                "Overall, today's data reflects a healthy operational tempo with a strong emphasis on resolving high-priority, time-sensitive claims. Key performance indicators are positive, but continued focus is required on the small percentage of claims aging into the Backlog."
-            ];
-        }
-
         async function createTitlePage(doc) {
             const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
             
@@ -805,17 +768,17 @@
             doc.text(`Prepared for: ${clientName}`, 14, 28);
             doc.text(`Date: ${getFormattedDate()}`, 14, 34);
 
-            // Executive Summary
+            // UPDATED: Brief diplomatic statement instead of Executive Summary
             doc.setFontSize(16);
             doc.setFont('helvetica', 'bold');
-            doc.text('Executive Summary', 14, 50);
+            doc.text('Introduction', 14, 50);
             doc.setLineWidth(0.5);
-            doc.line(14, 52, 60, 52);
+            doc.line(14, 52, 48, 52);
 
-            const narrative = generateNarrativeSummary();
+            const introText = "This report provides a daily analysis of claim inventory movement and highlights key operational metrics. The following pages offer a visual and statistical breakdown of claim cohorts to support workflow management and strategic oversight.";
             doc.setFontSize(11);
             doc.setFont('helvetica', 'normal');
-            const summaryText = doc.splitTextToSize(narrative.join('\n\n'), 182);
+            const summaryText = doc.splitTextToSize(introText, 182);
             doc.text(summaryText, 14, 60);
 
             // KPIs
@@ -832,7 +795,7 @@
                 { label: 'Critical-to-Backlog Aging Rate', value: critToBacklogRate }
             ];
 
-            const kpiStartY = 140;
+            const kpiStartY = 120; // Adjusted position
             doc.setFontSize(16);
             doc.setFont('helvetica', 'bold');
             doc.text('Key Performance Indicators', 14, kpiStartY);
@@ -861,7 +824,7 @@
             doc.setFont('helvetica', 'bold');
             doc.text("Graphical Analysis - The Big Picture", 14, 20);
 
-            // Helper to render a chart and return its image data
+            // UPDATED: Helper to render a chart with data labels
             const renderChartToImage = async (canvasId, config, width, height) => {
                 const container = document.getElementById('chart-render-container');
                 const canvas = document.createElement('canvas');
@@ -872,7 +835,49 @@
                 
                 return new Promise((resolve) => {
                     config.options.animation = {
-                        onComplete: () => {
+                        onComplete: (animation) => {
+                            const chartInstance = animation.chart;
+                            const ctx = chartInstance.ctx;
+                            ctx.font = 'bold 12px Inter';
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillStyle = '#fff';
+
+                            chartInstance.data.datasets.forEach((dataset, i) => {
+                                const meta = chartInstance.getDatasetMeta(i);
+                                meta.data.forEach((element, index) => {
+                                    const data = dataset.data[index];
+                                    if (data > 0) {
+                                        let position;
+                                        if (config.type === 'doughnut') {
+                                            position = element.getCenterPoint();
+                                            // Make text black for doughnut chart for better visibility
+                                            ctx.fillStyle = '#000';
+                                        } else if (config.options.indexAxis === 'y') { // Horizontal bar
+                                            position = {
+                                                x: element.x - 20,
+                                                y: element.y
+                                            };
+                                            if (element.width < 30) { // If bar is too small, put label outside
+                                                ctx.fillStyle = '#000';
+                                                position.x = element.x + 20;
+                                            }
+                                        } else { // Vertical bar
+                                            position = {
+                                                x: element.x,
+                                                y: element.y + 15
+                                            };
+                                            if (element.height < 20) { // If bar is too small
+                                               ctx.fillStyle = '#000';
+                                               position.y = element.y - 10;
+                                            }
+                                        }
+                                        ctx.fillText(data, position.x, position.y);
+                                        ctx.fillStyle = '#fff'; // Reset for next loop
+                                    }
+                                });
+                            });
+                            
                             const imgData = canvas.toDataURL('image/png');
                             container.innerHTML = ''; // Clean up
                             resolve(imgData);
@@ -907,7 +912,7 @@
                         backgroundColor: `hsl(${i * 360 / sortedDestinations.length}, 70%, 50%)`
                     }))
                 },
-                options: { indexAxis: 'y', scales: { x: { stacked: true }, y: { stacked: true } }, responsive: false, plugins: { title: { display: true, text: "Yesterday's Claim Flow by Destination" } } }
+                options: { indexAxis: 'y', scales: { x: { stacked: true }, y: { stacked: true } }, responsive: false, plugins: { title: { display: true, text: "Yesterday's Claim Flow by Destination" }, legend: { display: false } } }
             };
             const flowChartImg = await renderChartToImage('flowChart', flowChartConfig, 1000, 800);
             doc.addImage(flowChartImg, 'PNG', 14, 25, 180, 100);
@@ -951,7 +956,7 @@
                     labels: Object.keys(critOutcomes),
                     datasets: [{ label: 'Number of Claims', data: Object.values(critOutcomes), backgroundColor: '#FF6384' }]
                 },
-                options: { responsive: false, plugins: { title: { display: true, text: "Outcomes of Yesterday's Critical Claims" } } }
+                options: { responsive: false, plugins: { title: { display: true, text: "Outcomes of Yesterday's Critical Claims" }, legend: { display: false } } }
             };
             const critChartImg = await renderChartToImage('critChart', critChartConfig, 600, 400);
             doc.addImage(critChartImg, 'PNG', 105, 135, 90, 60);
@@ -962,10 +967,16 @@
             doc.setFont('helvetica', 'bold');
             doc.text("Detailed Cohort Movement Analysis", 14, 20);
             
-            let finalY = 25; // Keep track of where the last table ended
+            let finalY = 25;
 
-            for(const state in detailedMovementStats) {
-                for(const bucket in detailedMovementStats[state]) {
+            const sortedStates = Object.keys(detailedMovementStats).sort();
+            for(const state of sortedStates) {
+                const sortedBuckets = Object.keys(detailedMovementStats[state]).sort((a,b) => {
+                    const order = { 'Critical': 1, 'Priority': 2, 'Backlog': 3, 'Queue': 4 };
+                    return (order[a] || 99) - (order[b] || 99);
+                });
+
+                for(const bucket of sortedBuckets) {
                     const data = detailedMovementStats[state][bucket];
                     if (data.totalYesterday === 0) continue;
 
@@ -986,27 +997,30 @@
                          tableBody.push([`Moved to: ${newState} - ${newBucket}`, count, `${(count/data.totalYesterday*100).toFixed(1)}%`, impact]);
                     });
 
+                    // Check if table will fit on the page, add new page if not
+                    const tableHeight = (tableBody.length + 1) * 10 + 20; // Estimate height
+                    if (finalY + tableHeight > 280) {
+                        doc.addPage();
+                        finalY = 20;
+                    }
+
                     doc.autoTable({
                         startY: finalY + 5,
                         head: [['Destination', 'Count', 'Percentage', 'Impact']],
                         body: tableBody,
-                        // Add a title for each table
                         didDrawPage: (data) => {
                             doc.setFontSize(12);
                             doc.setFont('helvetica', 'bold');
                             doc.text(`From: ${state} - ${bucket} (Yesterday's Total: ${data.totalYesterday})`, data.settings.margin.left, finalY + 2);
                         },
-                        // Style the impact column
                         willDrawCell: (data) => {
                             if (data.column.dataKey === 'Impact' && data.cell.section === 'body') {
                                 if (data.cell.text[0] === 'Positive') doc.setTextColor(0, 128, 0); // Green
                                 else if (data.cell.text[0] === 'Negative') doc.setTextColor(255, 0, 0); // Red
                             }
                         },
-                        didDrawCell: (data) => {
-                            doc.setTextColor(0, 0, 0); // Reset color
-                        },
-                        margin: { top: 30 }
+                        didDrawCell: () => doc.setTextColor(0, 0, 0),
+                        margin: { top: finalY + 10 }
                     });
 
                     finalY = doc.autoTable.previous.finalY;
@@ -1014,6 +1028,83 @@
             }
         }
         
+        // NEW: Function to create the User Productivity Page
+        async function createProductivityPage(doc) {
+            doc.setFontSize(18);
+            doc.setFont('helvetica', 'bold');
+            doc.text("User Productivity Summary", 14, 20);
+
+            const config = gatherConfig();
+            const userStats = {};
+
+            // Helper to process a claim list
+            const processList = (list, isPrebatch) => {
+                list.forEach(item => {
+                    const row = isPrebatch ? item : item.originalRow;
+                    const claimState = String(row[config.claimStatusIndex] || '').trim().toUpperCase();
+                    const user = String(row[config.activityUserIndex] || 'Unassigned').trim();
+                    if (!user) return;
+
+                    if (!userStats[user]) {
+                        userStats[user] = { total: 0, prebatch: 0, approved: 0, other: 0 };
+                    }
+                    userStats[user].total++;
+                    if (isPrebatch) {
+                        userStats[user].prebatch++;
+                    } else if (claimState === 'APPROVED') {
+                        userStats[user].approved++;
+                    } else {
+                        userStats[user].other++;
+                    }
+                });
+            };
+            
+            // Process non-prebatch and prebatch claims
+            // Create a combined list of all claims with their user
+            const allClaimsToday = new Map();
+            processedClaimsList.forEach(claim => allClaimsToday.set(claim.claimNumber, {user: claim.user, state: claim.claimState, isPrebatch: false}));
+            prebatchClaims.forEach(row => {
+                const claimNumber = String(row[config.claimNumberIndex] || '').trim();
+                const user = String(row[config.activityUserIndex] || 'Unassigned').trim();
+                allClaimsToday.set(claimNumber, {user: user, state: 'PREBATCH', isPrebatch: true});
+            });
+
+            // Aggregate stats
+            allClaimsToday.forEach(claimData => {
+                const user = claimData.user;
+                if (!user || user === 'Unassigned') return;
+                if (!userStats[user]) {
+                    userStats[user] = { total: 0, prebatch: 0, approved: 0, other: 0 };
+                }
+                userStats[user].total++;
+                if (claimData.isPrebatch) {
+                    userStats[user].prebatch++;
+                } else if (claimData.state === 'APPROVED') {
+                    userStats[user].approved++;
+                } else {
+                    userStats[user].other++;
+                }
+            });
+
+            const tableBody = Object.entries(userStats)
+                .map(([user, stats]) => {
+                    const breakdownParts = [];
+                    if (stats.prebatch > 0) breakdownParts.push(`Prebatch (${stats.prebatch})`);
+                    if (stats.approved > 0) breakdownParts.push(`Approved (${stats.approved})`);
+                    if (stats.other > 0) breakdownParts.push(`Other (${stats.other})`);
+                    return [user, stats.total, breakdownParts.join(', ')];
+                })
+                .sort((a, b) => b[1] - a[1]); // Sort by total claims descending
+
+            doc.autoTable({
+                startY: 25,
+                head: [['Username', 'Total Claims Touched', 'Outcome Breakdown']],
+                body: tableBody,
+                theme: 'striped',
+                headStyles: { fillColor: [79, 70, 229] }, // Indigo color
+            });
+        }
+
         document.addEventListener('DOMContentLoaded', initializeTool);
     </script>
 </body>
