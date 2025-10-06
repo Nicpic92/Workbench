@@ -3,53 +3,93 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spreadsheet Simplicity - Your Data Workbench</title>
+    <title>Spreadsheet Simplicity - Home</title>
+    
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
     </style>
 </head>
 <body class="text-gray-800">
 
-    <header class="bg-white shadow-sm">
+    <!-- Standardized Header -->
+    <header class="bg-white shadow-sm sticky top-0 z-50">
         <div class="container mx-auto px-6 py-4 flex justify-between items-center">
-            <a href="/" class="flex items-center space-x-2">
-                <!-- <img src="/assets/logo.png" alt="Logo" class="h-8 w-8"> -->
+             <a href="/" class="flex items-center space-x-2">
                 <span class="text-2xl font-bold text-gray-900">Spreadsheet Simplicity</span>
             </a>
-            <nav class="flex items-center space-x-8">
-                <a href="/" class="text-indigo-600 font-bold">Home</a>
-                <a href="/workbench.html" class="text-gray-600 hover:text-indigo-600 font-medium">The Workbench</a>
-                <a href="/ClaimStatusReportTool.html" class="text-gray-600 hover:text-indigo-600 font-medium">Claim Status</a>
+            <nav id="main-nav" class="hidden md:flex items-center space-x-8">
+                <a href="/index.html" class="text-indigo-600 font-bold">Tools</a>
+                <a href="/about.html" class="text-gray-600 hover:text-indigo-600 font-medium">Our Security Promise</a>
+                <div id="nav-auth-section" class="pl-4"></div>
             </nav>
         </div>
     </header>
 
-    <main>
-        <section class="text-center py-20 px-6 bg-white">
-            <div class="container mx-auto">
-                <h1 class="text-5xl md:text-6xl font-extrabold tracking-tight">
-                    <span class="bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 to-teal-500">The Data Operations Workbench</span>
-                </h1>
-                <p class="mt-4 text-xl md:text-2xl font-semibold text-gray-700">One Tool to Rule Your Spreadsheets.</p>
-                <p class="mt-6 max-w-2xl mx-auto text-lg text-gray-600">
-                    Clean, merge, analyze, and transform your Excel and CSV files without ever uploading them. All processing happens securely and privately in your browser.
+    <main class="container mx-auto px-6 py-12">
+        <div class="max-w-4xl mx-auto">
+            <div class="text-center mb-16">
+                <h1 class="text-4xl md:text-5xl font-extrabold text-gray-900">Empowering Your Workflow</h1>
+                <p class="mt-4 max-w-2xl mx-auto text-lg text-gray-600">
+                    Secure, browser-based tools designed to simplify your complex spreadsheet tasks. Your data's privacy is our top priority.
                 </p>
-                <div class="mt-8">
-                    <a href="/workbench.html" class="inline-block bg-indigo-600 text-white font-bold text-lg rounded-full py-4 px-10 hover:bg-indigo-700 transition-transform transform hover:scale-105">
-                        Launch the Workbench
-                    </a>
+            </div>
+
+            <!-- Tools Section -->
+            <div>
+                <h2 class="text-3xl font-bold text-gray-900 mb-8 text-center border-b pb-4">Our Tools</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+
+                    <!-- Card for Claim Status Report Tool -->
+                    <div class="bg-white rounded-xl shadow-lg p-8 flex flex-col">
+                        <h3 class="text-2xl font-bold text-gray-900 mb-3">Claim Status Report Tool</h3>
+                        <p class="text-gray-600 mb-6 flex-grow">
+                            Analyzes daily claim reports, compares them against previous data, and generates comprehensive Excel and PDF action reports with detailed analytics.
+                        </p>
+                        <a href="/ClaimStatusReportTool.html" class="inline-block bg-indigo-600 text-white font-bold text-center rounded-lg py-3 px-8 hover:bg-indigo-700 transition-transform transform hover:scale-105">
+                            Go to Tool
+                        </a>
+                    </div>
+
+                    <!-- NEW: Card for Report Builder Tool -->
+                    <div class="bg-white rounded-xl shadow-lg p-8 flex flex-col">
+                        <h3 class="text-2xl font-bold text-gray-900 mb-3">Report Builder</h3>
+                        <p class="text-gray-600 mb-6 flex-grow">
+                            Merge multiple Excel reports into a single master file. Select key columns, choose the data you need, and generate a consolidated report instantly.
+                        </p>
+                        <a href="/ReportBuilder.html" class="inline-block bg-indigo-600 text-white font-bold text-center rounded-lg py-3 px-8 hover:bg-indigo-700 transition-transform transform hover:scale-105">
+                            Go to Tool
+                        </a>
+                    </div>
+
                 </div>
             </div>
-        </section>
+        </div>
     </main>
-
-    <footer class="bg-gray-800 text-white py-8">
+    
+    <!-- Standardized Footer -->
+    <footer class="bg-gray-800 text-white py-8 mt-16">
         <div class="container mx-auto text-center px-6">
+            <div class="flex justify-center space-x-6 mb-4">
+                 <a href="/index.html" class="text-gray-400 hover:text-white">Tools</a>
+                 <a href="/about.html" class="text-gray-400 hover:text-white">Our Security Promise</a>
+            </div>
             <p>&copy; 2025 Spreadsheet Simplicity. All rights reserved.</p>
         </div>
     </footer>
+    
+    <!-- Script to Initialize Auth UI -->
+    <script src="/auth.js"></script>
 
 </body>
 </html>
