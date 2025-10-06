@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Report Builder - Spreadsheet Simplicity</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Third-party libraries for tool functionality -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.6.0/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+        #loader {
+            display: none;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #4f46e5;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1.5s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <!-- NEW: Standardized Header to match the rest of the site -->
+    <header class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="container mx-auto px-6 py-4 flex justify-between items-center">
+             <a href="/" class="flex items-center space-x-2">
+                <span class="text-2xl font-bold text-gray-900">Spreadsheet Simplicity</span>
+            </a>
+            <nav id="main-nav" class="hidden md:flex items-center space-x-8">
+                <!-- Navigation links updated for consistency -->
+                <a href="/ClaimStatusReportTool.html" class="text-gray-600 hover:text-indigo-600 font-medium">Claim Status Report Tool</a>
+                <a href="/ReportBuilder.html" class="text-indigo-600 font-bold">Report Builder</a>
+                <a href="/about.html" class="text-gray-600 hover:text-indigo-600 font-medium">Our Security Promise</a>
+                <div id="nav-auth-section" class="pl-4"></div>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-6 py-12">
+        <div class="max-w-4xl mx-auto">
+            <div class="text-center mb-12">
+                <h1 class="text-4xl md:text-5xl font-extrabold text-gray-900">Report Builder</h1>
+                <p class="mt-4 max-w-2xl mx-auto text-lg text-gray-600">
+                    Merge multiple Excel reports into one master file. This tool runs entirely in your browser—your data never leaves your computer.
+                </p>
+            </div>
+
+            <!-- INSTRUCTIONS CARD (Unchanged) -->
+            <div class="bg-blue-50 border-l-4 border-blue-400 text-blue-800 p-6 rounded-lg mb-8" role="alert">
+                <h3 class="font-bold text-lg mb-2">How It Works</h3>
+                <ul class="list-disc list-inside space-y-1">
+                    <li><strong>Step 1:</strong> Upload at least two .xlsx reports you want to merge.</li>
+                    <li><strong>Step 2:</strong> For each file, select the "key" column (like "Claim ID") that the tool will use to match rows.</li>
+                    <li><strong>Step 3:</strong> Choose your "main report." All its columns will be selected by default.</li>
+                    <li><strong>Step 4:</strong> Add any additional columns you need from the other reports.</li>
+                    <li><strong>Step 5:</strong> Name your new report and click Generate!</li>
+                </ul>
+            </div>
+
+            <!-- TOOL UI (Unchanged) -->
+            <div class="step bg-white rounded-xl shadow-lg p-8 mb-8">
+                <h2 class="text-2xl font-bold text-gray-900 mb-4">Step 1: Upload Reports</h2>
+                <input type="file" id="file-upload" multiple accept=".xlsx" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+            </div>
+            <div id="key-mapping-step" class="step bg-white rounded-xl shadow-lg p-8 mb-8" style="display:none;">
+                <h2 class="text-2xl font-bold text-gray-900 mb-1">Step 2: Map Key Identifiers</h2>
+                <p class="text-gray-600 mb-6">For each report, select the column that contains the unique ID to match rows.</p>
+                <div id="key-mapping" class="space-y-4"></div>
+            </div>
+            <div id="main-report-step" class="step bg-white rounded-xl shadow-lg p-8 mb-8" style="display:none;">
+                <h2 class="text-2xl font-bold text-gray-900 mb-1">Step 3: Select the Main Report</h2>
+                <p class="text-gray-600 mb-6">All columns from this report will be selected by default in the next step.</p>
+                <div id="main-report-selection" class="space-y-3"></div>
+            </div>
+            <div id="column-selection-step" class="step bg-white rounded-xl shadow-lg p-8 mb-8" style="display:none;">
+                <h2 class="text-2xl font-bold text-gray-900 mb-1">Step 4: Select Columns for New Report</h2>
+                <p class="text-gray-600 mb-6">Confirm columns from your main report and add any others you need.</p>
+                <div id="column-selection" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+            </div>
+            <div id="generate-report-step" class="step bg-white rounded-xl shadow-lg p-8" style="display:none;">
+                <h2 class="text-2xl font-bold text-gray-900 mb-4">Step 5: Generate Report</h2>
+                <input type="text" id="new-report-name" placeholder="Enter new report name (e.g., Consolidated_Report)" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 mb-4">
+                <button id="generate-button" class="w-full bg-indigo-600 text-white font-bold text-lg rounded-lg py-3 px-10 hover:bg-indigo-700 transition-transform transform hover:scale-105 disabled:bg-indigo-300 disabled:cursor-not-allowed">Generate ZIP</button>
+                <div id="loader"></div>
+            </div>
+        </div>
+    </main>
+    
+    <!-- STANDARDIZED FOOTER (Unchanged) -->
+    <footer class="bg-gray-800 text-white py-8 mt-16">
+        <div class="container mx-auto text-center px-6">
+            <div class="flex justify-center space-x-6 mb-4">
+                 <a href="/index.html" class="text-gray-400 hover:text-white">Tools</a>
+                 <a href="/about.html" class="text-gray-400 hover:text-white">Our Security Promise</a>
+            </div>
+            <p>&copy; 2025 Spreadsheet Simplicity. All rights reserved.</p>
+        </div>
+    </footer>
+    
+    <!-- TOOL LOGIC SCRIPT (Unchanged) -->
+    <script>
+        // --- All of the original tool's JavaScript logic goes here ---
+        // (This is the large script block from your file, it does not need to be changed)
+        let uploadedFilesData = [];
+        const fileUpload = document.getElementById('file-upload');
+        const keyMappingStep = document.getElementById('key-mapping-step');
+        const keyMappingDiv = document.getElementById('key-mapping');
+        const mainReportStep = document.getElementById('main-report-step');
+        const mainReportSelectionDiv = document.getElementById('main-report-selection');
+        const columnSelectionStep = document.getElementById('column-selection-step');
+        const columnSelectionDiv = document.getElementById('column-selection');
+        const generateReportStep = document.getElementById('generate-report-step');
+        const generateButton = document.getElementById('generate-button');
+        const newReportNameInput = document.getElementById('new-report-name');
+        const loader = document.getElementById('loader');
+        fileUpload.addEventListener('change', handleFileUpload);
+        function hideAllSteps() { keyMappingStep.style.display = 'none'; mainReportStep.style.display = 'none'; columnSelectionStep.style.display = 'none'; generateReportStep.style.display = 'none'; }
+        function handleFileUpload(event) {
+            const files = event.target.files; if (files.length < 2) { if (files.length === 1) alert("Please upload at least two files to build a report."); return; };
+            loader.style.display = 'block'; let filesProcessed = 0; uploadedFilesData = []; hideAllSteps();
+            Array.from(files).forEach(file => {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    try { const data = new Uint8Array(e.target.result); const workbook = XLSX.read(data, { type: 'array' }); const sheetName = workbook.SheetNames[0]; const worksheet = workbook.Sheets[sheetName]; const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }); uploadedFilesData.push({ name: file.name, headers: jsonData[0] || [], data: jsonData.slice(1), file: file });
+                    } catch (error) { alert(`Could not process the file: ${file.name}. It might be corrupted or not a valid .xlsx file.`); console.error(error); }
+                    filesProcessed++; if (filesProcessed === files.length) { loader.style.display = 'none'; populateKeyIdentifierMapping(); keyMappingStep.style.display = 'block'; }
+                }; reader.readAsArrayBuffer(file);
+            });
+        }
+        function populateKeyIdentifierMapping() {
+            keyMappingDiv.innerHTML = ''; uploadedFilesData.forEach((fileData, fileIndex) => {
+                const rowDiv = document.createElement('div'); rowDiv.className = 'flex items-center gap-4 p-4 bg-gray-50 rounded-lg border'; const label = document.createElement('label'); label.htmlFor = `key-select-${fileIndex}`; label.className = 'font-semibold text-gray-700 flex-grow truncate'; label.textContent = fileData.name; const select = document.createElement('select'); select.id = `key-select-${fileIndex}`; select.dataset.fileIndex = fileIndex; select.className = 'key-mapper-select w-1/2 p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500'; select.innerHTML = '<option value="">-- Select Key Column --</option>'; fileData.headers.forEach(header => { const option = document.createElement('option'); option.value = header; option.textContent = header; select.appendChild(option); });
+                rowDiv.appendChild(label); rowDiv.appendChild(select); keyMappingDiv.appendChild(rowDiv); select.addEventListener('change', checkAllKeysMapped);
+            });
+        }
+        function checkAllKeysMapped() { const selects = document.querySelectorAll('.key-mapper-select'); const allMapped = Array.from(selects).every(s => s.value !== ''); if (allMapped) { populateMainReportSelection(); mainReportStep.style.display = 'block'; } else { mainReportStep.style.display = 'none'; columnSelectionStep.style.display = 'none'; generateReportStep.style.display = 'none'; } }
+        function populateMainReportSelection() {
+            mainReportSelectionDiv.innerHTML = ''; uploadedFilesData.forEach((fileData, fileIndex) => {
+                const rowDiv = document.createElement('div'); rowDiv.className = 'flex items-center p-4 bg-gray-50 rounded-lg border cursor-pointer hover:bg-indigo-50'; const radio = document.createElement('input'); radio.type = 'radio'; radio.name = 'main-report'; radio.id = `main-report-${fileIndex}`; radio.value = fileIndex; radio.className = 'h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500'; radio.addEventListener('change', handleMainReportSelection); const label = document.createElement('label'); label.htmlFor = `main-report-${fileIndex}`; label.className = 'ml-3 block text-md font-medium text-gray-700 flex-grow cursor-pointer'; label.textContent = fileData.name;
+                rowDiv.appendChild(radio); rowDiv.appendChild(label); mainReportSelectionDiv.appendChild(rowDiv);
+            });
+        }
+        function handleMainReportSelection() { populateColumnSelection(); columnSelectionStep.style.display = 'block'; generateReportStep.style.display = 'block'; }
+        function populateColumnSelection() {
+            const mainReportRadio = document.querySelector('input[name="main-report"]:checked'); if (!mainReportRadio) return; const mainReportIndex = parseInt(mainReportRadio.value); columnSelectionDiv.innerHTML = '';
+            uploadedFilesData.forEach((fileData, fileIndex) => {
+                const fileDiv = document.createElement('div'); fileDiv.className = 'bg-gray-50 border p-4 rounded-lg'; fileDiv.innerHTML = `<h3 class="font-bold text-lg mb-3 border-b pb-2">${fileData.name}</h3>`; const columnList = document.createElement('div'); columnList.className = 'space-y-2';
+                fileData.headers.forEach((column) => {
+                    const isMainReport = fileIndex === mainReportIndex; const itemDiv = document.createElement('div'); itemDiv.className = 'flex items-center'; const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.id = `file-${fileIndex}-col-${column.replace(/\s+/g, '-')}`; checkbox.value = column; checkbox.checked = isMainReport; checkbox.className = 'h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500'; const label = document.createElement('label'); label.htmlFor = checkbox.id; label.className = 'ml-3 text-sm text-gray-600'; label.textContent = column;
+                    itemDiv.appendChild(checkbox); itemDiv.appendChild(label); columnList.appendChild(itemDiv);
+                }); fileDiv.appendChild(columnList); columnSelectionDiv.appendChild(fileDiv);
+            });
+        }
+        generateButton.addEventListener('click', () => { if (!newReportNameInput.value) { alert('Please enter a name for the new report.'); return; } loader.style.display = 'block'; generateButton.disabled = true; setTimeout(generateReportAndZip, 50); });
+        function generateReportAndZip() {
+            try {
+                const keyMappings = Array.from(document.querySelectorAll('.key-mapper-select')).map(select => ({ fileIndex: parseInt(select.dataset.fileIndex), keyColumn: select.value })); const newReportHeader = Array.from(document.querySelectorAll('#column-selection input[type="checkbox"]:checked')).map(cb => cb.value); const uniqueHeader = [...new Set(newReportHeader)]; const mergedData = new Map();
+                uploadedFilesData.forEach((fileData, fileIndex) => {
+                    const mapping = keyMappings.find(m => m.fileIndex === fileIndex); if (!mapping) return; const keyColIndex = fileData.headers.indexOf(mapping.keyColumn); if (keyColIndex === -1) return;
+                    fileData.data.forEach(row => { const key = row[keyColIndex]; if (key === null || key === undefined || String(key).trim() === '') return; if (!mergedData.has(key)) mergedData.set(key, {}); const rowObject = mergedData.get(key); fileData.headers.forEach((header, colIdx) => { if (rowObject[header] === undefined) { rowObject[header] = row[colIdx]; } }); });
+                });
+                const newReportData = [uniqueHeader]; mergedData.forEach(rowData => { const newRow = uniqueHeader.map(header => rowData[header] ?? ''); newReportData.push(newRow); });
+                const newWorkbook = XLSX.utils.book_new(); const newWorksheet = XLSX.utils.aoa_to_sheet(newReportData); XLSX.utils.book_append_sheet(newWorkbook, newWorksheet, 'Consolidated Report'); const newReportOutput = XLSX.write(newWorkbook, { bookType: 'xlsx', type: 'array' });
+                const zip = new JSZip(); uploadedFilesData.forEach(fileData => zip.file(fileData.name, fileData.file)); const newReportName = newReportNameInput.value.replace(/\.xlsx$/i, ''); zip.file(`${newReportName}.xlsx`, new Blob([newReportOutput], { type: 'application/octet-stream' }));
+                zip.generateAsync({ type: 'blob' }).then(function (content) { saveAs(content, 'Report_Builder_Output.zip'); }).finally(() => { loader.style.display = 'none'; generateButton.disabled = false; });
+            } catch (error) { console.error("An error occurred during report generation:", error); alert("An error occurred. Please check the developer console for more details."); loader.style.display = 'none'; generateButton.disabled = false; }
+        }
+    </script>
+    
+    <!-- SCRIPT TO INITIALIZE AUTH UI -->
+    <script src="/auth.js"></script>
+
+</body>
+</html>
