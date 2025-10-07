@@ -75,8 +75,7 @@
                         <div><label for="claimTypeCol">Claim Type:</label><input type="text" id="claimTypeCol" class="mt-1 w-full p-2 border rounded-md uppercase"></div>
                         <div><label for="totalChargesCol">Total Charges:</label><input type="text" id="totalChargesCol" class="mt-1 w-full p-2 border rounded-md uppercase"></div>
                         <div><label for="notesCol">W9/Notes Column:</label><input type="text" id="notesCol" class="mt-1 w-full p-2 border rounded-md uppercase"></div>
-                        <div><label for="activityUserCol">Activity User:</label><input type="text" id="activityUserCol" class="mt-1 w-full p-2 border rounded-md uppercase"></div>
-                        <div class="md:col-span-2"><label for="dateCols">Date Columns:</label><input type="text" id="dateCols" class="mt-1 w-full p-2 border rounded-md uppercase"></div>
+                        <div class="md:col-span-3"><label for="dateCols">Date Columns:</label><input type="text" id="dateCols" class="mt-1 w-full p-2 border rounded-md uppercase"></div>
                     </div>
                 </div>
                 
@@ -186,10 +185,10 @@
             const processBtn = document.getElementById('processBtn');
 
             const clientPresets = {
-                solis: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'V', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C', activityUserCol: 'AC' },
-                liberty: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'V', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C', activityUserCol: 'AC' },
-                secur: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'U', dsnpCol: 'Y', claimTypeCol: 'D', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C', activityUserCol: 'AC' },
-                csh: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'U', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C', activityUserCol: 'AC' }
+                solis: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'V', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
+                liberty: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'V', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
+                secur: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'U', dsnpCol: 'Y', claimTypeCol: 'D', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
+                csh: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'U', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' }
             };
 
             clientSelect.addEventListener('change', () => {
@@ -236,7 +235,7 @@
                     return col - 1;
                 };
                 const config = {};
-                const ids = ['cleanAge', 'claimStatus', 'claimNumber', 'payer', 'networkStatus', 'dsnp', 'claimType', 'totalCharges', 'notes', 'activityUser'];
+                const ids = ['cleanAge', 'claimStatus', 'claimNumber', 'payer', 'networkStatus', 'dsnp', 'claimType', 'totalCharges', 'notes'];
                 ids.forEach(id => config[`${id}Index`] = colLetterToIndex(document.getElementById(`${id}Col`).value));
                 if (Object.values(config).some(val => val === -1)) throw new Error("Invalid column letter entered.");
                 return config;
@@ -256,7 +255,6 @@
                 const cleanAge = parseInt(row[config.cleanAgeIndex], 10);
                 let owner = null;
                 const claimNumber = String(row[config.claimNumberIndex] || '').trim();
-                const user = String(row[config.activityUserIndex] || 'Unassigned').trim();
                 if (claimNumber && yesterdayDataMap.has(claimNumber)) owner = yesterdayDataMap.get(claimNumber).owner;
                 if (!owner) {
                     owner = getHardcodedAssignment(noteText);
@@ -272,7 +270,7 @@
                         else owner = 'PV';
                     }
                 }
-                claims.push({ ...config, originalRow: row, noteText, cleanAge, claimState, owner, claimNumber, user });
+                claims.push({ ...config, originalRow: row, noteText, cleanAge, claimState, owner, claimNumber });
             }
             return claims;
         }
@@ -468,7 +466,6 @@
             const downloadsContainer = document.getElementById('download-links-container');
             downloadsContainer.innerHTML = '';
             
-            // Generate standard Excel reports
             createDownloadLink(buildWorkbook(processedClaimsList, `${clientName} Daily Action Report`), `${clientName} Overall Daily Action Report for ${getFormattedDate()}.xlsx`, downloadsContainer);
             createDownloadLink(buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'Claims'), `${clientName} Claims - Action Report`, 'Claims'), `${clientName} Claims - Action Report for ${getFormattedDate()}.xlsx`, downloadsContainer);
             createDownloadLink(buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'PV'), `${clientName} PV - Action Report`, 'PV'), `${clientName} PV - Action Report for ${getFormattedDate()}.xlsx`, downloadsContainer);
@@ -726,7 +723,7 @@
         }
 
         // ===================================================================
-        // FIXED AND UPDATED PDF GENERATION LOGIC
+        // UPDATED PDF GENERATION LOGIC WITH NEW KPIs
         // ===================================================================
 
         async function generatePdfReport() {
@@ -737,8 +734,6 @@
             await createChartsPage(doc);
             doc.addPage();
             await createDetailedTablesPage(doc);
-            doc.addPage();
-            await createProductivityPage(doc);
 
             // Add footers to all pages
             const pageCount = doc.internal.getNumberOfPages();
@@ -753,7 +748,15 @@
             const clientName = document.getElementById('client-select').value;
             doc.save(`${clientName.toUpperCase()}_Daily_Claim-Flow_Analysis_${getFormattedDate()}.pdf`);
         }
-
+        
+        // Helper function to format large numbers as strings (e.g., 1200 -> $1.2K, 1200000 -> $1.2M)
+        function formatCurrency(value) {
+            if (value === null || isNaN(value)) return '$0';
+            if (value < 1000) return `$${value.toFixed(0)}`;
+            if (value < 1000000) return `$${(value / 1000).toFixed(1)}K`;
+            return `$${(value / 1000000).toFixed(1)}M`;
+        }
+        
         async function createTitlePage(doc) {
             const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
             
@@ -778,17 +781,66 @@
             const summaryText = doc.splitTextToSize(introText, 182);
             doc.text(summaryText, 14, 60);
 
-            const totalYesterday = Object.values(detailedMovementStats).flatMap(Object.values).reduce((s,c) => s + c.totalYesterday, 0);
-            const totalPrebatched = Object.values(detailedMovementStats).flatMap(Object.values).reduce((sum, cohort) => sum + cohort.movedToPrebatch, 0);
-            const critResolved = workflowMovement.criticalWorked;
-            const critTotal = detailedMovementStats.PEND?.Critical?.totalYesterday || 0;
-            const critToBacklogRate = critTotal > 0 ? ((workflowMovement.criticalToBacklog / critTotal) * 100).toFixed(1) + '%' : 'N/A';
+            // --- NEW KPI CALCULATIONS ---
+            const config = gatherConfig();
+
+            // Financial KPIs
+            let valueInPend = 0, deniedDollars = 0;
+            // Operational & Quality KPIs
+            let pendAgeSum = 0, pendAgeCount = 0, oonCount = 0;
+            const denialReasons = {};
             
+            processedClaimsList.forEach(claim => {
+                const charges = parseFloat(String(claim.originalRow[config.totalChargesIndex]).replace(/[^0-9.-]/g, '')) || 0;
+                if(claim.claimState === 'PEND') {
+                    valueInPend += charges;
+                    if (!isNaN(claim.cleanAge)) {
+                        pendAgeSum += claim.cleanAge;
+                        pendAgeCount++;
+                    }
+                }
+                if(claim.claimState === 'DENY') {
+                    deniedDollars += charges;
+                    const reason = claim.noteText || 'No Reason Cited';
+                    denialReasons[reason] = (denialReasons[reason] || 0) + 1;
+                }
+                if(String(claim.originalRow[config.networkStatusIndex] || '').toUpperCase().includes('OUT')) {
+                    oonCount++;
+                }
+            });
+
+            const avgPendAge = pendAgeCount > 0 ? (pendAgeSum / pendAgeCount).toFixed(1) + ' Days' : 'N/A';
+            const topDenialReason = Object.keys(denialReasons).length > 0 ? Object.entries(denialReasons).sort((a,b) => b[1] - a[1])[0][0] : 'N/A';
+            const oonPercent = processedClaimsList.length > 0 ? ((oonCount / processedClaimsList.length) * 100).toFixed(1) + '%' : 'N/A';
+
+            // Denial Overturn Rate
+            let deniedYesterdayCount = 0;
+            if(yesterdayStats && yesterdayStats.DENY) {
+                deniedYesterdayCount = yesterdayStats.DENY.total;
+            }
+            let overturnedCount = 0;
+            if (detailedMovementStats.DENY) {
+                for (const bucket in detailedMovementStats.DENY) {
+                    const cohort = detailedMovementStats.DENY[bucket];
+                    overturnedCount += cohort.movedToPrebatch;
+                    for (const dest in cohort.movedTo) {
+                        if (dest.startsWith('APPROVED')) {
+                            overturnedCount += cohort.movedTo[dest];
+                        }
+                    }
+                }
+            }
+            const denialOverturnRate = deniedYesterdayCount > 0 ? ((overturnedCount / deniedYesterdayCount) * 100).toFixed(1) + '%' : 'N/A';
+
+            const totalClaimsProcessed = Object.values(detailedMovementStats).flatMap(Object.values).reduce((s,c) => s + c.totalYesterday, 0);
+
             const kpis = [
-                { label: 'Total Claims Processed Yesterday', value: totalYesterday.toLocaleString() },
-                { label: 'Claims Moved to Prebatch', value: totalPrebatched.toLocaleString() },
-                { label: 'Critical Claims Resolved', value: critResolved.toLocaleString() },
-                { label: 'Critical-to-Backlog Aging Rate', value: critToBacklogRate }
+                { label: 'Total Claims Processed', value: totalClaimsProcessed.toLocaleString() },
+                { label: 'Value in PEND Inventory', value: formatCurrency(valueInPend) },
+                { label: 'Denied Dollars at Risk', value: formatCurrency(deniedDollars) },
+                { label: 'Average Clean Age (PEND)', value: avgPendAge },
+                { label: 'Denial Overturn Rate', value: denialOverturnRate },
+                { label: 'Out-of-Network %', value: oonPercent }
             ];
 
             const kpiStartY = 120;
@@ -796,21 +848,26 @@
             doc.setFont('helvetica', 'bold');
             doc.text('Key Performance Indicators', 14, kpiStartY);
             doc.line(14, kpiStartY + 2, 70, kpiStartY + 2);
-
+            
             let currentX = 14;
-            const rectWidth = 45;
+            let currentY = kpiStartY + 10;
+            const rectWidth = 58;
             const rectHeight = 30;
 
-            kpis.forEach(kpi => {
+            kpis.forEach((kpi, index) => {
+                if (index === 3) { // Move to the second row
+                    currentY += rectHeight + 5;
+                    currentX = 14;
+                }
                 doc.setFillColor(240, 240, 255);
-                doc.roundedRect(currentX, kpiStartY + 10, rectWidth, rectHeight, 3, 3, 'F');
+                doc.roundedRect(currentX, currentY, rectWidth, rectHeight, 3, 3, 'F');
                 doc.setFontSize(18);
                 doc.setFont('helvetica', 'bold');
-                doc.text(kpi.value, currentX + rectWidth/2, kpiStartY + 25, { align: 'center'});
+                doc.text(kpi.value, currentX + rectWidth/2, currentY + 15, { align: 'center'});
                 doc.setFontSize(9);
                 doc.setFont('helvetica', 'normal');
                 const label = doc.splitTextToSize(kpi.label, rectWidth - 5);
-                doc.text(label, currentX + rectWidth/2, kpiStartY + 33, { align: 'center'});
+                doc.text(label, currentX + rectWidth/2, currentY + 23, { align: 'center'});
                 currentX += rectWidth + 5;
             });
         }
@@ -843,19 +900,18 @@
                                 meta.data.forEach((element, index) => {
                                     const data = dataset.data[index];
                                     let position;
-                                    // FIX 3: Conditional label drawing based on element size
                                     if (config.type === 'doughnut' && data > 0) {
                                         position = element.getCenterPoint();
-                                        ctx.fillStyle = '#000'; // Black text for doughnut
+                                        ctx.fillStyle = '#000';
                                         ctx.fillText(data, position.x, position.y);
-                                    } else if (config.options.indexAxis === 'y' && data > 0 && element.width > 15) { // Horizontal bar, width threshold
+                                    } else if (config.options.indexAxis === 'y' && data > 0 && element.width > 15) {
                                         position = { x: element.x - 20, y: element.y };
                                         if (element.width < 30) { 
                                             ctx.fillStyle = '#000';
                                             position.x = element.x + 20;
                                         }
                                         ctx.fillText(data, position.x, position.y);
-                                    } else if (data > 0 && element.height > 15) { // Vertical bar, height threshold
+                                    } else if (data > 0 && element.height > 15) {
                                         position = { x: element.x, y: element.y + 15 };
                                         if (element.height < 25) {
                                            ctx.fillStyle = '#000';
@@ -863,7 +919,7 @@
                                         }
                                         ctx.fillText(data, position.x, position.y);
                                     }
-                                    ctx.fillStyle = '#fff'; // Reset for next loop
+                                    ctx.fillStyle = '#fff';
                                 });
                             });
                             
@@ -876,7 +932,6 @@
                 });
             };
 
-            // Chart 1: Claim Flow
             const flowData = {};
             const destinations = new Set(['Prebatch', 'Resolved/Removed']);
             for(const state in detailedMovementStats) {
@@ -903,7 +958,6 @@
             const flowChartImg = await renderChartToImage('flowChart', flowChartConfig, 1000, 800);
             doc.addImage(flowChartImg, 'PNG', 14, 25, 180, 100);
 
-            // Chart 2: PEND inventory
             const pendData = { Queue: 0, Priority: 0, Critical: 0, Backlog: 0 };
             let totalPend = 0;
             if (detailedMovementStats.PEND) {
@@ -920,7 +974,6 @@
             const pendChartImg = await renderChartToImage('pendChart', pendChartConfig, 400, 400);
             doc.addImage(pendChartImg, 'PNG', 14, 135, 80, 80);
 
-            // Chart 3: Critical outcomes
             const critOutcomes = { 'Moved to Prebatch': 0, 'Approved': 0, 'Remained Critical': 0, 'Aged to Backlog': 0, 'Denied': 0 };
             if (detailedMovementStats.PEND && detailedMovementStats.PEND.Critical) {
                 const crit = detailedMovementStats.PEND.Critical;
@@ -934,7 +987,6 @@
                 }
             }
             
-            // FIX 1: Check for data before rendering the critical outcomes chart
             const totalCritOutcomes = Object.values(critOutcomes).reduce((a, b) => a + b, 0);
             if (totalCritOutcomes > 0) {
                 const critChartConfig = {
@@ -967,7 +1019,7 @@
                 });
 
                 for(const bucket of sortedBuckets) {
-                    const cohortData = detailedMovementStats[state][bucket]; // Use a new variable to avoid scope issues
+                    const cohortData = detailedMovementStats[state][bucket];
                     if (cohortData.totalYesterday === 0) continue;
 
                     const tableBody = [];
@@ -993,7 +1045,6 @@
                         startY: finalY + 5,
                         head: [['Destination', 'Count', 'Percentage', 'Impact']],
                         body: tableBody,
-                        // FIX 2: Correctly reference the cohort's total in the title
                         didDrawPage: (tableData) => {
                             doc.setFontSize(12);
                             doc.setFont('helvetica', 'bold');
@@ -1014,53 +1065,6 @@
             }
         }
         
-        async function createProductivityPage(doc) {
-            doc.setFontSize(18);
-            doc.setFont('helvetica', 'bold');
-            doc.text("User Productivity Summary", 14, 20);
-
-            const config = gatherConfig();
-            const userStats = {};
-
-            const allClaimsToday = new Map();
-            processedClaimsList.forEach(claim => allClaimsToday.set(claim.claimNumber, {user: claim.user, state: claim.claimState, isPrebatch: false}));
-            prebatchClaims.forEach(row => {
-                const claimNumber = String(row[config.claimNumberIndex] || '').trim();
-                const user = String(row[config.activityUserIndex] || 'Unassigned').trim();
-                allClaimsToday.set(claimNumber, {user: user, state: 'PREBATCH', isPrebatch: true});
-            });
-
-            allClaimsToday.forEach(claimData => {
-                const user = claimData.user;
-                if (!user || user === 'Unassigned') return;
-                if (!userStats[user]) {
-                    userStats[user] = { total: 0, prebatch: 0, approved: 0, other: 0 };
-                }
-                userStats[user].total++;
-                if (claimData.isPrebatch) userStats[user].prebatch++;
-                else if (claimData.state === 'APPROVED') userStats[user].approved++;
-                else userStats[user].other++;
-            });
-
-            const tableBody = Object.entries(userStats)
-                .map(([user, stats]) => {
-                    const breakdownParts = [];
-                    if (stats.prebatch > 0) breakdownParts.push(`Prebatch (${stats.prebatch})`);
-                    if (stats.approved > 0) breakdownParts.push(`Approved (${stats.approved})`);
-                    if (stats.other > 0) breakdownParts.push(`Other (${stats.other})`);
-                    return [user, stats.total, breakdownParts.join(', ')];
-                })
-                .sort((a, b) => b[1] - a[1]);
-
-            doc.autoTable({
-                startY: 25,
-                head: [['Username', 'Total Claims Touched', 'Outcome Breakdown']],
-                body: tableBody,
-                theme: 'striped',
-                headStyles: { fillColor: [79, 70, 229] },
-            });
-        }
-
         document.addEventListener('DOMContentLoaded', initializeTool);
     </script>
 </body>
