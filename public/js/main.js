@@ -101,14 +101,8 @@ async function performInitialProcessing() {
         state.mainReportHeader = main_aoa[0];
         state.prebatchClaims = main_aoa.slice(1).filter(row => String(row[config.claimStatusIndex] || '').toUpperCase().includes('PREBATCH'));
         
-        // --- Prebatch Movement Analysis ---
-        if (state.hasYesterdayFile) {
-            // Simplified from original for clarity, full logic can be re-integrated if needed
-        }
-
         state.processedClaimsList = processAndAssignClaims(main_aoa, config, state.yesterdayDataMap);
         
-        // --- Augment Rows for Final Report ---
         state.fileHeaderRow = [...state.mainReportHeader];
         if (state.hasYesterdayFile) {
             state.fileHeaderRow.splice(config.claimStatusIndex, 0, 'Yest. Claim State');
@@ -120,9 +114,9 @@ async function performInitialProcessing() {
         
         const getDaysBucketText = (age) => {
              if (isNaN(age)) return '';
-             if (age >= 28 && age <= 29) return '28-29 days';
+             if (age >= 28 && age <= 30) return '28-30 days';
              if (age >= 21 && age <= 27) return '21-27 days';
-             if (age >= 30) return '30+ days';
+             if (age >= 31) return '31+ days';
              return '0-20 days';
         };
 
@@ -135,8 +129,8 @@ async function performInitialProcessing() {
             newRow.push(claim.owner, (claim.noteText.match(/due\s*by?[:\s]*(\d{1,2}[\/-]\d{1,2}(?:[\/-]\d{2,4})?)/i) || [])[1] || '');
             
             claim.processedRow = newRow;
-            claim.defaultOwner = claim.owner; // Keep track of the initial assignment
-            claim.finalOwner = claim.owner;   // This can be changed by the user
+            claim.defaultOwner = claim.owner;
+            claim.finalOwner = claim.owner;
         });
 
         ui.displayStatus('Processing Complete. Please review and finalize.', 'success');
@@ -150,7 +144,6 @@ async function performInitialProcessing() {
 async function generateFinalReports() {
     ui.displayStatus('Generating final reports...', 'info', true);
     
-    // Apply user overrides from the assignment editor
     const noteOverrides = new Map();
     document.querySelectorAll('.assignment-override').forEach(select => { 
         if (select.value) noteOverrides.set(select.dataset.noteText, select.value); 
@@ -159,13 +152,12 @@ async function generateFinalReports() {
         const override = noteOverrides.get(claim.noteText || "No Note");
         if (override) {
             claim.finalOwner = override;
-            // Update the owner in the row that gets written to Excel
             claim.processedRow[claim.processedRow.length - 2] = override; 
         }
     });
 
     if (state.hasYesterdayFile) {
-        runDetailedCohortAnalysis(); // This function now lives here
+        runDetailedCohortAnalysis();
         state.cycleTimeMetrics = calculateCycleTimeMetrics(state.processedClaimsList);
     }
     
@@ -173,7 +165,6 @@ async function generateFinalReports() {
     const downloadsContainer = document.getElementById('download-links-container');
     downloadsContainer.innerHTML = '';
     
-    // Create download links for Excel reports
     createDownloadLink(buildWorkbook(state.processedClaimsList, `${clientName} Daily Action Report`), `${clientName} Overall Daily Action Report for ${ui.getFormattedDate()}.xlsx`, downloadsContainer);
     createDownloadLink(buildWorkbook(state.processedClaimsList.filter(c => c.finalOwner === 'Claims'), `${clientName} Claims - Action Report`, 'Claims'), `${clientName} Claims - Action Report for ${ui.getFormattedDate()}.xlsx`, downloadsContainer);
     createDownloadLink(buildWorkbook(state.processedClaimsList.filter(c => c.finalOwner === 'PV'), `${clientName} PV - Action Report`, 'PV'), `${clientName} PV - Action Report for ${ui.getFormattedDate()}.xlsx`, downloadsContainer);
@@ -213,12 +204,12 @@ function copyEmailText() {
         const todayStats = calculateStats(state.processedClaimsList);
         const formatStatLine = (today, yesterday) => `${today} (Yest. ${yesterday ?? 0})`;
         const createStatBlock = (title, statusKey) => {
-            const yestBlock = state.yesterdayStats?.[statusKey] || { total: 0, '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
-            const todayBlock = todayStats?.[statusKey] || { total: 0, '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
+            const yestBlock = state.yesterdayStats?.[statusKey] || { total: 0, '28-30': 0, '21-27': 0, '31+': 0, '0-20': 0 };
+            const todayBlock = todayStats?.[statusKey] || { total: 0, '28-30': 0, '21-27': 0, '31+': 0, '0-20': 0 };
             return `Number of total claims ${title}: ${formatStatLine(todayBlock.total, yestBlock.total)}\n` +
-               `CRITICAL (28-29 Days): ${formatStatLine(todayBlock['28-29'], yestBlock['28-29'])}\n` +
+               `CRITICAL (28-30 Days): ${formatStatLine(todayBlock['28-30'], yestBlock['28-30'])}\n` +
                `PRIORITY (21-27 Days): ${formatStatLine(todayBlock['21-27'], yestBlock['21-27'])}\n` +
-               `Backlog (30+ Days): ${formatStatLine(todayBlock['30+'], yestBlock['30+'])}\n` +
+               `Backlog (31+ Days): ${formatStatLine(todayBlock['31+'], yestBlock['31+'])}\n` +
                `Queue (0-20 Days): ${formatStatLine(todayBlock['0-20'], yestBlock['0-20'])}`;
         };
         
@@ -238,7 +229,6 @@ function copyEmailText() {
 }
 
 function runDetailedCohortAnalysis() {
-    // Reset workflow movement for this run
     state.workflowMovement = { pvToClaims: 0, claimsToPv: 0, criticalToBacklog: 0, criticalWorked: 0 };
     state.detailedMovementStats = {};
 
@@ -248,14 +238,13 @@ function runDetailedCohortAnalysis() {
 
     const getBucketFromAge = (age) => {
         if (isNaN(age)) return 'UNKNOWN';
-        if (age >= 28 && age <= 29) return 'Critical';
-        if (age >= 30) return 'Backlog';
+        if (age >= 28 && age <= 30) return 'Critical';
+        if (age >= 31) return 'Backlog';
         if (age >= 21 && age <= 27) return 'Priority';
         return 'Queue';
     };
     const getStateKey = (stateStr) => (stateStr || '').includes('MANAGEMENT') ? 'MANAGEMENTREVIEW' : (stateStr || '');
     
-    // 1. Group yesterday's claims into cohorts
     const yestCohorts = {};
     for (const [claimNumber, yestData] of state.yesterdayDataMap.entries()) {
         const yestState = getStateKey(yestData.state);
@@ -264,7 +253,6 @@ function runDetailedCohortAnalysis() {
         if (!yestCohorts[yestState][yestBucket]) yestCohorts[yestState][yestBucket] = [];
         yestCohorts[yestState][yestBucket].push(claimNumber);
 
-        // Check for PV/Claims workflow movement
         if(todayClaimsMap.has(claimNumber)){
             const todayOwner = todayClaimsMap.get(claimNumber).finalOwner;
             if(yestData.owner === 'PV' && todayOwner === 'Claims') state.workflowMovement.pvToClaims++;
@@ -272,7 +260,6 @@ function runDetailedCohortAnalysis() {
         }
     }
 
-    // 2. Analyze the destination of each cohort
     for(const yestState in yestCohorts){
         state.detailedMovementStats[yestState] = {};
         for(const yestBucket in yestCohorts[yestState]){
@@ -298,7 +285,6 @@ function runDetailedCohortAnalysis() {
         }
     }
 
-    // 3. Calculate critical claim movement summary
     if(state.detailedMovementStats.PEND && state.detailedMovementStats.PEND.Critical){
          const critPend = state.detailedMovementStats.PEND.Critical;
          state.workflowMovement.criticalWorked = (critPend.resolvedOrRemoved || 0) + (critPend.movedToPrebatch || 0);
@@ -308,7 +294,6 @@ function runDetailedCohortAnalysis() {
                  state.workflowMovement.criticalToBacklog += critPend.movedTo[dest];
              } else {
                 const [, newBucket] = dest.split('_');
-                // It counts as "worked" if it moved to any state that ISN'T still critical
                 if (newBucket !== 'Critical') {
                     state.workflowMovement.criticalWorked += critPend.movedTo[dest];
                 }
@@ -316,11 +301,9 @@ function runDetailedCohortAnalysis() {
          }
     }
      
-    // 4. Calculate claims that will become critical tomorrow and update UI
     const approachingCriticalCount = state.processedClaimsList.filter(claim => claim.cleanAge === 27).length;
     document.getElementById('moving-to-critical-count').textContent = approachingCriticalCount.toLocaleString();
     
-    // 5. Update the UI with summary stats
     document.getElementById('pv-to-claims-count').textContent = state.workflowMovement.pvToClaims.toLocaleString();
     document.getElementById('claims-to-pv-count').textContent = state.workflowMovement.claimsToPv.toLocaleString();
     document.getElementById('critical-to-backlog-count').textContent = state.workflowMovement.criticalToBacklog.toLocaleString();
