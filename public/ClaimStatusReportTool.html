@@ -723,7 +723,7 @@
         }
 
         // ===================================================================
-        // UPDATED PDF GENERATION LOGIC WITH NEW KPIs
+        // FINALIZED PDF GENERATION LOGIC
         // ===================================================================
 
         async function generatePdfReport() {
@@ -735,7 +735,6 @@
             doc.addPage();
             await createDetailedTablesPage(doc);
 
-            // Add footers to all pages
             const pageCount = doc.internal.getNumberOfPages();
             for (let i = 1; i <= pageCount; i++) {
                 doc.setPage(i);
@@ -749,7 +748,6 @@
             doc.save(`${clientName.toUpperCase()}_Daily_Claim-Flow_Analysis_${getFormattedDate()}.pdf`);
         }
         
-        // Helper function to format large numbers as strings (e.g., 1200 -> $1.2K, 1200000 -> $1.2M)
         function formatCurrency(value) {
             if (value === null || isNaN(value)) return '$0';
             if (value < 1000) return `$${value.toFixed(0)}`;
@@ -781,12 +779,8 @@
             const summaryText = doc.splitTextToSize(introText, 182);
             doc.text(summaryText, 14, 60);
 
-            // --- NEW KPI CALCULATIONS ---
             const config = gatherConfig();
-
-            // Financial KPIs
             let valueInPend = 0, deniedDollars = 0;
-            // Operational & Quality KPIs
             let pendAgeSum = 0, pendAgeCount = 0, oonCount = 0;
             const denialReasons = {};
             
@@ -813,25 +807,17 @@
             const topDenialReason = Object.keys(denialReasons).length > 0 ? Object.entries(denialReasons).sort((a,b) => b[1] - a[1])[0][0] : 'N/A';
             const oonPercent = processedClaimsList.length > 0 ? ((oonCount / processedClaimsList.length) * 100).toFixed(1) + '%' : 'N/A';
 
-            // Denial Overturn Rate
             let deniedYesterdayCount = 0;
-            if(yesterdayStats && yesterdayStats.DENY) {
-                deniedYesterdayCount = yesterdayStats.DENY.total;
-            }
+            if(yesterdayStats && yesterdayStats.DENY) { deniedYesterdayCount = yesterdayStats.DENY.total; }
             let overturnedCount = 0;
             if (detailedMovementStats.DENY) {
                 for (const bucket in detailedMovementStats.DENY) {
                     const cohort = detailedMovementStats.DENY[bucket];
                     overturnedCount += cohort.movedToPrebatch;
-                    for (const dest in cohort.movedTo) {
-                        if (dest.startsWith('APPROVED')) {
-                            overturnedCount += cohort.movedTo[dest];
-                        }
-                    }
+                    for (const dest in cohort.movedTo) { if (dest.startsWith('APPROVED')) { overturnedCount += cohort.movedTo[dest]; } }
                 }
             }
             const denialOverturnRate = deniedYesterdayCount > 0 ? ((overturnedCount / deniedYesterdayCount) * 100).toFixed(1) + '%' : 'N/A';
-
             const totalClaimsProcessed = Object.values(detailedMovementStats).flatMap(Object.values).reduce((s,c) => s + c.totalYesterday, 0);
 
             const kpis = [
@@ -855,7 +841,7 @@
             const rectHeight = 30;
 
             kpis.forEach((kpi, index) => {
-                if (index === 3) { // Move to the second row
+                if (index === 3) {
                     currentY += rectHeight + 5;
                     currentX = 14;
                 }
@@ -877,6 +863,7 @@
             doc.setFont('helvetica', 'bold');
             doc.text("Graphical Analysis - The Big Picture", 14, 20);
 
+            // UPDATED: Simplified chart renderer that does NOT draw numerical labels
             const renderChartToImage = async (canvasId, config, width, height) => {
                 const container = document.getElementById('chart-render-container');
                 const canvas = document.createElement('canvas');
@@ -888,42 +875,7 @@
                 return new Promise((resolve) => {
                     config.options.animation = {
                         onComplete: (animation) => {
-                            const chartInstance = animation.chart;
-                            const ctx = chartInstance.ctx;
-                            ctx.font = 'bold 12px Inter';
-                            ctx.textAlign = 'center';
-                            ctx.textBaseline = 'middle';
-                            ctx.fillStyle = '#fff';
-
-                            chartInstance.data.datasets.forEach((dataset, i) => {
-                                const meta = chartInstance.getDatasetMeta(i);
-                                meta.data.forEach((element, index) => {
-                                    const data = dataset.data[index];
-                                    let position;
-                                    if (config.type === 'doughnut' && data > 0) {
-                                        position = element.getCenterPoint();
-                                        ctx.fillStyle = '#000';
-                                        ctx.fillText(data, position.x, position.y);
-                                    } else if (config.options.indexAxis === 'y' && data > 0 && element.width > 15) {
-                                        position = { x: element.x - 20, y: element.y };
-                                        if (element.width < 30) { 
-                                            ctx.fillStyle = '#000';
-                                            position.x = element.x + 20;
-                                        }
-                                        ctx.fillText(data, position.x, position.y);
-                                    } else if (data > 0 && element.height > 15) {
-                                        position = { x: element.x, y: element.y + 15 };
-                                        if (element.height < 25) {
-                                           ctx.fillStyle = '#000';
-                                           position.y = element.y - 10;
-                                        }
-                                        ctx.fillText(data, position.x, position.y);
-                                    }
-                                    ctx.fillStyle = '#fff';
-                                });
-                            });
-                            
-                            const imgData = canvas.toDataURL('image/png');
+                            const imgData = animation.chart.toDataURL('image/png');
                             container.innerHTML = '';
                             resolve(imgData);
                         }
