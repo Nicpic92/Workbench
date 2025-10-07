@@ -50,9 +50,23 @@ export function buildWorkbook(claimsData, reportTitle, ownerFilter = null) {
         else if (claim.claimState === 'ONHOLD') { statusTab = 'OnHold'; tabOwner = 'PV'; }
         else if (claim.claimState === 'PEND') { statusTab = 'Pend'; tabOwner = 'Claims'; }
         else if (claim.claimState === 'DENY') { statusTab = 'Deny'; tabOwner = 'Claims'; }
-        else if (claim.claimState === 'PR') { statusTab = 'PayerRev'; tabOwner = 'Claims'; }
         
-        if (dsnpStatus && tabOwner && networkType && (ownerFilter === 'PV' || !isHighCost)) {
+        // START: New Payer Review (PR) Breakout Logic
+        if (claim.claimState === 'PR') {
+            const payerName = String(claim.originalRow[claim.payerIndex] || 'Unknown Payer').trim();
+            const sanitizedPayer = payerName.replace(/[\\\/\?\*\[\]]/g, '').substring(0, 25);
+            const tabKey = `PR - ${sanitizedPayer}`;
+            
+            if (!sheetsData[tabKey]) {
+                sheetsData[tabKey] = [state.fileHeaderRow];
+                tabMetadata[tabKey] = { owner: 'Claims', priority: 6 }; // Use priority 6 for PR tabs
+            }
+            sheetsData[tabKey].push(claim.processedRow);
+        }
+        // END: New Payer Review (PR) Breakout Logic
+
+        // MODIFIED: Exclude PR claims from the standard age-based breakout tabs
+        if (dsnpStatus && tabOwner && networkType && claim.claimState !== 'PR' && (ownerFilter === 'PV' || !isHighCost)) {
             let tabKey = '', priorityLevel = 0;
             if (claim.cleanAge >= 28 && claim.cleanAge <= 30) { priorityLevel = 1; tabKey = `CRITICAL (28-30d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
             else if (claim.cleanAge >= 21 && claim.cleanAge <= 27) { priorityLevel = 2; tabKey = `PRIORITY (21-27d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
@@ -100,6 +114,7 @@ export function buildWorkbook(claimsData, reportTitle, ownerFilter = null) {
     addSectionToCover("Priority 2: PRIORITY (21-27 days)", 2);
     addSectionToCover("Priority 3: Backlog (31+ days)", 3);
     addSectionToCover("W9 and Other Tasks", 5);
+    addSectionToCover("Payer Review (by Payer)", 6); // ADDED: New section for PR tabs
 
     const wb = XLSX.utils.book_new();
     const coverWS = XLSX.utils.aoa_to_sheet(coverPageData);
@@ -123,6 +138,7 @@ export function buildWorkbook(claimsData, reportTitle, ownerFilter = null) {
 
 // --- PDF Report Generation ---
 
+// START: Entire section is updated or new
 export async function generatePdfReport() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
@@ -130,6 +146,8 @@ export async function generatePdfReport() {
     await createTitlePage(doc);
     doc.addPage();
     await createChartsPage(doc);
+    doc.addPage();
+    createPivotTablesPage(doc); // New page added here
     doc.addPage();
     await createDetailedTablesPage(doc);
 
@@ -194,6 +212,85 @@ function aggregatePivotData(claimsList, config, isPrebatch) {
     return data;
 }
 
+/**
+ * Creates a new page in the PDF with two pivot tables.
+ * @param {jsPDF} doc - The jsPDF document instance.
+ */
+function createPivotTablesPage(doc) {
+    const config = gatherConfig();
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text("Claim Counts by Aging & Network Status", 14, 20);
+    let finalY = 25;
+
+    // --- Helper function to draw a single table ---
+    const drawPivotTable = (startY, title, subtitle, tableData) => {
+        const ageBuckets = ['0-20', '21-27', '28-30', '31+'];
+        let totalPar = 0;
+        let totalNonPar = 0;
+        
+        const body = ageBuckets.map(bucket => {
+            const parCount = tableData[bucket].par;
+            const nonParCount = tableData[bucket].nonPar;
+            totalPar += parCount;
+            totalNonPar += nonParCount;
+            return [
+                bucket,
+                parCount.toLocaleString(),
+                nonParCount.toLocaleString(),
+                (parCount + nonParCount).toLocaleString()
+            ];
+        });
+
+        const totalClaims = totalPar + totalNonPar;
+        const backlogPar = tableData['31+'].par;
+        const backlogNonPar = tableData['31+'].nonPar;
+
+        // Add percentage row to the body for styling
+        body.push([
+            { content: '31+ Percentage', styles: { fontStyle: 'bold', fillColor: [255, 235, 204] } },
+            { content: totalPar > 0 ? `${((backlogPar / totalPar) * 100).toFixed(1)}%` : '0.0%', styles: { fontStyle: 'bold' } },
+            { content: totalNonPar > 0 ? `${((backlogNonPar / totalNonPar) * 100).toFixed(1)}%` : '0.0%', styles: { fontStyle: 'bold' } },
+            { content: totalClaims > 0 ? `${(((backlogPar + backlogNonPar) / totalClaims) * 100).toFixed(1)}%` : '0.0%', styles: { fontStyle: 'bold' } },
+        ]);
+
+        doc.autoTable({
+            startY: startY,
+            head: [['Aging', 'Par', 'Non Par', 'Grand Total']],
+            body: body,
+            foot: [[
+                'Grand Total',
+                totalPar.toLocaleString(),
+                totalNonPar.toLocaleString(),
+                totalClaims.toLocaleString()
+            ]],
+            theme: 'grid',
+            headStyles: { fillColor: [0, 105, 140] },
+            footStyles: { fillColor: [220, 239, 245], textColor: [0, 0, 0], fontStyle: 'bold' },
+            didDrawPage: (data) => {
+                doc.setFontSize(12);
+                doc.setFont('helvetica', 'bold');
+                doc.text(title, data.settings.margin.left, startY - 8);
+
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'normal');
+                doc.setFillColor(255, 224, 204); // Light orange
+                doc.rect(data.settings.margin.left, startY - 4, 180, 5, 'F');
+                doc.text(subtitle, data.settings.margin.left + 2, startY);
+            },
+        });
+        return doc.autoTable.previous.finalY;
+    };
+
+    // --- Generate and draw the two tables ---
+    const prebatchPivotData = aggregatePivotData(state.prebatchClaims, config, true);
+    finalY = drawPivotTable(finalY, 'Prebatch Claim Counts', 'Filters: Clean Claims only, includes both DSNP and Non DSNP, Prebatch Only', prebatchPivotData);
+
+    const processedPivotData = aggregatePivotData(state.processedClaimsList, config, false);
+    drawPivotTable(finalY + 20, 'Active Claim Counts', 'Filters: Clean Claims only, includes both DSNP and Non DSNP, All but Prebatch', processedPivotData);
+}
+// END: Section complete
+
 function formatCurrency(value) {
     if (value === null || isNaN(value)) return '$0';
     if (value < 1000) return `$${value.toFixed(0)}`;
@@ -201,6 +298,7 @@ function formatCurrency(value) {
     return `$${(value / 1000000).toFixed(1)}M`;
 }
 
+// ... The rest of the functions (createTitlePage, createChartsPage, createDetailedTablesPage) remain unchanged from the previous version.
 async function createTitlePage(doc) {
     const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
     let currentY = 20;
@@ -355,76 +453,30 @@ async function createTitlePage(doc) {
         currentX += rectWidth + 5;
     });
     
-    // START: Moved pivot tables here from their own function
-    let finalY = kpiY + rectHeight + 10;
-    
-    // --- Helper function to draw a single table ---
-    const drawPivotTable = (startY, title, tableData) => {
-        const ageBuckets = ['0-20', '21-27', '28-30', '31+'];
-        let totalPar = 0;
-        let totalNonPar = 0;
-        
-        const body = ageBuckets.map(bucket => {
-            const parCount = tableData[bucket].par;
-            const nonParCount = tableData[bucket].nonPar;
-            totalPar += parCount;
-            totalNonPar += nonParCount;
-            return [
-                bucket,
-                parCount.toLocaleString(),
-                nonParCount.toLocaleString(),
-                (parCount + nonParCount).toLocaleString()
-            ];
-        });
+    let finalY = kpiY + rectHeight + 5;
 
-        const totalClaims = totalPar + totalNonPar;
-        const backlogPar = tableData['31+'].par;
-        const backlogNonPar = tableData['31+'].nonPar;
+    if (Object.keys(state.cycleTimeMetrics).length > 0) {
+         doc.setFontSize(16);
+         doc.setFont('helvetica', 'bold');
+         doc.text('Claims Cycle Time Performance', 14, finalY);
+         doc.line(14, finalY + 2, 85, finalY + 2);
 
-        body.push([
-            { content: '31+ Percentage', styles: { fontStyle: 'bold', fillColor: [255, 235, 204] } },
-            { content: totalPar > 0 ? `${((backlogPar / totalPar) * 100).toFixed(1)}%` : '0.0%', styles: { fontStyle: 'bold' } },
-            { content: totalNonPar > 0 ? `${((backlogNonPar / totalNonPar) * 100).toFixed(1)}%` : '0.0%', styles: { fontStyle: 'bold' } },
-            { content: totalClaims > 0 ? `${(((backlogPar + backlogNonPar) / totalClaims) * 100).toFixed(1)}%` : '0.0%', styles: { fontStyle: 'bold' } },
-        ]);
+         const tableBody = [
+             [`95% of Clean/Non-Par Claims in 30 Days`, state.cycleTimeMetrics.cleanNonPar30],
+             [`All Other Non-Par Claims in 60 Days`, state.cycleTimeMetrics.otherNonPar60],
+             [`95% of Clean/Par Claims in 30 Days`, state.cycleTimeMetrics.cleanPar30],
+             [`All Other Par Claims in 60 Days`, state.cycleTimeMetrics.otherPar60],
+         ];
 
-        doc.autoTable({
-            startY: startY,
-            head: [['Aging', 'Par', 'Non Par', 'Grand Total']],
-            body: body,
-            foot: [['Grand Total', totalPar.toLocaleString(), totalNonPar.toLocaleString(), totalClaims.toLocaleString()]],
-            theme: 'grid',
-            headStyles: { fillColor: [0, 105, 140] },
-            footStyles: { fillColor: [220, 239, 245], textColor: [0, 0, 0], fontStyle: 'bold' },
-            didDrawPage: (data) => {
-                doc.setFontSize(12);
-                doc.setFont('helvetica', 'bold');
-                doc.text(title, data.settings.margin.left, startY - 5);
-            },
-        });
-        return doc.autoTable.previous.finalY;
-    };
-    
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Claim Counts by Aging & Network Status', 14, finalY);
-    doc.line(14, finalY + 2, 110, finalY + 2);
-    finalY += 8;
-
-    if (finalY + 50 > 290) { // Check if there's enough space for at least one table
-        doc.addPage();
-        finalY = 20;
+         doc.autoTable({
+             startY: finalY + 5,
+             head: [['Performance Measure', 'Current Performance']],
+             body: tableBody,
+             theme: 'grid',
+             headStyles: { fillColor: [41, 128, 186] },
+         });
+         finalY = doc.autoTable.previous.finalY;
     }
-    const prebatchPivotData = aggregatePivotData(state.prebatchClaims, config, true);
-    finalY = drawPivotTable(finalY, 'Prebatch Claim Counts', prebatchPivotData);
-
-    if (finalY + 50 > 290) { 
-        doc.addPage();
-        finalY = 20;
-    }
-    const processedPivotData = aggregatePivotData(state.processedClaimsList, config, false);
-    drawPivotTable(finalY + 10, 'Active Claim Counts', processedPivotData);
-    // END: Moved pivot tables section
 }
 
 async function createChartsPage(doc) {
