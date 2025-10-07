@@ -15,8 +15,19 @@ export function displayStatus(message, type, showLoader = false) {
     document.getElementById('processBtn').disabled = !!showLoader;
 }
 
+// START: New function to show configuration warnings
+export function displayWarning(message) {
+    const warningContainer = document.getElementById('warning-container');
+    const warningMessage = document.getElementById('warning-message');
+    if (warningContainer && warningMessage) {
+        warningMessage.textContent = message;
+        warningContainer.classList.remove('hidden');
+    }
+}
+// END: New function
+
 export function resetUI() {
-    ['review-container', 'final-downloads-container', 'movement-summary-container', 'approaching-critical-container', 'prebatch-container'].forEach(id => {
+    ['review-container', 'final-downloads-container', 'movement-summary-container', 'approaching-critical-container', 'prebatch-container', 'warning-container'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.add('hidden');
     });
@@ -55,12 +66,10 @@ function displayApproachingCriticalTable() {
     const container = document.getElementById('approaching-critical-container');
     const tableContainer = document.getElementById('approaching-critical-table-container');
 
-    // START: Bug fix - Update the summary count when this table is displayed
     const countElement = document.getElementById('moving-to-critical-count');
     if (countElement) {
         countElement.textContent = approachingCriticalClaims.length.toLocaleString();
     }
-    // END: Bug fix
 
     if (approachingCriticalClaims.length > 0) {
         let tableHtml = `
@@ -135,7 +144,6 @@ function displayAssignmentEditor() {
             assignmentContainer.innerHTML += categoryHtml;
         });
 
-        // Add event listeners for bulk assignment dropdowns
         document.querySelectorAll('.category-assign').forEach(select => {
             select.addEventListener('change', (e) => {
                 const targetCategory = e.target.dataset.categoryTarget;
