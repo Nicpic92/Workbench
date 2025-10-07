@@ -160,13 +160,6 @@ export async function generatePdfReport() {
     doc.save(`${clientName.toUpperCase()}_Daily_Claim-Flow_Analysis_${getFormattedDate()}.pdf`);
 }
 
-/**
- * Aggregates claim data into aging buckets for pivot tables.
- * @param {Array} claimsList - The list of claims to process.
- * @param {Object} config - The column configuration object.
- * @param {boolean} isPrebatch - True if processing prebatch claims (which have a different data structure).
- * @returns {Object} Aggregated data structure.
- */
 function aggregatePivotData(claimsList, config, isPrebatch) {
     const data = {
         '0-20': { par: 0, nonPar: 0 },
@@ -182,12 +175,7 @@ function aggregatePivotData(claimsList, config, isPrebatch) {
             continue;
         }
 
-        // ADDED COMMENT: The config.networkStatusIndex corresponds to the column letter (e.g., 'V')
-        // set in the "Network Status (Par/Non-Par)" input field on the webpage.
         const networkStatusValue = String(row[config.networkStatusIndex] || '');
-
-        // ADDED COMMENT: The logic checks if the text in that column contains "OUT".
-        // If it does, it's Non-Par. Otherwise, it's considered Par.
         const isNonPar = networkStatusValue.toUpperCase().includes('OUT');
         
         const cleanAge = isPrebatch ? parseInt(row[config.cleanAgeIndex], 10) : claim.cleanAge;
@@ -211,20 +199,14 @@ function aggregatePivotData(claimsList, config, isPrebatch) {
     return data;
 }
 
-/**
- * Creates a new page in the PDF with two pivot tables.
- * @param {jsPDF} doc - The jsPDF document instance.
- */
 function createPivotTablesPage(doc) {
     const config = gatherConfig();
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
     doc.text("Claim Counts by Aging & Network Status", 14, 20);
     
-    // MODIFIED: Increased the starting Y position to prevent title overlap
     let finalY = 30;
 
-    // --- Helper function to draw a single table ---
     const drawPivotTable = (startY, title, subtitle, tableData) => {
         const ageBuckets = ['0-20', '21-27', '28-30', '31+'];
         let totalPar = 0;
@@ -445,30 +427,7 @@ async function createTitlePage(doc) {
         currentX += rectWidth + 5;
     });
     
-    let finalY = kpiY + rectHeight + 5;
-
-    if (Object.keys(state.cycleTimeMetrics).length > 0) {
-         doc.setFontSize(16);
-         doc.setFont('helvetica', 'bold');
-         doc.text('Claims Cycle Time Performance', 14, finalY);
-         doc.line(14, finalY + 2, 85, finalY + 2);
-
-         const tableBody = [
-             [`95% of Clean/Non-Par Claims in 30 Days`, state.cycleTimeMetrics.cleanNonPar30],
-             [`All Other Non-Par Claims in 60 Days`, state.cycleTimeMetrics.otherNonPar60],
-             [`95% of Clean/Par Claims in 30 Days`, state.cycleTimeMetrics.cleanPar30],
-             [`All Other Par Claims in 60 Days`, state.cycleTimeMetrics.otherPar60],
-         ];
-
-         doc.autoTable({
-             startY: finalY + 5,
-             head: [['Performance Measure', 'Current Performance']],
-             body: tableBody,
-             theme: 'grid',
-             headStyles: { fillColor: [41, 128, 186] },
-         });
-         finalY = doc.autoTable.previous.finalY;
-    }
+    // REMOVED: The Claims Cycle Time Performance table has been deleted from this function.
 }
 
 async function createChartsPage(doc) {
