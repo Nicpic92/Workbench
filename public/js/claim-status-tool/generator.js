@@ -152,7 +152,8 @@ export async function generatePdfReport() {
         doc.setPage(i);
         doc.setFontSize(8);
         doc.setTextColor(150);
-        doc.text('Spreadsheet Simplicity - Confidential & Proprietary', 14, 290);
+        // REMOVED: The following line that added the confidential footer has been deleted.
+        // doc.text('Spreadsheet Simplicity - Confidential & Proprietary', 14, 290);
         doc.text(`Page ${i} of ${pageCount}`, 190, 290);
     }
 
@@ -205,7 +206,8 @@ function createPivotTablesPage(doc) {
     doc.setFont('helvetica', 'bold');
     doc.text("Claim Counts by Aging & Network Status", 14, 20);
     
-    let finalY = 30;
+    // MODIFIED: Increased the starting Y position further to guarantee no overlap.
+    let finalY = 35;
 
     const drawPivotTable = (startY, title, subtitle, tableData) => {
         const ageBuckets = ['0-20', '21-27', '28-30', '31+'];
@@ -426,8 +428,6 @@ async function createTitlePage(doc) {
         doc.text(label, currentX + rectWidth/2, kpiY + 23, { align: 'center'});
         currentX += rectWidth + 5;
     });
-    
-    // REMOVED: The Claims Cycle Time Performance table has been deleted from this function.
 }
 
 async function createChartsPage(doc) {
