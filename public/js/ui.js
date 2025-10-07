@@ -44,9 +44,59 @@ export function displayReviewStep() {
         document.getElementById('prebatch-container').classList.add('hidden');
     }
 
+    displayApproachingCriticalTable();
     displayAssignmentEditor();
 
     document.getElementById('review-container').classList.remove('hidden');
+}
+
+function displayApproachingCriticalTable() {
+    const approachingCriticalClaims = state.processedClaimsList.filter(claim => claim.cleanAge === 27);
+    const container = document.getElementById('approaching-critical-container');
+    const tableContainer = document.getElementById('approaching-critical-table-container');
+
+    // START: Bug fix - Update the summary count when this table is displayed
+    const countElement = document.getElementById('moving-to-critical-count');
+    if (countElement) {
+        countElement.textContent = approachingCriticalClaims.length.toLocaleString();
+    }
+    // END: Bug fix
+
+    if (approachingCriticalClaims.length > 0) {
+        let tableHtml = `
+            <div class="table-container border rounded-lg max-h-64 overflow-y-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50 sticky top-0">
+                        <tr>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Claim #</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Payer</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total Charges</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Claim State</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Current Owner</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">`;
+
+        for (const claim of approachingCriticalClaims) {
+            const totalCharges = (parseFloat(String(claim.originalRow[claim.totalChargesIndex]).replace(/[^0-9.-]/g, '')) || 0)
+                                 .toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+            
+            tableHtml += `
+                <tr>
+                    <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">${claim.claimNumber}</td>
+                    <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-700">${claim.originalRow[claim.payerIndex] || 'N/A'}</td>
+                    <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-700">${totalCharges}</td>
+                    <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-700">${claim.claimState}</td>
+                    <td class="px-4 py-2 whitespace-nowrap text-sm font-semibold text-gray-800">${claim.finalOwner}</td>
+                </tr>`;
+        }
+
+        tableHtml += `</tbody></table></div>`;
+        tableContainer.innerHTML = tableHtml;
+        container.classList.remove('hidden');
+    } else {
+        container.classList.add('hidden');
+    }
 }
 
 function displayAssignmentEditor() {
