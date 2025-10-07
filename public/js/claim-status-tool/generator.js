@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { getFormattedDate } from './ui.js';
-import { gatherConfig } from './config.js'; // Needed for PDF generation
-import { calculateStats } from './processing.js'; // Needed for email text
+import { gatherConfig } from './config.js'; 
+import { calculateStats } from './processing.js'; 
 
 // This module is responsible for generating all final file outputs (Excel, PDF, etc.)
 
@@ -21,15 +21,15 @@ export function buildWorkbook(claimsData, reportTitle, ownerFilter = null) {
     if (ownerFilter !== 'PV') sheetsData[highDollarSheetName] = [state.fileHeaderRow];
     
     const tabMetadata = {};
-    const overallSummary = { par: { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0, total: 0 }, nonpar: { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0, total: 0 } };
+    const overallSummary = { par: { '28-30': 0, '21-27': 0, '31+': 0, '0-20': 0, total: 0 }, nonpar: { '28-30': 0, '21-27': 0, '31+': 0, '0-20': 0, total: 0 } };
 
     for (const claim of claimsData) {
         const networkType = String(claim.originalRow[claim.networkStatusIndex] || '').toUpperCase().includes('OUT') ? 'nonpar' : 'par';
         overallSummary[networkType].total++;
         if (!isNaN(claim.cleanAge)) {
-            if (claim.cleanAge >= 28 && claim.cleanAge <= 29) overallSummary[networkType]['28-29']++;
+            if (claim.cleanAge >= 28 && claim.cleanAge <= 30) overallSummary[networkType]['28-30']++;
             else if (claim.cleanAge >= 21 && claim.cleanAge <= 27) overallSummary[networkType]['21-27']++;
-            else if (claim.cleanAge >= 30) overallSummary[networkType]['30+']++;
+            else if (claim.cleanAge >= 31) overallSummary[networkType]['31+']++;
             else overallSummary[networkType]['0-20']++;
         }
         
@@ -54,9 +54,9 @@ export function buildWorkbook(claimsData, reportTitle, ownerFilter = null) {
         
         if (dsnpStatus && tabOwner && networkType && (ownerFilter === 'PV' || !isHighCost)) {
             let tabKey = '', priorityLevel = 0;
-            if (claim.cleanAge >= 28 && claim.cleanAge <= 29) { priorityLevel = 1; tabKey = `CRITICAL (28-29d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
+            if (claim.cleanAge >= 28 && claim.cleanAge <= 30) { priorityLevel = 1; tabKey = `CRITICAL (28-30d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
             else if (claim.cleanAge >= 21 && claim.cleanAge <= 27) { priorityLevel = 2; tabKey = `PRIORITY (21-27d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
-            else if (claim.cleanAge >= 30) { priorityLevel = 3; tabKey = `Backlog (30+d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
+            else if (claim.cleanAge >= 31) { priorityLevel = 3; tabKey = `Backlog (31+d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
             else { priorityLevel = 4; tabKey = `Queue (0-20d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
             
             if (!(ownerFilter && priorityLevel === 4)) {
@@ -79,7 +79,7 @@ export function buildWorkbook(claimsData, reportTitle, ownerFilter = null) {
         }
     }
 
-    const coverPageData = [[reportTitle], [`Date: ${getFormattedDate()}`], [], ["Overall Claim Summary"], ["Category", "28-29 Days (Critical)", "21-27 Days (Priority)", "30+ Days (Backlog)", "0-20 Days (Queue)", "Total Active Claims"], ["Par Claims", overallSummary.par['28-29'], overallSummary.par['21-27'], overallSummary.par['30+'], overallSummary.par['0-20'], overallSummary.par.total], ["Non-Par Claims", overallSummary.nonpar['28-29'], overallSummary.nonpar['21-27'], overallSummary.nonpar['30+'], overallSummary.nonpar['0-20'], overallSummary.nonpar.total], [], ["Core Strategy: Focus on claims nearing the 30-day threshold. Work tabs in priority order."], []];
+    const coverPageData = [[reportTitle], [`Date: ${getFormattedDate()}`], [], ["Overall Claim Summary"], ["Category", "28-30 Days (Critical)", "21-27 Days (Priority)", "31+ Days (Backlog)", "0-20 Days (Queue)", "Total Active Claims"], ["Par Claims", overallSummary.par['28-30'], overallSummary.par['21-27'], overallSummary.par['31+'], overallSummary.par['0-20'], overallSummary.par.total], ["Non-Par Claims", overallSummary.nonpar['28-30'], overallSummary.nonpar['21-27'], overallSummary.nonpar['31+'], overallSummary.nonpar['0-20'], overallSummary.nonpar.total], [], ["Core Strategy: Focus on claims nearing the 31-day threshold. Work tabs in priority order."], []];
     const allBreakoutTabs = Object.keys(tabMetadata);
 
     const addSectionToCover = (title, priority) => {
@@ -96,9 +96,9 @@ export function buildWorkbook(claimsData, reportTitle, ownerFilter = null) {
         }
     };
     
-    addSectionToCover("Priority 1: CRITICAL (28-29 days)", 1);
+    addSectionToCover("Priority 1: CRITICAL (28-30 days)", 1);
     addSectionToCover("Priority 2: PRIORITY (21-27 days)", 2);
-    addSectionToCover("Priority 3: Backlog (30+ days)", 3);
+    addSectionToCover("Priority 3: Backlog (31+ days)", 3);
     addSectionToCover("W9 and Other Tasks", 5);
 
     const wb = XLSX.utils.book_new();
@@ -120,7 +120,6 @@ export function buildWorkbook(claimsData, reportTitle, ownerFilter = null) {
     
     return new Blob([XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
-
 
 // --- PDF Report Generation ---
 
@@ -221,8 +220,8 @@ async function createTitlePage(doc) {
     const criticalSuccessRate = totalCriticalYesterday > 0 ? ((state.workflowMovement.criticalWorked / totalCriticalYesterday) * 100).toFixed(1) + '%' : 'N/A';
 
     const todayStats = calculateStats(state.processedClaimsList);
-    const yestBacklog = state.yesterdayStats?.PEND?.['30+'] ?? 0;
-    const todayBacklog = todayStats?.PEND?.['30+'] ?? 0;
+    const yestBacklog = state.yesterdayStats?.PEND?.['31+'] ?? 0;
+    const todayBacklog = todayStats?.PEND?.['31+'] ?? 0;
     const backlogChange = todayBacklog - yestBacklog;
     let backlogText;
     if (backlogChange > 0) backlogText = `increased by ${backlogChange} claims.`;
@@ -233,7 +232,7 @@ async function createTitlePage(doc) {
         `A total of ${totalClaimsProcessed.toLocaleString()} claims reached a final adjudication status (Approved or Denied).`,
         `The team achieved a ${criticalSuccessRate} success rate in resolving claims from yesterday's critical aging bucket.`,
         `Approximately ${formatCurrency(valueRecoveredFromDenials)} in revenue was recovered from overturned denials.`,
-        `The high-priority Backlog (30+ Days) inventory has ${backlogText}`
+        `The high-priority Backlog (31+ Days) inventory has ${backlogText}`
     ];
 
     doc.setFontSize(11);
