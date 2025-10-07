@@ -755,6 +755,9 @@
             return `$${(value / 1000000).toFixed(1)}M`;
         }
         
+        // ===================================================================
+        // THIS ENTIRE FUNCTION HAS BEEN UPDATED
+        // ===================================================================
         async function createTitlePage(doc) {
             const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
             
@@ -818,7 +821,21 @@
                 }
             }
             const denialOverturnRate = deniedYesterdayCount > 0 ? ((overturnedCount / deniedYesterdayCount) * 100).toFixed(1) + '%' : 'N/A';
-            const totalClaimsProcessed = Object.values(detailedMovementStats).flatMap(Object.values).reduce((s,c) => s + c.totalYesterday, 0);
+            
+            // --- NEW LOGIC FOR TOTAL CLAIMS PROCESSED ---
+            let totalClaimsProcessed = 0;
+            for (const state in detailedMovementStats) {
+                for (const bucket in detailedMovementStats[state]) {
+                    const cohort = detailedMovementStats[state][bucket];
+                    for (const destination in cohort.movedTo) {
+                        // A claim is "processed" if it moved to an Approved or Deny status
+                        if (destination.startsWith('APPROVED') || destination.startsWith('DENY')) {
+                            totalClaimsProcessed += cohort.movedTo[destination];
+                        }
+                    }
+                }
+            }
+            // --- END OF NEW LOGIC ---
 
             const kpis = [
                 { label: 'Total Claims Processed', value: totalClaimsProcessed.toLocaleString() },
