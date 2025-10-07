@@ -760,58 +760,114 @@
         // ===================================================================
         async function createTitlePage(doc) {
             const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
-            
+            let currentY = 20;
+
             doc.setFontSize(22);
             doc.setFont('helvetica', 'bold');
-            doc.text('Daily Claim-Flow Analysis', 14, 20);
-
+            doc.text('Daily Claim-Flow Analysis', 14, currentY);
+            currentY += 8;
+            
             doc.setFontSize(14);
             doc.setFont('helvetica', 'normal');
-            doc.text(`Prepared for: ${clientName}`, 14, 28);
-            doc.text(`Date: ${getFormattedDate()}`, 14, 34);
+            doc.text(`Prepared for: ${clientName}`, 14, currentY);
+            currentY += 6;
+            doc.text(`Date: ${getFormattedDate()}`, 14, currentY);
+            currentY += 16;
 
             doc.setFontSize(16);
             doc.setFont('helvetica', 'bold');
-            doc.text('Introduction', 14, 50);
+            doc.text('Introduction', 14, currentY);
             doc.setLineWidth(0.5);
-            doc.line(14, 52, 48, 52);
+            doc.line(14, currentY + 2, 48, currentY + 2);
+            currentY += 8;
 
             const introText = "This report provides a daily analysis of claim inventory movement and highlights key operational metrics. The following pages offer a visual and statistical breakdown of claim cohorts to support workflow management and strategic oversight.";
             doc.setFontSize(11);
             doc.setFont('helvetica', 'normal');
             const summaryText = doc.splitTextToSize(introText, 182);
-            doc.text(summaryText, 14, 60);
+            doc.text(summaryText, 14, currentY);
+            currentY += (summaryText.length * 5) + 8;
+            
+            // --- NEW SUMMARY OF FINDINGS SECTION ---
+            doc.setFontSize(16);
+            doc.setFont('helvetica', 'bold');
+            doc.text('Summary of Findings', 14, currentY);
+            doc.setLineWidth(0.5);
+            doc.line(14, currentY + 2, 65, currentY + 2);
+            currentY += 8;
 
+            // --- Calculations for Summary ---
             const config = gatherConfig();
+            
+            let totalClaimsProcessed = 0;
+            for (const state in detailedMovementStats) {
+                for (const bucket in detailedMovementStats[state]) {
+                    const cohort = detailedMovementStats[state][bucket];
+                    for (const destination in cohort.movedTo) {
+                        if (destination.startsWith('APPROVED') || destination.startsWith('DENY')) {
+                            totalClaimsProcessed += cohort.movedTo[destination];
+                        }
+                    }
+                }
+            }
+
+            let valueRecoveredFromDenials = 0;
+            const todayClaimsMap = new Map(processedClaimsList.map(c => [c.claimNumber, c]));
+            for (const [claimNumber, yestData] of yesterdayDataMap.entries()) {
+                if (yestData.state === 'DENY') {
+                    const todayClaim = todayClaimsMap.get(claimNumber);
+                    if (todayClaim && (todayClaim.claimState === 'APPROVED' || todayClaim.claimState.includes('PREBATCH'))) {
+                         const charges = parseFloat(String(todayClaim.originalRow[config.totalChargesIndex]).replace(/[^0-9.-]/g, '')) || 0;
+                         valueRecoveredFromDenials += charges;
+                    }
+                }
+            }
+
+            const totalCriticalYesterday = detailedMovementStats.PEND?.Critical?.totalYesterday || 0;
+            const criticalSuccessRate = totalCriticalYesterday > 0 ? ((workflowMovement.criticalWorked / totalCriticalYesterday) * 100).toFixed(1) + '%' : 'N/A';
+
+            const todayStats = calculateStats(processedClaimsList);
+            const yestBacklog = yesterdayStats?.PEND?.['30+'] ?? 0;
+            const todayBacklog = todayStats?.PEND?.['30+'] ?? 0;
+            const backlogChange = todayBacklog - yestBacklog;
+            let backlogText;
+            if (backlogChange > 0) backlogText = `increased by ${backlogChange} claims.`;
+            else if (backlogChange < 0) backlogText = `decreased by ${Math.abs(backlogChange)} claims.`;
+            else backlogText = "remained stable.";
+
+            const summaryPoints = [
+                `A total of ${totalClaimsProcessed.toLocaleString()} claims reached a final adjudication status (Approved or Denied).`,
+                `The team achieved a ${criticalSuccessRate} success rate in resolving claims from yesterday's critical aging bucket.`,
+                `Approximately ${formatCurrency(valueRecoveredFromDenials)} in revenue was recovered from overturned denials.`,
+                `The high-priority Backlog (30+ Days) inventory has ${backlogText}`
+            ];
+
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'normal');
+            summaryPoints.forEach(point => {
+                doc.text("•", 16, currentY);
+                const pointText = doc.splitTextToSize(point, 172);
+                doc.text(pointText, 22, currentY);
+                currentY += (pointText.length * 5) + 2; // Add a little space between bullet points
+            });
+            // --- END OF SUMMARY SECTION ---
+
             let valueInPend = 0, deniedDollars = 0;
             let pendAgeSum = 0, pendAgeCount = 0, oonCount = 0;
-            const denialReasons = {};
             
             processedClaimsList.forEach(claim => {
                 const charges = parseFloat(String(claim.originalRow[config.totalChargesIndex]).replace(/[^0-9.-]/g, '')) || 0;
                 if(claim.claimState === 'PEND') {
                     valueInPend += charges;
-                    if (!isNaN(claim.cleanAge)) {
-                        pendAgeSum += claim.cleanAge;
-                        pendAgeCount++;
-                    }
+                    if (!isNaN(claim.cleanAge)) { pendAgeSum += claim.cleanAge; pendAgeCount++; }
                 }
-                if(claim.claimState === 'DENY') {
-                    deniedDollars += charges;
-                    const reason = claim.noteText || 'No Reason Cited';
-                    denialReasons[reason] = (denialReasons[reason] || 0) + 1;
-                }
-                if(String(claim.originalRow[config.networkStatusIndex] || '').toUpperCase().includes('OUT')) {
-                    oonCount++;
-                }
+                if(claim.claimState === 'DENY') deniedDollars += charges;
+                if(String(claim.originalRow[config.networkStatusIndex] || '').toUpperCase().includes('OUT')) oonCount++;
             });
 
             const avgPendAge = pendAgeCount > 0 ? (pendAgeSum / pendAgeCount).toFixed(1) + ' Days' : 'N/A';
-            const topDenialReason = Object.keys(denialReasons).length > 0 ? Object.entries(denialReasons).sort((a,b) => b[1] - a[1])[0][0] : 'N/A';
             const oonPercent = processedClaimsList.length > 0 ? ((oonCount / processedClaimsList.length) * 100).toFixed(1) + '%' : 'N/A';
-
-            let deniedYesterdayCount = 0;
-            if(yesterdayStats && yesterdayStats.DENY) { deniedYesterdayCount = yesterdayStats.DENY.total; }
+            const deniedYesterdayCount = yesterdayStats?.DENY?.total || 0;
             let overturnedCount = 0;
             if (detailedMovementStats.DENY) {
                 for (const bucket in detailedMovementStats.DENY) {
@@ -822,21 +878,6 @@
             }
             const denialOverturnRate = deniedYesterdayCount > 0 ? ((overturnedCount / deniedYesterdayCount) * 100).toFixed(1) + '%' : 'N/A';
             
-            // --- NEW LOGIC FOR TOTAL CLAIMS PROCESSED ---
-            let totalClaimsProcessed = 0;
-            for (const state in detailedMovementStats) {
-                for (const bucket in detailedMovementStats[state]) {
-                    const cohort = detailedMovementStats[state][bucket];
-                    for (const destination in cohort.movedTo) {
-                        // A claim is "processed" if it moved to an Approved or Deny status
-                        if (destination.startsWith('APPROVED') || destination.startsWith('DENY')) {
-                            totalClaimsProcessed += cohort.movedTo[destination];
-                        }
-                    }
-                }
-            }
-            // --- END OF NEW LOGIC ---
-
             const kpis = [
                 { label: 'Total Claims Processed', value: totalClaimsProcessed.toLocaleString() },
                 { label: 'Value in PEND Inventory', value: formatCurrency(valueInPend) },
@@ -846,31 +887,31 @@
                 { label: 'Out-of-Network %', value: oonPercent }
             ];
 
-            const kpiStartY = 120;
+            const kpiStartY = currentY + 10; // Dynamic start based on summary text
             doc.setFontSize(16);
             doc.setFont('helvetica', 'bold');
             doc.text('Key Performance Indicators', 14, kpiStartY);
             doc.line(14, kpiStartY + 2, 70, kpiStartY + 2);
             
             let currentX = 14;
-            let currentY = kpiStartY + 10;
+            let kpiY = kpiStartY + 10;
             const rectWidth = 58;
             const rectHeight = 30;
 
             kpis.forEach((kpi, index) => {
                 if (index === 3) {
-                    currentY += rectHeight + 5;
+                    kpiY += rectHeight + 5;
                     currentX = 14;
                 }
                 doc.setFillColor(240, 240, 255);
-                doc.roundedRect(currentX, currentY, rectWidth, rectHeight, 3, 3, 'F');
+                doc.roundedRect(currentX, kpiY, rectWidth, rectHeight, 3, 3, 'F');
                 doc.setFontSize(18);
                 doc.setFont('helvetica', 'bold');
-                doc.text(kpi.value, currentX + rectWidth/2, currentY + 15, { align: 'center'});
+                doc.text(kpi.value, currentX + rectWidth/2, kpiY + 15, { align: 'center'});
                 doc.setFontSize(9);
                 doc.setFont('helvetica', 'normal');
                 const label = doc.splitTextToSize(kpi.label, rectWidth - 5);
-                doc.text(label, currentX + rectWidth/2, currentY + 23, { align: 'center'});
+                doc.text(label, currentX + rectWidth/2, kpiY + 23, { align: 'center'});
                 currentX += rectWidth + 5;
             });
         }
@@ -880,7 +921,6 @@
             doc.setFont('helvetica', 'bold');
             doc.text("Graphical Analysis - The Big Picture", 14, 20);
 
-            // CORRECTED FUNCTION
             const renderChartToImage = async (canvasId, config, width, height) => {
                 const container = document.getElementById('chart-render-container');
                 const canvas = document.createElement('canvas');
@@ -896,7 +936,6 @@
                             ...config.options,
                             animation: {
                                 onComplete: () => {
-                                    // CORRECTED: Call toDataURL() on the canvas element itself.
                                     const imgData = chartInstance.canvas.toDataURL('image/png');
                                     chartInstance.destroy();
                                     container.innerHTML = '';
