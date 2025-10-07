@@ -15,16 +15,21 @@ export function displayStatus(message, type, showLoader = false) {
     document.getElementById('processBtn').disabled = !!showLoader;
 }
 
-// START: New function to show configuration warnings
+// MODIFIED: This function now displays a more prominent warning
 export function displayWarning(message) {
     const warningContainer = document.getElementById('warning-container');
     const warningMessage = document.getElementById('warning-message');
+    const editorDescription = document.getElementById('assignment-editor-description');
+
     if (warningContainer && warningMessage) {
         warningMessage.textContent = message;
         warningContainer.classList.remove('hidden');
     }
+    // Also add the warning directly to the assignment editor for high visibility
+    if(editorDescription) {
+        editorDescription.innerHTML = `<strong class="text-red-600">Action Required:</strong> ${message}`;
+    }
 }
-// END: New function
 
 export function resetUI() {
     ['review-container', 'final-downloads-container', 'movement-summary-container', 'approaching-critical-container', 'prebatch-container', 'warning-container'].forEach(id => {
@@ -127,11 +132,20 @@ function displayAssignmentEditor() {
         }
     });
 
+    // MODIFIED: Check if the warning is already displayed. If not, proceed as normal.
+    // The warning function now handles the description text.
+    const editorDescription = document.getElementById('assignment-editor-description');
+    if (editorDescription.textContent.includes('Action Required')) {
+        // If the warning is active, just show a simplified message below it.
+        assignmentContainer.innerHTML += `<div class="text-center py-4 text-gray-500 border rounded-lg bg-gray-50">Please correct the column configuration above to see note categories.</div>`;
+        return;
+    }
+
     if (uniqueNoteCount === 0) {
-        document.getElementById('assignment-editor-description').textContent = "No notes were found in the report to assign.";
+        editorDescription.textContent = "No notes were found in the report to assign.";
         assignmentContainer.innerHTML += `<div class="text-center py-4 text-gray-500">No notes found.</div>`;
     } else {
-        document.getElementById('assignment-editor-description').textContent = `Found ${uniqueNoteCount} unique notes. The 'Default Assignment' now reflects yesterday's final assignment. Please review.`;
+        editorDescription.textContent = `Found ${uniqueNoteCount} unique notes. The 'Default Assignment' now reflects yesterday's final assignment. Please review.`;
         Object.keys(categorizedNotes).sort().forEach(category => {
             const notes = categorizedNotes[category];
             const categoryId = category.replace(/\s|&/g, '-');
