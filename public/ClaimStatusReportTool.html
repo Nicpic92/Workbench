@@ -91,7 +91,6 @@
                     <p class="mt-2 text-lg text-gray-600">Review assignments for all notes and download your reports.</p>
                 </div>
 
-                <!-- START: This section is updated -->
                 <div id="movement-summary-container" class="hidden bg-blue-50 p-6 rounded-lg">
                     <h3 class="text-xl font-bold text-gray-900 mb-3">Workflow & Aging Movement Summary</h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-700">
@@ -99,13 +98,10 @@
                         <p>Claims moved from Claims to PV: <strong id="claims-to-pv-count" class="text-blue-800">0</strong></p>
                         <p>Critical claims moved to Backlog: <strong id="critical-to-backlog-count" class="text-red-600">0</strong></p>
                         <p>Critical claims worked/removed: <strong id="critical-worked-count" class="text-green-600">0</strong></p>
-                        <!-- ADDED THIS LINE to hold the new count -->
                         <p class="md:col-span-2 text-yellow-900 font-semibold bg-yellow-200 -m-2 p-2 rounded">Claims moving to Critical tomorrow (28 Days): <strong id="moving-to-critical-count" class="text-yellow-900">0</strong></p>
                     </div>
                 </div>
-                <!-- END: Update complete -->
 
-                <!-- This container is now unused, but we leave it in the HTML for safety -->
                 <div id="approaching-critical-container" class="hidden bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-6 rounded-lg">
                     <h3 class="text-xl font-bold text-gray-900 mb-3">Claims Approaching Critical Status (27 Days Old)</h3>
                     <p class="text-gray-700 mb-4">These claims will move into the CRITICAL (28-29 day) bucket tomorrow. Prioritize them to prevent aging.</p>
