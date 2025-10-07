@@ -51,7 +51,6 @@ export function buildWorkbook(claimsData, reportTitle, ownerFilter = null) {
         else if (claim.claimState === 'PEND') { statusTab = 'Pend'; tabOwner = 'Claims'; }
         else if (claim.claimState === 'DENY') { statusTab = 'Deny'; tabOwner = 'Claims'; }
         
-        // START: New Payer Review (PR) Breakout Logic
         if (claim.claimState === 'PR') {
             const payerName = String(claim.originalRow[claim.payerIndex] || 'Unknown Payer').trim();
             const sanitizedPayer = payerName.replace(/[\\\/\?\*\[\]]/g, '').substring(0, 25);
@@ -59,13 +58,11 @@ export function buildWorkbook(claimsData, reportTitle, ownerFilter = null) {
             
             if (!sheetsData[tabKey]) {
                 sheetsData[tabKey] = [state.fileHeaderRow];
-                tabMetadata[tabKey] = { owner: 'Claims', priority: 6 }; // Use priority 6 for PR tabs
+                tabMetadata[tabKey] = { owner: 'Claims', priority: 6 }; 
             }
             sheetsData[tabKey].push(claim.processedRow);
         }
-        // END: New Payer Review (PR) Breakout Logic
 
-        // MODIFIED: Exclude PR claims from the standard age-based breakout tabs
         if (dsnpStatus && tabOwner && networkType && claim.claimState !== 'PR' && (ownerFilter === 'PV' || !isHighCost)) {
             let tabKey = '', priorityLevel = 0;
             if (claim.cleanAge >= 28 && claim.cleanAge <= 30) { priorityLevel = 1; tabKey = `CRITICAL (28-30d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
@@ -114,7 +111,7 @@ export function buildWorkbook(claimsData, reportTitle, ownerFilter = null) {
     addSectionToCover("Priority 2: PRIORITY (21-27 days)", 2);
     addSectionToCover("Priority 3: Backlog (31+ days)", 3);
     addSectionToCover("W9 and Other Tasks", 5);
-    addSectionToCover("Payer Review (by Payer)", 6); // ADDED: New section for PR tabs
+    addSectionToCover("Payer Review (by Payer)", 6);
 
     const wb = XLSX.utils.book_new();
     const coverWS = XLSX.utils.aoa_to_sheet(coverPageData);
@@ -138,7 +135,6 @@ export function buildWorkbook(claimsData, reportTitle, ownerFilter = null) {
 
 // --- PDF Report Generation ---
 
-// START: Entire section is updated or new
 export async function generatePdfReport() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
@@ -147,7 +143,7 @@ export async function generatePdfReport() {
     doc.addPage();
     await createChartsPage(doc);
     doc.addPage();
-    createPivotTablesPage(doc); // New page added here
+    createPivotTablesPage(doc);
     doc.addPage();
     await createDetailedTablesPage(doc);
 
@@ -180,17 +176,20 @@ function aggregatePivotData(claimsList, config, isPrebatch) {
     };
 
     for (const claim of claimsList) {
-        // Handle two different data structures: array of arrays for prebatch, array of objects for processed
         const row = isPrebatch ? claim : claim.originalRow;
-
         const claimType = String(row[config.claimTypeIndex] || '').toUpperCase();
-        
-        // Filter for "I00 and P00 Only"
         if (!claimType.startsWith('I') && !claimType.startsWith('P')) {
             continue;
         }
 
-        const isNonPar = String(row[config.networkStatusIndex] || '').toUpperCase().includes('OUT');
+        // ADDED COMMENT: The config.networkStatusIndex corresponds to the column letter (e.g., 'V')
+        // set in the "Network Status (Par/Non-Par)" input field on the webpage.
+        const networkStatusValue = String(row[config.networkStatusIndex] || '');
+
+        // ADDED COMMENT: The logic checks if the text in that column contains "OUT".
+        // If it does, it's Non-Par. Otherwise, it's considered Par.
+        const isNonPar = networkStatusValue.toUpperCase().includes('OUT');
+        
         const cleanAge = isPrebatch ? parseInt(row[config.cleanAgeIndex], 10) : claim.cleanAge;
         
         let ageBucket = '';
@@ -221,7 +220,9 @@ function createPivotTablesPage(doc) {
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
     doc.text("Claim Counts by Aging & Network Status", 14, 20);
-    let finalY = 25;
+    
+    // MODIFIED: Increased the starting Y position to prevent title overlap
+    let finalY = 30;
 
     // --- Helper function to draw a single table ---
     const drawPivotTable = (startY, title, subtitle, tableData) => {
@@ -246,7 +247,6 @@ function createPivotTablesPage(doc) {
         const backlogPar = tableData['31+'].par;
         const backlogNonPar = tableData['31+'].nonPar;
 
-        // Add percentage row to the body for styling
         body.push([
             { content: '31+ Percentage', styles: { fontStyle: 'bold', fillColor: [255, 235, 204] } },
             { content: totalPar > 0 ? `${((backlogPar / totalPar) * 100).toFixed(1)}%` : '0.0%', styles: { fontStyle: 'bold' } },
@@ -258,12 +258,7 @@ function createPivotTablesPage(doc) {
             startY: startY,
             head: [['Aging', 'Par', 'Non Par', 'Grand Total']],
             body: body,
-            foot: [[
-                'Grand Total',
-                totalPar.toLocaleString(),
-                totalNonPar.toLocaleString(),
-                totalClaims.toLocaleString()
-            ]],
+            foot: [[ 'Grand Total', totalPar.toLocaleString(), totalNonPar.toLocaleString(), totalClaims.toLocaleString() ]],
             theme: 'grid',
             headStyles: { fillColor: [0, 105, 140] },
             footStyles: { fillColor: [220, 239, 245], textColor: [0, 0, 0], fontStyle: 'bold' },
@@ -274,7 +269,7 @@ function createPivotTablesPage(doc) {
 
                 doc.setFontSize(10);
                 doc.setFont('helvetica', 'normal');
-                doc.setFillColor(255, 224, 204); // Light orange
+                doc.setFillColor(255, 224, 204);
                 doc.rect(data.settings.margin.left, startY - 4, 180, 5, 'F');
                 doc.text(subtitle, data.settings.margin.left + 2, startY);
             },
@@ -282,14 +277,12 @@ function createPivotTablesPage(doc) {
         return doc.autoTable.previous.finalY;
     };
 
-    // --- Generate and draw the two tables ---
     const prebatchPivotData = aggregatePivotData(state.prebatchClaims, config, true);
     finalY = drawPivotTable(finalY, 'Prebatch Claim Counts', 'Filters: Clean Claims only, includes both DSNP and Non DSNP, Prebatch Only', prebatchPivotData);
 
     const processedPivotData = aggregatePivotData(state.processedClaimsList, config, false);
     drawPivotTable(finalY + 20, 'Active Claim Counts', 'Filters: Clean Claims only, includes both DSNP and Non DSNP, All but Prebatch', processedPivotData);
 }
-// END: Section complete
 
 function formatCurrency(value) {
     if (value === null || isNaN(value)) return '$0';
@@ -298,7 +291,6 @@ function formatCurrency(value) {
     return `$${(value / 1000000).toFixed(1)}M`;
 }
 
-// ... The rest of the functions (createTitlePage, createChartsPage, createDetailedTablesPage) remain unchanged from the previous version.
 async function createTitlePage(doc) {
     const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
     let currentY = 20;
