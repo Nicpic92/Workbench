@@ -1,146 +1,98 @@
-// js/ui.js
+import { state } from './state.js';
+import { getNoteCategory } from './processing.js';
+import { downloadPrebatchReport } from './generator.js';
 
-import { state, getActiveDataset } from './state.js';
-
-// Get all DOM elements once
-const welcomeView = document.getElementById('welcome-view');
-const dataView = document.getElementById('data-view');
-const actionsContainer = document.getElementById('actions-container');
-const loadedFilesList = document.getElementById('loaded-files-list');
-const tableTitle = document.getElementById('table-title');
-const tableContainer = document.getElementById('data-table-container');
-const statusBar = document.getElementById('status-bar');
-const loaderOverlay = document.getElementById('loader-overlay');
-
-// Modal Elements
-const configModal = document.getElementById('config-modal');
-const modalTitle = document.getElementById('modal-title');
-const modalBody = document.getElementById('modal-body');
-let modalConfirmBtn = document.getElementById('modal-confirm-btn');
-const modalCancelBtn = document.getElementById('modal-cancel-btn');
-const modalCloseBtn = document.getElementById('modal-close-btn');
+// This module contains all functions that directly interact with the DOM (the HTML page).
+// This keeps the logic for how the page looks and behaves separate from the data processing logic.
 
 // --- Core UI Functions ---
 
-export function updateUI() {
-    if (state.datasets.length === 0) {
-        welcomeView.style.display = 'flex';
-        dataView.classList.add('hidden');
-        actionsContainer.style.display = 'none';
-        loadedFilesList.innerHTML = '';
+export function displayStatus(message, type, showLoader = false) {
+    const statusDiv = document.getElementById('status');
+    statusDiv.textContent = message;
+    statusDiv.style.color = type === 'error' ? 'red' : (type === 'success' ? 'green' : '#4f46e5');
+    document.getElementById('loader').style.display = showLoader ? 'block' : 'none';
+    document.getElementById('processBtn').disabled = !!showLoader;
+}
+
+export function resetUI() {
+    ['review-container', 'final-downloads-container', 'movement-summary-container', 'approaching-critical-container', 'prebatch-container'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+    });
+    document.getElementById('download-links-container').innerHTML = '';
+    document.getElementById('copyEmailBtn').classList.add('hidden');
+    document.getElementById('status').textContent = '';
+    document.getElementById('assignment-editor-container').innerHTML = '';
+    document.getElementById('approaching-critical-table-container').innerHTML = '';
+}
+
+export function getFormattedDate() {
+    const d = new Date(), day = d.getDate(), month = d.toLocaleString('default', { month: 'short' }), year = d.getFullYear();
+    const s = (day % 10 == 1 && day != 11) ? 'st' : ((day % 10 == 2 && day != 12) ? 'nd' : ((day % 10 == 3 && day != 13) ? 'rd' : 'th'));
+    return `${day}${s} ${month} ${year}`;
+}
+
+// --- Review Step Display Functions ---
+
+export function displayReviewStep() {
+    if (state.prebatchClaims.length > 0) {
+        document.getElementById('prebatch-summary').textContent = `Found ${state.prebatchClaims.length} claims in Prebatch status.`;
+        document.getElementById('downloadPrebatchBtn').onclick = downloadPrebatchReport;
+        document.getElementById('prebatch-container').classList.remove('hidden');
     } else {
-        welcomeView.style.display = 'none';
-        actionsContainer.style.display = 'block';
-        dataView.classList.remove('hidden');
-        renderLoadedFilesList();
-        renderActiveDataset();
+        document.getElementById('prebatch-container').classList.add('hidden');
     }
+
+    displayAssignmentEditor();
+
+    document.getElementById('review-container').classList.remove('hidden');
 }
 
-function renderLoadedFilesList() {
-    loadedFilesList.innerHTML = '';
-    state.datasets.forEach((ds, index) => {
-        const item = document.createElement('div');
-        item.className = 'loaded-file-item';
-        if (index === state.activeDatasetIndex) {
-            item.classList.add('active');
-        }
-        item.textContent = ds.name;
-        item.onclick = () => {
-            state.activeDatasetIndex = index;
-            updateUI();
-        };
-        loadedFilesList.appendChild(item);
-    });
-}
-
-function renderActiveDataset() {
-    const activeDataset = getActiveDataset();
-    if (!activeDataset) return;
-    tableTitle.textContent = activeDataset.name;
-    renderDataTable(activeDataset.data, activeDataset.headers);
-    statusBar.textContent = `Displaying ${activeDataset.data.length.toLocaleString()} rows and ${activeDataset.headers.length} columns. (Preview of first 200 rows)`;
-}
-
-function formatCellValue(value) {
-    if (value === null || value === undefined) return '';
-    if (value instanceof Date) {
-        if (isNaN(value.getTime())) return String(value);
-        const month = String(value.getUTCMonth() + 1).padStart(2, '0');
-        const day = String(value.getUTCDate()).padStart(2, '0');
-        const year = value.getUTCFullYear();
-        return `${month}/${day}/${year}`;
-    }
-    return String(value);
-}
-
-function renderDataTable(data, headers) {
-    const table = document.createElement('table');
-    const thead = table.createTHead();
-    const headerRow = thead.insertRow();
-    headers.forEach(h => {
-        const th = document.createElement('th');
-        th.textContent = h;
-        headerRow.appendChild(th);
-    });
-    const tbody = table.createTBody();
-    data.slice(0, 200).forEach(row => {
-        const tr = tbody.insertRow();
-        headers.forEach(header => {
-             const td = tr.insertCell();
-             td.textContent = formatCellValue(row[header]);
-        });
-    });
-    tableContainer.innerHTML = '';
-    tableContainer.appendChild(table);
-}
-
-// --- Helper & Utility UI Functions ---
-
-export function showLoader(show) {
-    loaderOverlay.style.display = show ? 'flex' : 'none';
-}
-
-export function closeModal(id) {
-    document.getElementById(id).classList.add('hidden');
-}
-
-export function showConfigModal(title, content, onConfirm) {
-    modalTitle.textContent = title;
-    modalBody.innerHTML = content;
-    configModal.style.display = 'flex';
-    // Clone and replace button to remove old listeners
-    const newConfirmBtn = modalConfirmBtn.cloneNode(true);
-    modalConfirmBtn.parentNode.replaceChild(newConfirmBtn, modalConfirmBtn);
-    newConfirmBtn.addEventListener('click', onConfirm);
-    modalConfirmBtn = newConfirmBtn;
+function displayAssignmentEditor() {
+    const assignmentContainer = document.getElementById('assignment-editor-container');
+    assignmentContainer.innerHTML = `<h3 class="text-xl font-bold text-gray-900 mb-3">Assignment Editor</h3><p id="assignment-editor-description" class="text-gray-700 mb-4"></p>`;
+    const categorizedNotes = {};
+    let uniqueNoteCount = 0;
     
-    // Wire up close buttons for this specific modal instance
-    modalCancelBtn.onclick = () => closeModal('config-modal');
-    modalCloseBtn.onclick = () => closeModal('config-modal');
-}
+    state.processedClaimsList.forEach(claim => {
+        const note = claim.noteText || "No Note";
+        if (note !== "No Note") {
+            const category = getNoteCategory(note);
+            if (!categorizedNotes[category]) categorizedNotes[category] = {};
+            if (!categorizedNotes[category][note]) {
+                categorizedNotes[category][note] = { count: 0, defaultOwner: claim.defaultOwner };
+                uniqueNoteCount++;
+            }
+            categorizedNotes[category][note].count++;
+        }
+    });
 
-export function generateColumnCheckboxes(headers) {
-    return headers.map(h => `<label class="flex items-center p-2 rounded hover:bg-slate-100"><input type="checkbox" class="h-4 w-4 rounded mr-2" data-column-name="${h}"><span class="text-sm">${h}</span></label>`).join('');
-}
+    if (uniqueNoteCount === 0) {
+        document.getElementById('assignment-editor-description').textContent = "No notes were found in the report to assign.";
+        assignmentContainer.innerHTML += `<div class="text-center py-4 text-gray-500">No notes found.</div>`;
+    } else {
+        document.getElementById('assignment-editor-description').textContent = `Found ${uniqueNoteCount} unique notes. The 'Default Assignment' now reflects yesterday's final assignment. Please review.`;
+        Object.keys(categorizedNotes).sort().forEach(category => {
+            const notes = categorizedNotes[category];
+            const categoryId = category.replace(/\s|&/g, '-');
+            let tableRowsHtml = '';
+            Object.keys(notes).sort((a, b) => notes[b].count - notes[a].count).forEach(noteText => {
+                const data = notes[noteText];
+                tableRowsHtml += `<tr class="bg-white"><td class="px-6 py-4 text-sm text-gray-700 break-words">${noteText}</td><td class="px-6 py-4 text-sm text-gray-700">${data.count}</td><td class="px-6 py-4 text-sm font-medium text-gray-900">${data.defaultOwner || 'N/A'}</td><td class="px-6 py-4 text-sm text-gray-500"><select class="p-2 border rounded-md w-full assignment-override" data-note-text="${noteText.replace(/"/g, '&quot;')}" data-category="${categoryId}"><option value="">Keep Default</option><option value="Claims">Claims</option><option value="PV">PV</option></select></td></tr>`;
+            });
+            const categoryHtml = `<details class="bg-gray-50 border rounded-lg overflow-hidden" open><summary class="p-4 bg-gray-100 hover:bg-gray-200 flex justify-between items-center"><h4 class="text-lg font-bold text-gray-800">${category} (${Object.keys(notes).length} notes)</h4><div class="flex items-center space-x-2"><label class="text-sm font-medium">Assign All to:</label><select class="p-2 border rounded-md category-assign" data-category-target="${categoryId}"><option value="">-- Bulk Assign --</option><option value="Claims">Claims</option><option value="PV">PV</option></select></div></summary><div class="p-2"><div class="table-container border rounded-lg"><table class="min-w-full divide-y divide-gray-200 table-fixed"><thead class="bg-white sticky top-0"><tr><th scope="col" class="w-1/2 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Note Text</th><th scope="col" class="w-1/12 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Count</th><th scope="col" class="w-1/4 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Default Assignment</th><th scope="col" class="w-1/4 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">New Assignment</th></tr></thead><tbody class="divide-y divide-gray-200">${tableRowsHtml}</tbody></table></div></div></details>`;
+            assignmentContainer.innerHTML += categoryHtml;
+        });
 
-export function generateColumnSelect(headers, id) {
-    return `<select id="${id}" class="w-full p-2 border rounded mt-1">${headers.map(h => `<option value="${h}">${h}</option>`).join('')}</select>`;
-}
-
-export function generateDatasetSelect(id) {
-    return `<select id="${id}" class="w-full p-2 border rounded mt-1">${state.datasets.map((ds, i) => `<option value="${i}">${ds.name}</option>`).join('')}</select>`;
-}
-
-export function handleDownload() {
-    const activeDataset = getActiveDataset();
-    if (!activeDataset) return;
-    showLoader(true);
-    setTimeout(() => {
-        const ws = XLSX.utils.json_to_sheet(activeDataset.data);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Result");
-        XLSX.writeFile(wb, `Processed_${activeDataset.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.xlsx`);
-        showLoader(false);
-    }, 50);
+        // Add event listeners for bulk assignment dropdowns
+        document.querySelectorAll('.category-assign').forEach(select => {
+            select.addEventListener('change', (e) => {
+                const targetCategory = e.target.dataset.categoryTarget;
+                const newAssignment = e.target.value;
+                if (!newAssignment) return;
+                document.querySelectorAll(`.assignment-override[data-category="${targetCategory}"]`).forEach(noteSelect => { noteSelect.value = newAssignment; });
+            });
+        });
+    }
 }
