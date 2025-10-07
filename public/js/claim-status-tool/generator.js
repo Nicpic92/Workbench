@@ -123,6 +123,7 @@ export function buildWorkbook(claimsData, reportTitle, ownerFilter = null) {
 
 // --- PDF Report Generation ---
 
+// START: Entire section is updated or new
 export async function generatePdfReport() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
@@ -130,6 +131,8 @@ export async function generatePdfReport() {
     await createTitlePage(doc);
     doc.addPage();
     await createChartsPage(doc);
+    doc.addPage();
+    createPivotTablesPage(doc); // New page added here
     doc.addPage();
     await createDetailedTablesPage(doc);
 
@@ -146,6 +149,133 @@ export async function generatePdfReport() {
     doc.save(`${clientName.toUpperCase()}_Daily_Claim-Flow_Analysis_${getFormattedDate()}.pdf`);
 }
 
+/**
+ * Aggregates claim data into aging buckets for pivot tables.
+ * @param {Array} claimsList - The list of claims to process.
+ * @param {Object} config - The column configuration object.
+ * @param {boolean} isPrebatch - True if processing prebatch claims (which have a different data structure).
+ * @returns {Object} Aggregated data structure.
+ */
+function aggregatePivotData(claimsList, config, isPrebatch) {
+    const data = {
+        '0-20': { par: 0, nonPar: 0 },
+        '21-27': { par: 0, nonPar: 0 },
+        '28-30': { par: 0, nonPar: 0 },
+        '31+': { par: 0, nonPar: 0 },
+    };
+
+    for (const claim of claimsList) {
+        // Handle two different data structures: array of arrays for prebatch, array of objects for processed
+        const row = isPrebatch ? claim : claim.originalRow;
+
+        const claimType = String(row[config.claimTypeIndex] || '').toUpperCase();
+        
+        // Filter for "I00 and P00 Only"
+        if (!claimType.startsWith('I') && !claimType.startsWith('P')) {
+            continue;
+        }
+
+        const isNonPar = String(row[config.networkStatusIndex] || '').toUpperCase().includes('OUT');
+        const cleanAge = isPrebatch ? parseInt(row[config.cleanAgeIndex], 10) : claim.cleanAge;
+        
+        let ageBucket = '';
+        if (isNaN(cleanAge)) continue;
+
+        if (cleanAge >= 31) ageBucket = '31+';
+        else if (cleanAge >= 28) ageBucket = '28-30';
+        else if (cleanAge >= 21) ageBucket = '21-27';
+        else ageBucket = '0-20';
+
+        if (data[ageBucket]) {
+            if (isNonPar) {
+                data[ageBucket].nonPar++;
+            } else {
+                data[ageBucket].par++;
+            }
+        }
+    }
+    return data;
+}
+
+/**
+ * Creates a new page in the PDF with two pivot tables.
+ * @param {jsPDF} doc - The jsPDF document instance.
+ */
+function createPivotTablesPage(doc) {
+    const config = gatherConfig();
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text("Claim Counts by Aging & Network Status", 14, 20);
+    let finalY = 25;
+
+    // --- Helper function to draw a single table ---
+    const drawPivotTable = (startY, title, subtitle, tableData) => {
+        const ageBuckets = ['0-20', '21-27', '28-30', '31+'];
+        let totalPar = 0;
+        let totalNonPar = 0;
+        
+        const body = ageBuckets.map(bucket => {
+            const parCount = tableData[bucket].par;
+            const nonParCount = tableData[bucket].nonPar;
+            totalPar += parCount;
+            totalNonPar += nonParCount;
+            return [
+                bucket,
+                parCount.toLocaleString(),
+                nonParCount.toLocaleString(),
+                (parCount + nonParCount).toLocaleString()
+            ];
+        });
+
+        const totalClaims = totalPar + totalNonPar;
+        const backlogPar = tableData['31+'].par;
+        const backlogNonPar = tableData['31+'].nonPar;
+
+        // Add percentage row to the body for styling
+        body.push([
+            { content: '31+ Percentage', styles: { fontStyle: 'bold', fillColor: [255, 235, 204] } },
+            { content: totalPar > 0 ? `${((backlogPar / totalPar) * 100).toFixed(1)}%` : '0.0%', styles: { fontStyle: 'bold' } },
+            { content: totalNonPar > 0 ? `${((backlogNonPar / totalNonPar) * 100).toFixed(1)}%` : '0.0%', styles: { fontStyle: 'bold' } },
+            { content: totalClaims > 0 ? `${(((backlogPar + backlogNonPar) / totalClaims) * 100).toFixed(1)}%` : '0.0%', styles: { fontStyle: 'bold' } },
+        ]);
+
+        doc.autoTable({
+            startY: startY,
+            head: [['Aging', 'Par', 'Non Par', 'Grand Total']],
+            body: body,
+            foot: [[
+                'Grand Total',
+                totalPar.toLocaleString(),
+                totalNonPar.toLocaleString(),
+                totalClaims.toLocaleString()
+            ]],
+            theme: 'grid',
+            headStyles: { fillColor: [0, 105, 140] },
+            footStyles: { fillColor: [220, 239, 245], textColor: [0, 0, 0], fontStyle: 'bold' },
+            didDrawPage: (data) => {
+                doc.setFontSize(12);
+                doc.setFont('helvetica', 'bold');
+                doc.text(title, data.settings.margin.left, startY - 8);
+
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'normal');
+                doc.setFillColor(255, 224, 204); // Light orange
+                doc.rect(data.settings.margin.left, startY - 4, 180, 5, 'F');
+                doc.text(subtitle, data.settings.margin.left + 2, startY);
+            },
+        });
+        return doc.autoTable.previous.finalY;
+    };
+
+    // --- Generate and draw the two tables ---
+    const prebatchPivotData = aggregatePivotData(state.prebatchClaims, config, true);
+    finalY = drawPivotTable(finalY, 'Prebatch Claim Counts', 'Filters: Clean Claims only, includes both DSNP and Non DSNP, Prebatch Only', prebatchPivotData);
+
+    const processedPivotData = aggregatePivotData(state.processedClaimsList, config, false);
+    drawPivotTable(finalY + 20, 'Active Claim Counts', 'Filters: Clean Claims only, includes both DSNP and Non DSNP, All but Prebatch', processedPivotData);
+}
+// END: Section complete
+
 function formatCurrency(value) {
     if (value === null || isNaN(value)) return '$0';
     if (value < 1000) return `$${value.toFixed(0)}`;
@@ -153,6 +283,7 @@ function formatCurrency(value) {
     return `$${(value / 1000000).toFixed(1)}M`;
 }
 
+// ... The rest of the functions (createTitlePage, createChartsPage, createDetailedTablesPage) remain unchanged from the previous version.
 async function createTitlePage(doc) {
     const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
     let currentY = 20;
