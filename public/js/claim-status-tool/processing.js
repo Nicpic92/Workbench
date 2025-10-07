@@ -100,7 +100,7 @@ export function processYesterdayReport(aoa) {
 }
 
 export function calculateStats(claimsList) {
-    const dayBuckets = { '28-29': 0, '21-27': 0, '30+': 0, '0-20': 0 };
+    const dayBuckets = { '28-30': 0, '21-27': 0, '31+': 0, '0-20': 0 };
     const stats = { 
         'PEND': { total: 0, ...dayBuckets }, 
         'ONHOLD': { total: 0, ...dayBuckets }, 
@@ -115,9 +115,9 @@ export function calculateStats(claimsList) {
             stats[finalClaimState].total++;
             let daysValue = '';
             if (!isNaN(claim.cleanAge)) {
-                if (claim.cleanAge >= 28 && claim.cleanAge <= 29) daysValue = '28-29';
+                if (claim.cleanAge >= 28 && claim.cleanAge <= 30) daysValue = '28-30';
                 else if (claim.cleanAge >= 21 && claim.cleanAge <= 27) daysValue = '21-27';
-                else if (claim.cleanAge >= 30) daysValue = '30+';
+                else if (claim.cleanAge >= 31) daysValue = '31+';
                 else daysValue = '0-20';
                 
                 if (stats[finalClaimState][daysValue] !== undefined) {
