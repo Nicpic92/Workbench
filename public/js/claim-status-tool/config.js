@@ -5,14 +5,12 @@
 export const clientPresets = {
     solis: { label: 'Clean Age (Q):', cleanAgeCol: 'Q', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'V', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
     liberty: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'V', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' },
-    
-    // START: This is the section that has been updated
     secur: { 
         label: 'Clean Age (Q):', 
         cleanAgeCol: 'Q', 
         claimStatusCol: 'I', 
         payerCol: 'A', 
-        networkStatusCol: 'V', // <-- This was changed from 'U' to 'V' to match your image
+        networkStatusCol: 'V',
         dsnpCol: 'Y', 
         claimTypeCol: 'D', 
         totalChargesCol: 'T', 
@@ -20,8 +18,6 @@ export const clientPresets = {
         notesCol: 'AA', 
         claimNumberCol: 'C' 
     },
-    // END: Update complete
-    
     csh: { label: 'Age (R):', cleanAgeCol: 'R', claimStatusCol: 'I', payerCol: 'A', networkStatusCol: 'U', dsnpCol: 'Y', claimTypeCol: 'B', totalChargesCol: 'T', dateCols: 'E,O,P', notesCol: 'AA', claimNumberCol: 'C' }
 };
 
