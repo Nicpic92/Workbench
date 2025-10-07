@@ -4,6 +4,47 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Claim Status Report Tool - Spreadsheet Simplicity</title>
+<!-- 
+    FIX: Added required external libraries.
+    - Tailwind CSS for styling.
+    - SheetJS (xlsx) for reading Excel files.
+    - jsPDF and its autotable plugin for creating PDF reports.
+    - Chart.js for rendering charts for the PDF.
+-->
+<script src="https://cdn.tailwindcss.com"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+    /* A simple loader style for visual feedback during processing */
+    #loader {
+        border: 5px solid #f3f3f3;
+        border-radius: 50%;
+        border-top: 5px solid #4f46e5;
+        width: 50px;
+        height: 50px;
+        animation: spin 1s linear infinite;
+        margin: 20px auto;
+        display: none; /* Hidden by default */
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    /* Hides the off-screen chart rendering container */
+    .chart-container {
+        position: absolute;
+        left: -9999px;
+        top: -9999px;
+    }
+</style>
+</head>
+
+<!-- FIX: Added the <body> tag to wrap all visible content. -->
+<body>
+
 <header class="bg-white shadow-sm sticky top-0 z-50">
     <div class="container mx-auto px-6 py-4 flex justify-between items-center">
          <a href="#" class="flex items-center space-x-2">
@@ -120,6 +161,7 @@
 <!-- Container for off-screen chart rendering -->
 <div id="chart-render-container" class="chart-container"></div>
 
+<!-- FIX: Moved the main script block to the end of the body -->
 <script>
     const { jsPDF } = window.jspdf;
 
@@ -542,7 +584,6 @@
         document.getElementById('movement-summary-container').classList.remove('hidden');
     }
 
-    // --- NEW FUNCTION TO CALCULATE CYCLE TIME METRICS ---
     function calculateCycleTimeMetrics() {
         const metrics = {
             total_clean_nonpar: 0, met_goal_clean_nonpar: 0,
@@ -929,7 +970,6 @@
         
         let finalY = kpiY + rectHeight + 5;
 
-        // --- NEW CYCLE TIME METRICS TABLE ---
         if (Object.keys(cycleTimeMetrics).length > 0) {
              doc.setFontSize(16);
              doc.setFont('helvetica', 'bold');
@@ -1057,9 +1097,6 @@
         }
     }
 
-    // ===================================================================
-    // THIS ENTIRE FUNCTION HAS BEEN UPDATED FOR SPACING
-    // ===================================================================
     async function createDetailedTablesPage(doc) {
         doc.setFontSize(18);
         doc.setFont('helvetica', 'bold');
@@ -1116,12 +1153,13 @@
                     margin: { top: finalY + 10 }
                 });
 
-                finalY = doc.autoTable.previous.finalY + 5; // --- ADDED SPACING HERE ---
+                finalY = doc.autoTable.previous.finalY + 5;
             }
         }
     }
     
     document.addEventListener('DOMContentLoaded', initializeTool);
 </script>
+
 </body>
 </html>
