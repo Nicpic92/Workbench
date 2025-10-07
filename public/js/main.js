@@ -1,7 +1,7 @@
 import { state, resetState } from './state.js';
 import { clientPresets, gatherConfig } from './config.js';
 import * as ui from './ui.js';
-import { processYesterdayReport, processAndAssignClaims, calculateStats, calculateCycleTimeMetrics } from './processing.js';
+import { processYesterdayReport, processAndAssignClaims, calculateStats, getNoteCategory } from './processing.js';
 import { buildWorkbook, generatePdfReport } from './generator.js';
 
 // This is the main entry point for the application. It orchestrates the other modules.
@@ -103,6 +103,24 @@ async function performInitialProcessing() {
         
         state.processedClaimsList = processAndAssignClaims(main_aoa, config, state.yesterdayDataMap);
         
+        // START: Added check for note category distribution
+        const noteStats = { miscellaneous: 0, totalWithNotes: 0 };
+        state.processedClaimsList.forEach(claim => {
+            if (claim.noteText) {
+                noteStats.totalWithNotes++;
+                if (getNoteCategory(claim.noteText) === 'Miscellaneous') {
+                    noteStats.miscellaneous++;
+                }
+            }
+        });
+
+        if (noteStats.totalWithNotes > 10 && (noteStats.miscellaneous / noteStats.totalWithNotes > 0.9)) {
+            const configuredNoteCol = document.getElementById('notesCol').value.toUpperCase();
+            const warningMessage = `Warning: Over 90% of notes were categorized as 'Miscellaneous'. This often means the configured 'W9/Notes Column' (currently set to column '${configuredNoteCol}') is incorrect for this report. Please verify all column configurations above.`;
+            ui.displayWarning(warningMessage);
+        }
+        // END: Added check
+
         state.fileHeaderRow = [...state.mainReportHeader];
         if (state.hasYesterdayFile) {
             state.fileHeaderRow.splice(config.claimStatusIndex, 0, 'Yest. Claim State');
@@ -300,10 +318,6 @@ function runDetailedCohortAnalysis() {
          }
     }
      
-    // REMOVED: The redundant and misplaced count update has been removed from this function.
-    // const approachingCriticalCount = state.processedClaimsList.filter(claim => claim.cleanAge === 27).length;
-    // document.getElementById('moving-to-critical-count').textContent = approachingCriticalCount.toLocaleString();
-    
     document.getElementById('pv-to-claims-count').textContent = state.workflowMovement.pvToClaims.toLocaleString();
     document.getElementById('claims-to-pv-count').textContent = state.workflowMovement.claimsToPv.toLocaleString();
     document.getElementById('critical-to-backlog-count').textContent = state.workflowMovement.criticalToBacklog.toLocaleString();
