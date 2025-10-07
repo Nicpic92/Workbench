@@ -13,7 +13,7 @@
     <!-- Core Spreadsheet Library -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 
-    <!-- NEW: PDF and Charting Libraries -->
+    <!-- PDF and Charting Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -473,7 +473,6 @@
             createDownloadLink(buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'Claims'), `${clientName} Claims - Action Report`, 'Claims'), `${clientName} Claims - Action Report for ${getFormattedDate()}.xlsx`, downloadsContainer);
             createDownloadLink(buildWorkbook(processedClaimsList.filter(c => c.finalOwner === 'PV'), `${clientName} PV - Action Report`, 'PV'), `${clientName} PV - Action Report for ${getFormattedDate()}.xlsx`, downloadsContainer);
             
-            // NEW: Add button to generate PDF report
             if (hasYesterdayFile) {
                 const pdfButton = document.createElement('button');
                 pdfButton.id = 'downloadPdfReportBtn';
@@ -727,7 +726,7 @@
         }
 
         // ===================================================================
-        // NEW AND UPDATED PDF GENERATION LOGIC
+        // FIXED AND UPDATED PDF GENERATION LOGIC
         // ===================================================================
 
         async function generatePdfReport() {
@@ -758,7 +757,6 @@
         async function createTitlePage(doc) {
             const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
             
-            // Header
             doc.setFontSize(22);
             doc.setFont('helvetica', 'bold');
             doc.text('Daily Claim-Flow Analysis', 14, 20);
@@ -768,7 +766,6 @@
             doc.text(`Prepared for: ${clientName}`, 14, 28);
             doc.text(`Date: ${getFormattedDate()}`, 14, 34);
 
-            // UPDATED: Brief diplomatic statement instead of Executive Summary
             doc.setFontSize(16);
             doc.setFont('helvetica', 'bold');
             doc.text('Introduction', 14, 50);
@@ -781,7 +778,6 @@
             const summaryText = doc.splitTextToSize(introText, 182);
             doc.text(summaryText, 14, 60);
 
-            // KPIs
             const totalYesterday = Object.values(detailedMovementStats).flatMap(Object.values).reduce((s,c) => s + c.totalYesterday, 0);
             const totalPrebatched = Object.values(detailedMovementStats).flatMap(Object.values).reduce((sum, cohort) => sum + cohort.movedToPrebatch, 0);
             const critResolved = workflowMovement.criticalWorked;
@@ -795,7 +791,7 @@
                 { label: 'Critical-to-Backlog Aging Rate', value: critToBacklogRate }
             ];
 
-            const kpiStartY = 120; // Adjusted position
+            const kpiStartY = 120;
             doc.setFontSize(16);
             doc.setFont('helvetica', 'bold');
             doc.text('Key Performance Indicators', 14, kpiStartY);
@@ -824,7 +820,6 @@
             doc.setFont('helvetica', 'bold');
             doc.text("Graphical Analysis - The Big Picture", 14, 20);
 
-            // UPDATED: Helper to render a chart with data labels
             const renderChartToImage = async (canvasId, config, width, height) => {
                 const container = document.getElementById('chart-render-container');
                 const canvas = document.createElement('canvas');
@@ -847,39 +842,33 @@
                                 const meta = chartInstance.getDatasetMeta(i);
                                 meta.data.forEach((element, index) => {
                                     const data = dataset.data[index];
-                                    if (data > 0) {
-                                        let position;
-                                        if (config.type === 'doughnut') {
-                                            position = element.getCenterPoint();
-                                            // Make text black for doughnut chart for better visibility
+                                    let position;
+                                    // FIX 3: Conditional label drawing based on element size
+                                    if (config.type === 'doughnut' && data > 0) {
+                                        position = element.getCenterPoint();
+                                        ctx.fillStyle = '#000'; // Black text for doughnut
+                                        ctx.fillText(data, position.x, position.y);
+                                    } else if (config.options.indexAxis === 'y' && data > 0 && element.width > 15) { // Horizontal bar, width threshold
+                                        position = { x: element.x - 20, y: element.y };
+                                        if (element.width < 30) { 
                                             ctx.fillStyle = '#000';
-                                        } else if (config.options.indexAxis === 'y') { // Horizontal bar
-                                            position = {
-                                                x: element.x - 20,
-                                                y: element.y
-                                            };
-                                            if (element.width < 30) { // If bar is too small, put label outside
-                                                ctx.fillStyle = '#000';
-                                                position.x = element.x + 20;
-                                            }
-                                        } else { // Vertical bar
-                                            position = {
-                                                x: element.x,
-                                                y: element.y + 15
-                                            };
-                                            if (element.height < 20) { // If bar is too small
-                                               ctx.fillStyle = '#000';
-                                               position.y = element.y - 10;
-                                            }
+                                            position.x = element.x + 20;
                                         }
                                         ctx.fillText(data, position.x, position.y);
-                                        ctx.fillStyle = '#fff'; // Reset for next loop
+                                    } else if (data > 0 && element.height > 15) { // Vertical bar, height threshold
+                                        position = { x: element.x, y: element.y + 15 };
+                                        if (element.height < 25) {
+                                           ctx.fillStyle = '#000';
+                                           position.y = element.y - 10;
+                                        }
+                                        ctx.fillText(data, position.x, position.y);
                                     }
+                                    ctx.fillStyle = '#fff'; // Reset for next loop
                                 });
                             });
                             
                             const imgData = canvas.toDataURL('image/png');
-                            container.innerHTML = ''; // Clean up
+                            container.innerHTML = '';
                             resolve(imgData);
                         }
                     };
@@ -887,7 +876,7 @@
                 });
             };
 
-            // Chart 1: Stacked Bar Chart for Claim Flow
+            // Chart 1: Claim Flow
             const flowData = {};
             const destinations = new Set(['Prebatch', 'Resolved/Removed']);
             for(const state in detailedMovementStats) {
@@ -895,10 +884,7 @@
                     const cohort = detailedMovementStats[state][bucket];
                     const cohortName = `${state} - ${bucket}`;
                     flowData[cohortName] = { total: cohort.totalYesterday, 'Prebatch': cohort.movedToPrebatch, 'Resolved/Removed': cohort.resolvedOrRemoved };
-                    for(const dest in cohort.movedTo) {
-                        destinations.add(dest);
-                        flowData[cohortName][dest] = cohort.movedTo[dest];
-                    }
+                    for(const dest in cohort.movedTo) { destinations.add(dest); flowData[cohortName][dest] = cohort.movedTo[dest]; }
                 }
             }
             const sortedDestinations = [...destinations].sort();
@@ -917,7 +903,7 @@
             const flowChartImg = await renderChartToImage('flowChart', flowChartConfig, 1000, 800);
             doc.addImage(flowChartImg, 'PNG', 14, 25, 180, 100);
 
-            // Chart 2: Donut Chart for PEND inventory
+            // Chart 2: PEND inventory
             const pendData = { Queue: 0, Priority: 0, Critical: 0, Backlog: 0 };
             let totalPend = 0;
             if (detailedMovementStats.PEND) {
@@ -928,16 +914,13 @@
             }
             const pendChartConfig = {
                 type: 'doughnut',
-                data: {
-                    labels: Object.keys(pendData),
-                    datasets: [{ data: Object.values(pendData), backgroundColor: ['#36A2EB', '#FFCE56', '#FF6384', '#4BC0C0'] }]
-                },
+                data: { labels: Object.keys(pendData), datasets: [{ data: Object.values(pendData), backgroundColor: ['#36A2EB', '#FFCE56', '#FF6384', '#4BC0C0'] }] },
                 options: { responsive: false, plugins: { title: { display: true, text: `Composition of Yesterday's PEND Inventory (Total: ${totalPend})` } } }
             };
             const pendChartImg = await renderChartToImage('pendChart', pendChartConfig, 400, 400);
             doc.addImage(pendChartImg, 'PNG', 14, 135, 80, 80);
 
-            // Chart 3: Bar Chart for Critical outcomes
+            // Chart 3: Critical outcomes
             const critOutcomes = { 'Moved to Prebatch': 0, 'Approved': 0, 'Remained Critical': 0, 'Aged to Backlog': 0, 'Denied': 0 };
             if (detailedMovementStats.PEND && detailedMovementStats.PEND.Critical) {
                 const crit = detailedMovementStats.PEND.Critical;
@@ -950,16 +933,23 @@
                     else if(newBucket === 'Critical') critOutcomes['Remained Critical'] += count;
                 }
             }
-            const critChartConfig = {
-                type: 'bar',
-                data: {
-                    labels: Object.keys(critOutcomes),
-                    datasets: [{ label: 'Number of Claims', data: Object.values(critOutcomes), backgroundColor: '#FF6384' }]
-                },
-                options: { responsive: false, plugins: { title: { display: true, text: "Outcomes of Yesterday's Critical Claims" }, legend: { display: false } } }
-            };
-            const critChartImg = await renderChartToImage('critChart', critChartConfig, 600, 400);
-            doc.addImage(critChartImg, 'PNG', 105, 135, 90, 60);
+            
+            // FIX 1: Check for data before rendering the critical outcomes chart
+            const totalCritOutcomes = Object.values(critOutcomes).reduce((a, b) => a + b, 0);
+            if (totalCritOutcomes > 0) {
+                const critChartConfig = {
+                    type: 'bar',
+                    data: { labels: Object.keys(critOutcomes), datasets: [{ label: 'Number of Claims', data: Object.values(critOutcomes), backgroundColor: '#FF6384' }] },
+                    options: { responsive: false, plugins: { title: { display: true, text: "Outcomes of Yesterday's Critical Claims" }, legend: { display: false } } }
+                };
+                const critChartImg = await renderChartToImage('critChart', critChartConfig, 600, 400);
+                doc.addImage(critChartImg, 'PNG', 105, 135, 90, 60);
+            } else {
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'italic');
+                doc.setTextColor(128);
+                doc.text("No Critical Claims to Analyze for this Period.", 150, 165, { align: 'center' });
+            }
         }
 
         async function createDetailedTablesPage(doc) {
@@ -977,28 +967,23 @@
                 });
 
                 for(const bucket of sortedBuckets) {
-                    const data = detailedMovementStats[state][bucket];
-                    if (data.totalYesterday === 0) continue;
+                    const cohortData = detailedMovementStats[state][bucket]; // Use a new variable to avoid scope issues
+                    if (cohortData.totalYesterday === 0) continue;
 
                     const tableBody = [];
-                    if (data.resolvedOrRemoved > 0) {
-                        tableBody.push(['Resolved/Removed from report', data.resolvedOrRemoved, `${(data.resolvedOrRemoved / data.totalYesterday * 100).toFixed(1)}%`, 'Positive']);
-                    }
-                    if (data.movedToPrebatch > 0) {
-                        tableBody.push(['Moved to Prebatch', data.movedToPrebatch, `${(data.movedToPrebatch / data.totalYesterday * 100).toFixed(1)}%`, 'Positive']);
-                    }
+                    if (cohortData.resolvedOrRemoved > 0) tableBody.push(['Resolved/Removed from report', cohortData.resolvedOrRemoved, `${(cohortData.resolvedOrRemoved / cohortData.totalYesterday * 100).toFixed(1)}%`, 'Positive']);
+                    if (cohortData.movedToPrebatch > 0) tableBody.push(['Moved to Prebatch', cohortData.movedToPrebatch, `${(cohortData.movedToPrebatch / cohortData.totalYesterday * 100).toFixed(1)}%`, 'Positive']);
                     
-                    const sortedDestinations = Object.entries(data.movedTo).sort((a,b) => b[1] - a[1]);
+                    const sortedDestinations = Object.entries(cohortData.movedTo).sort((a,b) => b[1] - a[1]);
                     sortedDestinations.forEach(([dest, count]) => {
                          const [newState, newBucket] = dest.split('_');
                          let impact = 'Neutral';
                          if (newBucket === 'Backlog' && bucket !== 'Backlog') impact = 'Negative';
                          if (newState.startsWith('APPROVED')) impact = 'Positive';
-                         tableBody.push([`Moved to: ${newState} - ${newBucket}`, count, `${(count/data.totalYesterday*100).toFixed(1)}%`, impact]);
+                         tableBody.push([`Moved to: ${newState} - ${newBucket}`, count, `${(count/cohortData.totalYesterday*100).toFixed(1)}%`, impact]);
                     });
 
-                    // Check if table will fit on the page, add new page if not
-                    const tableHeight = (tableBody.length + 1) * 10 + 20; // Estimate height
+                    const tableHeight = (tableBody.length + 1) * 10 + 20;
                     if (finalY + tableHeight > 280) {
                         doc.addPage();
                         finalY = 20;
@@ -1008,15 +993,16 @@
                         startY: finalY + 5,
                         head: [['Destination', 'Count', 'Percentage', 'Impact']],
                         body: tableBody,
-                        didDrawPage: (data) => {
+                        // FIX 2: Correctly reference the cohort's total in the title
+                        didDrawPage: (tableData) => {
                             doc.setFontSize(12);
                             doc.setFont('helvetica', 'bold');
-                            doc.text(`From: ${state} - ${bucket} (Yesterday's Total: ${data.totalYesterday})`, data.settings.margin.left, finalY + 2);
+                            doc.text(`From: ${state} - ${bucket} (Yesterday's Total: ${cohortData.totalYesterday})`, tableData.settings.margin.left, finalY + 2);
                         },
                         willDrawCell: (data) => {
                             if (data.column.dataKey === 'Impact' && data.cell.section === 'body') {
-                                if (data.cell.text[0] === 'Positive') doc.setTextColor(0, 128, 0); // Green
-                                else if (data.cell.text[0] === 'Negative') doc.setTextColor(255, 0, 0); // Red
+                                if (data.cell.text[0] === 'Positive') doc.setTextColor(0, 128, 0);
+                                else if (data.cell.text[0] === 'Negative') doc.setTextColor(255, 0, 0);
                             }
                         },
                         didDrawCell: () => doc.setTextColor(0, 0, 0),
@@ -1028,7 +1014,6 @@
             }
         }
         
-        // NEW: Function to create the User Productivity Page
         async function createProductivityPage(doc) {
             doc.setFontSize(18);
             doc.setFont('helvetica', 'bold');
@@ -1037,30 +1022,6 @@
             const config = gatherConfig();
             const userStats = {};
 
-            // Helper to process a claim list
-            const processList = (list, isPrebatch) => {
-                list.forEach(item => {
-                    const row = isPrebatch ? item : item.originalRow;
-                    const claimState = String(row[config.claimStatusIndex] || '').trim().toUpperCase();
-                    const user = String(row[config.activityUserIndex] || 'Unassigned').trim();
-                    if (!user) return;
-
-                    if (!userStats[user]) {
-                        userStats[user] = { total: 0, prebatch: 0, approved: 0, other: 0 };
-                    }
-                    userStats[user].total++;
-                    if (isPrebatch) {
-                        userStats[user].prebatch++;
-                    } else if (claimState === 'APPROVED') {
-                        userStats[user].approved++;
-                    } else {
-                        userStats[user].other++;
-                    }
-                });
-            };
-            
-            // Process non-prebatch and prebatch claims
-            // Create a combined list of all claims with their user
             const allClaimsToday = new Map();
             processedClaimsList.forEach(claim => allClaimsToday.set(claim.claimNumber, {user: claim.user, state: claim.claimState, isPrebatch: false}));
             prebatchClaims.forEach(row => {
@@ -1069,7 +1030,6 @@
                 allClaimsToday.set(claimNumber, {user: user, state: 'PREBATCH', isPrebatch: true});
             });
 
-            // Aggregate stats
             allClaimsToday.forEach(claimData => {
                 const user = claimData.user;
                 if (!user || user === 'Unassigned') return;
@@ -1077,13 +1037,9 @@
                     userStats[user] = { total: 0, prebatch: 0, approved: 0, other: 0 };
                 }
                 userStats[user].total++;
-                if (claimData.isPrebatch) {
-                    userStats[user].prebatch++;
-                } else if (claimData.state === 'APPROVED') {
-                    userStats[user].approved++;
-                } else {
-                    userStats[user].other++;
-                }
+                if (claimData.isPrebatch) userStats[user].prebatch++;
+                else if (claimData.state === 'APPROVED') userStats[user].approved++;
+                else userStats[user].other++;
             });
 
             const tableBody = Object.entries(userStats)
@@ -1094,14 +1050,14 @@
                     if (stats.other > 0) breakdownParts.push(`Other (${stats.other})`);
                     return [user, stats.total, breakdownParts.join(', ')];
                 })
-                .sort((a, b) => b[1] - a[1]); // Sort by total claims descending
+                .sort((a, b) => b[1] - a[1]);
 
             doc.autoTable({
                 startY: 25,
                 head: [['Username', 'Total Claims Touched', 'Outcome Breakdown']],
                 body: tableBody,
                 theme: 'striped',
-                headStyles: { fillColor: [79, 70, 229] }, // Indigo color
+                headStyles: { fillColor: [79, 70, 229] },
             });
         }
 
