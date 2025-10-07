@@ -5,11 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Claim Status Report Tool - Spreadsheet Simplicity</title>
 <!-- 
-    FIX: Added required external libraries.
-    - Tailwind CSS for styling.
-    - SheetJS (xlsx) for reading Excel files.
-    - jsPDF and its autotable plugin for creating PDF reports.
-    - Chart.js for rendering charts for the PDF.
+    NOTE: The Tailwind CDN is used here for simplicity in this single-file tool.
+    For a production website, a full installation is recommended as per the console warning.
 -->
 <script src="https://cdn.tailwindcss.com"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -18,7 +15,6 @@
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-    /* A simple loader style for visual feedback during processing */
     #loader {
         border: 5px solid #f3f3f3;
         border-radius: 50%;
@@ -27,13 +23,12 @@
         height: 50px;
         animation: spin 1s linear infinite;
         margin: 20px auto;
-        display: none; /* Hidden by default */
+        display: none;
     }
     @keyframes spin {
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
     }
-    /* Hides the off-screen chart rendering container */
     .chart-container {
         position: absolute;
         left: -9999px;
@@ -42,7 +37,6 @@
 </style>
 </head>
 
-<!-- FIX: Added the <body> tag to wrap all visible content. -->
 <body>
 
 <header class="bg-white shadow-sm sticky top-0 z-50">
@@ -161,9 +155,9 @@
 <!-- Container for off-screen chart rendering -->
 <div id="chart-render-container" class="chart-container"></div>
 
-<!-- FIX: Moved the main script block to the end of the body -->
 <script>
-    const { jsPDF } = window.jspdf;
+    // FIX: Declare jsPDF variable here, but assign it only after the script has loaded.
+    let jsPDF;
 
     // Global state variables
     let processedClaimsList = [];
@@ -1158,7 +1152,15 @@
         }
     }
     
-    document.addEventListener('DOMContentLoaded', initializeTool);
+    // FIX: Changed from DOMContentLoaded to the 'load' event to ensure all external scripts are fully loaded
+    // before the application script runs, preventing the 'jspdf is undefined' error.
+    window.addEventListener('load', () => {
+        // Assign the jsPDF constructor from the now-loaded library object.
+        jsPDF = window.jspdf.jsPDF;
+        // Initialize the main application logic.
+        initializeTool();
+    });
+
 </script>
 
 </body>
