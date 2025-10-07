@@ -873,18 +873,15 @@
                 container.appendChild(canvas);
                 
                 return new Promise((resolve) => {
-                    // Capture the chart instance returned by the constructor.
                     const chartInstance = new Chart(canvas, {
                         ...config,
                         options: {
                             ...config.options,
                             animation: {
                                 onComplete: () => {
-                                    // Use the captured instance to generate the image.
-                                    const imgData = chartInstance.toDataURL('image/png');
-                                    // Destroy the chart instance to free up resources.
+                                    // CORRECTED: Call toDataURL() on the canvas element itself.
+                                    const imgData = chartInstance.canvas.toDataURL('image/png');
                                     chartInstance.destroy();
-                                    // Clean up the off-screen canvas.
                                     container.innerHTML = '';
                                     resolve(imgData);
                                 }
