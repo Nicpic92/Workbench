@@ -1,18 +1,34 @@
-// js/state.js
+// This file manages the shared data and state for the tool.
+// By centralizing the state, we ensure that all parts of the application
+// are working with the same data.
 
-// The single source of truth for your application's data
 export const state = {
-    datasets: [],
-    activeDatasetIndex: 0,
+    processedClaimsList: [],
+    prebatchClaims: [],
+    fileHeaderRow: [],
+    mainReportHeader: [],
+    yesterdayDataMap: new Map(),
+    yesterdayStats: null,
+    workflowMovement: { pvToClaims: 0, claimsToPv: 0, criticalToBacklog: 0, criticalWorked: 0 },
+    prebatchMovementStats: {}, 
+    detailedMovementStats: {},
+    cycleTimeMetrics: {},
+    hasYesterdayFile: false
 };
 
-// A helper function to easily get the currently selected dataset
-export function getActiveDataset() {
-    return state.datasets[state.activeDatasetIndex];
-}
-
-// A function to add a new dataset to the state
-export function addNewDataset(name, data, headers) {
-    state.datasets.push({ name, data, headers });
-    state.activeDatasetIndex = state.datasets.length - 1;
+// Resets the state to its initial values. This is crucial for ensuring
+// that running the tool a second time doesn't use leftover data from the
+// previous run.
+export function resetState() {
+    state.processedClaimsList = [];
+    state.prebatchClaims = [];
+    state.fileHeaderRow = [];
+    state.mainReportHeader = [];
+    state.yesterdayDataMap.clear();
+    state.yesterdayStats = null;
+    state.hasYesterdayFile = false;
+    state.workflowMovement = { pvToClaims: 0, claimsToPv: 0, criticalToBacklog: 0, criticalWorked: 0 };
+    state.prebatchMovementStats = {};
+    state.detailedMovementStats = {};
+    state.cycleTimeMetrics = {};
 }
