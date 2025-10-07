@@ -863,7 +863,7 @@
             doc.setFont('helvetica', 'bold');
             doc.text("Graphical Analysis - The Big Picture", 14, 20);
 
-            // UPDATED: Simplified chart renderer that does NOT draw numerical labels
+            // CORRECTED FUNCTION
             const renderChartToImage = async (canvasId, config, width, height) => {
                 const container = document.getElementById('chart-render-container');
                 const canvas = document.createElement('canvas');
@@ -873,14 +873,24 @@
                 container.appendChild(canvas);
                 
                 return new Promise((resolve) => {
-                    config.options.animation = {
-                        onComplete: (animation) => {
-                            const imgData = animation.chart.toDataURL('image/png');
-                            container.innerHTML = '';
-                            resolve(imgData);
+                    // Capture the chart instance returned by the constructor.
+                    const chartInstance = new Chart(canvas, {
+                        ...config,
+                        options: {
+                            ...config.options,
+                            animation: {
+                                onComplete: () => {
+                                    // Use the captured instance to generate the image.
+                                    const imgData = chartInstance.toDataURL('image/png');
+                                    // Destroy the chart instance to free up resources.
+                                    chartInstance.destroy();
+                                    // Clean up the off-screen canvas.
+                                    container.innerHTML = '';
+                                    resolve(imgData);
+                                }
+                            }
                         }
-                    };
-                    new Chart(canvas, config);
+                    });
                 });
             };
 
