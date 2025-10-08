@@ -133,7 +133,6 @@ function displayAssignmentEditor() {
 
     const editorDescription = document.getElementById('assignment-editor-description');
     if (editorDescription.textContent.includes('Action Required')) {
-        // If the warning is active, just show a simplified message below it.
         assignmentContainer.innerHTML += `<div class="text-center py-4 text-gray-500 border rounded-lg bg-gray-50">Please correct the column configuration above to see note categories.</div>`;
         return;
     }
