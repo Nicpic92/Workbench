@@ -297,7 +297,6 @@ function aggregateAdvancedPivotData() {
     return { data: result, columns: sortedColumns, states: sortedStates };
 }
 
-// MODIFIED: This function now correctly calculates all totals.
 function createAdvancedPivotPage(doc) {
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
@@ -332,9 +331,7 @@ function createAdvancedPivotPage(doc) {
                 row.push(rowTotal.toLocaleString());
                 body.push(row);
                 
-                // START: Bug fix - This line was missing, causing totals to be zero.
                 typeSubtotals.total += rowTotal;
-                // END: Bug fix
             }
         });
         
