@@ -211,7 +211,6 @@ function createDownloadLink(blob, fileName, container) {
     container.appendChild(link);
 }
 
-// MODIFIED: This function is updated to use the correct keys and labels for the aging buckets.
 function copyEmailText() {
     const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
     let emailBody = `Hello Teams,\n\nAttached is today's Daily Action Report for ${clientName}.`;
@@ -220,7 +219,6 @@ function copyEmailText() {
         const todayStats = calculateStats(state.processedClaimsList);
         const formatStatLine = (today, yesterday) => `${today} (Yest. ${yesterday ?? 0})`;
         
-        // START: Bug fix - Standardized keys to match the calculateStats function and updated labels
         const createStatBlock = (title, statusKey) => {
             const yestBlock = state.yesterdayStats?.[statusKey] || { total: 0, '28-30': 0, '21-27': 0, '31+': 0, '0-20': 0 };
             const todayBlock = todayStats?.[statusKey] || { total: 0, '28-30': 0, '21-27': 0, '31+': 0, '0-20': 0 };
@@ -230,7 +228,6 @@ function copyEmailText() {
                `Backlog (31+ Days): ${formatStatLine(todayBlock['31+'], yestBlock['31+'])}\n` +
                `Queue (0-20 Days): ${formatStatLine(todayBlock['0-20'], yestBlock['0-20'])}`;
         };
-        // END: Bug fix
         
         emailBody += `\n\nBelow are the detailed highlights from the report. For a full visual breakdown of claim movement, please see the attached 'Daily Claim-Flow Analysis' PDF.\n\n` +
               `${createStatBlock('pending', 'PEND')}\n\n` +
