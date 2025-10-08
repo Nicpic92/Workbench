@@ -103,7 +103,6 @@ async function performInitialProcessing() {
         
         state.processedClaimsList = processAndAssignClaims(main_aoa, config, state.yesterdayDataMap);
         
-        // START: Added check for note category distribution
         const noteStats = { miscellaneous: 0, totalWithNotes: 0 };
         state.processedClaimsList.forEach(claim => {
             if (claim.noteText) {
@@ -119,7 +118,6 @@ async function performInitialProcessing() {
             const warningMessage = `Warning: Over 90% of notes were categorized as 'Miscellaneous'. This often means the configured 'W9/Notes Column' (currently set to column '${configuredNoteCol}') is incorrect for this report. Please verify all column configurations above.`;
             ui.displayWarning(warningMessage);
         }
-        // END: Added check
 
         state.fileHeaderRow = [...state.mainReportHeader];
         if (state.hasYesterdayFile) {
@@ -213,6 +211,7 @@ function createDownloadLink(blob, fileName, container) {
     container.appendChild(link);
 }
 
+// MODIFIED: This function is updated to use the correct keys and labels for the aging buckets.
 function copyEmailText() {
     const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
     let emailBody = `Hello Teams,\n\nAttached is today's Daily Action Report for ${clientName}.`;
@@ -220,6 +219,8 @@ function copyEmailText() {
     if (state.hasYesterdayFile) {
         const todayStats = calculateStats(state.processedClaimsList);
         const formatStatLine = (today, yesterday) => `${today} (Yest. ${yesterday ?? 0})`;
+        
+        // START: Bug fix - Standardized keys to match the calculateStats function
         const createStatBlock = (title, statusKey) => {
             const yestBlock = state.yesterdayStats?.[statusKey] || { total: 0, '28-30': 0, '21-27': 0, '31+': 0, '0-20': 0 };
             const todayBlock = todayStats?.[statusKey] || { total: 0, '28-30': 0, '21-27': 0, '31+': 0, '0-20': 0 };
@@ -229,6 +230,7 @@ function copyEmailText() {
                `Backlog (31+ Days): ${formatStatLine(todayBlock['31+'], yestBlock['31+'])}\n` +
                `Queue (0-20 Days): ${formatStatLine(todayBlock['0-20'], yestBlock['0-20'])}`;
         };
+        // END: Bug fix
         
         emailBody += `\n\nBelow are the detailed highlights from the report. For a full visual breakdown of claim movement, please see the attached 'Daily Claim-Flow Analysis' PDF.\n\n` +
               `${createStatBlock('pending', 'PEND')}\n\n` +
@@ -245,6 +247,7 @@ function copyEmailText() {
     }).catch(err => alert('Failed to copy text.'));
 }
 
+// MODIFIED: This function is updated to use the correct age ranges for buckets.
 function runDetailedCohortAnalysis() {
     state.workflowMovement = { pvToClaims: 0, claimsToPv: 0, criticalToBacklog: 0, criticalWorked: 0 };
     state.detailedMovementStats = {};
@@ -253,6 +256,7 @@ function runDetailedCohortAnalysis() {
     const config = gatherConfig();
     const prebatchClaimNumbers = new Set(state.prebatchClaims.map(row => String(row[config.claimNumberIndex] || '').trim()));
 
+    // START: Bug fix - Standardized age ranges
     const getBucketFromAge = (age) => {
         if (isNaN(age)) return 'UNKNOWN';
         if (age >= 28 && age <= 30) return 'Critical';
@@ -260,6 +264,8 @@ function runDetailedCohortAnalysis() {
         if (age >= 21 && age <= 27) return 'Priority';
         return 'Queue';
     };
+    // END: Bug fix
+
     const getStateKey = (stateStr) => (stateStr || '').includes('MANAGEMENT') ? 'MANAGEMENTREVIEW' : (stateStr || '');
     
     const yestCohorts = {};
