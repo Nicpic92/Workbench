@@ -135,6 +135,7 @@ export function buildWorkbook(claimsData, reportTitle, ownerFilter = null) {
 
 // --- PDF Report Generation ---
 
+// MODIFIED: Added a new page for the advanced pivot table
 export async function generatePdfReport() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
@@ -145,6 +146,8 @@ export async function generatePdfReport() {
     doc.addPage();
     createPivotTablesPage(doc);
     doc.addPage();
+    createAdvancedPivotPage(doc); // New page added here
+    doc.addPage();
     await createDetailedTablesPage(doc);
 
     const pageCount = doc.internal.getNumberOfPages();
@@ -152,8 +155,6 @@ export async function generatePdfReport() {
         doc.setPage(i);
         doc.setFontSize(8);
         doc.setTextColor(150);
-        // REMOVED: The following line that added the confidential footer has been deleted.
-        // doc.text('Spreadsheet Simplicity - Confidential & Proprietary', 14, 290);
         doc.text(`Page ${i} of ${pageCount}`, 190, 290);
     }
 
@@ -206,7 +207,6 @@ function createPivotTablesPage(doc) {
     doc.setFont('helvetica', 'bold');
     doc.text("Claim Counts by Aging & Network Status", 14, 20);
     
-    // MODIFIED: Increased the starting Y position further to guarantee no overlap.
     let finalY = 35;
 
     const drawPivotTable = (startY, title, subtitle, tableData) => {
@@ -268,6 +268,108 @@ function createPivotTablesPage(doc) {
     drawPivotTable(finalY + 20, 'Active Claim Counts', 'Filters: Clean Claims only, includes both DSNP and Non DSNP, All but Prebatch', processedPivotData);
 }
 
+// START: New functions for the advanced pivot table
+/**
+ * Aggregates data for the detailed pivot table (Claim Type > Claim State vs. DSNP Status)
+ */
+function aggregateAdvancedPivotData() {
+    const config = gatherConfig();
+    const result = { 'Institutional': {}, 'Professional': {} };
+    const columnSet = new Set();
+    const stateSet = new Set();
+
+    for (const claim of state.processedClaimsList) {
+        const claimTypeRaw = String(claim.originalRow[config.claimTypeIndex] || 'Other').toUpperCase();
+        const claimType = claimTypeRaw.includes('INSTITUTIONAL') ? 'Institutional' : (claimTypeRaw.includes('PROFESSIONAL') ? 'Professional' : 'Other');
+        
+        if (claimType === 'Other') continue;
+
+        const claimState = claim.claimState;
+        const dsnpStatus = String(claim.originalRow[config.dsnpIndex] || 'Unknown').trim();
+
+        columnSet.add(dsnpStatus);
+        stateSet.add(claimState);
+
+        if (!result[claimType][claimState]) result[claimType][claimState] = {};
+        if (!result[claimType][claimState][dsnpStatus]) result[claimType][claimState][dsnpStatus] = 0;
+        
+        result[claimType][claimState][dsnpStatus]++;
+    }
+    
+    const sortedColumns = [...columnSet].sort();
+    const sortedStates = [...stateSet].sort();
+
+    return { data: result, columns: sortedColumns, states: sortedStates };
+}
+
+/**
+ * Creates the advanced pivot table page in the PDF.
+ * @param {jsPDF} doc The jsPDF document instance.
+ */
+function createAdvancedPivotPage(doc) {
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text("Claim Counts by Type, State & DSNP Status", 14, 20);
+
+    const { data, columns, states } = aggregateAdvancedPivotData();
+    const head = [['Row Labels', ...columns, 'Grand Total']];
+    const body = [];
+    const grandTotals = {};
+    columns.forEach(c => grandTotals[c] = 0);
+    grandTotals.total = 0;
+
+    ['Institutional', 'Professional'].forEach(type => {
+        if (Object.keys(data[type]).length === 0) return;
+
+        const typeSubtotals = {};
+        columns.forEach(c => typeSubtotals[c] = 0);
+        typeSubtotals.total = 0;
+        
+        // Add main group row
+        body.push([{ content: type, colSpan: head[0].length, styles: { fillColor: [217, 225, 242], textColor: 0, fontStyle: 'bold' } }]);
+
+        states.forEach(stateName => {
+            if (data[type][stateName]) {
+                const row = [stateName];
+                let rowTotal = 0;
+                columns.forEach(col => {
+                    const count = data[type][stateName][col] || 0;
+                    row.push(count.toLocaleString());
+                    rowTotal += count;
+                    typeSubtotals[col] += count;
+                });
+                row.push(rowTotal.toLocaleString());
+                body.push(row);
+            }
+        });
+        
+        // Add subtotal row for the type
+        const subtotalRow = [{ content: `${type} Total`, styles: { fontStyle: 'bold' } }];
+        columns.forEach(c => {
+            subtotalRow.push({ content: typeSubtotals[c].toLocaleString(), styles: { fontStyle: 'bold' } });
+            grandTotals[c] += typeSubtotals[c];
+        });
+        subtotalRow.push({ content: typeSubtotals.total.toLocaleString(), styles: { fontStyle: 'bold' } });
+        body.push(subtotalRow);
+        grandTotals.total += typeSubtotals.total;
+    });
+    
+    const foot = [['Grand Total']];
+    columns.forEach(c => foot[0].push(grandTotals[c].toLocaleString()));
+    foot[0].push(grandTotals.total.toLocaleString());
+
+    doc.autoTable({
+        startY: 25,
+        head: head,
+        body: body,
+        foot: foot,
+        theme: 'grid',
+        headStyles: { fillColor: [79, 70, 229], fontStyle: 'bold' },
+        footStyles: { fillColor: [217, 225, 242], textColor: 0, fontStyle: 'bold' }
+    });
+}
+// END: New functions
+
 function formatCurrency(value) {
     if (value === null || isNaN(value)) return '$0';
     if (value < 1000) return `$${value.toFixed(0)}`;
@@ -275,6 +377,7 @@ function formatCurrency(value) {
     return `$${(value / 1000000).toFixed(1)}M`;
 }
 
+// MODIFIED: Added new KPIs and replaced two old ones
 async function createTitlePage(doc) {
     const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
     let currentY = 20;
@@ -367,8 +470,13 @@ async function createTitlePage(doc) {
     });
 
     let valueInPend = 0, deniedDollars = 0;
-    let pendAgeSum = 0, pendAgeCount = 0, oonCount = 0;
+    let pendAgeSum = 0, pendAgeCount = 0;
     
+    // START: Calculations for new KPIs
+    const approachingCriticalCount = state.processedClaimsList.filter(c => c.cleanAge === 27).length;
+    const criticalAgingToBacklogCount = state.processedClaimsList.filter(c => c.cleanAge === 30).length;
+    // END: Calculations for new KPIs
+
     state.processedClaimsList.forEach(claim => {
         const charges = parseFloat(String(claim.originalRow[config.totalChargesIndex]).replace(/[^0-9.-]/g, '')) || 0;
         if(claim.claimState === 'PEND') {
@@ -376,29 +484,18 @@ async function createTitlePage(doc) {
             if (!isNaN(claim.cleanAge)) { pendAgeSum += claim.cleanAge; pendAgeCount++; }
         }
         if(claim.claimState === 'DENY') deniedDollars += charges;
-        if(String(claim.originalRow[config.networkStatusIndex] || '').toUpperCase().includes('OUT')) oonCount++;
     });
 
     const avgPendAge = pendAgeCount > 0 ? (pendAgeSum / pendAgeCount).toFixed(1) + ' Days' : 'N/A';
-    const oonPercent = state.processedClaimsList.length > 0 ? ((oonCount / state.processedClaimsList.length) * 100).toFixed(1) + '%' : 'N/A';
-    const deniedYesterdayCount = state.yesterdayStats?.DENY?.total || 0;
-    let overturnedCount = 0;
-    if (state.detailedMovementStats.DENY) {
-        for (const bucket in state.detailedMovementStats.DENY) {
-            const cohort = state.detailedMovementStats.DENY[bucket];
-            overturnedCount += cohort.movedToPrebatch;
-            for (const dest in cohort.movedTo) { if (dest.startsWith('APPROVED')) { overturnedCount += cohort.movedTo[dest]; } }
-        }
-    }
-    const denialOverturnRate = deniedYesterdayCount > 0 ? ((overturnedCount / deniedYesterdayCount) * 100).toFixed(1) + '%' : 'N/A';
     
+    // MODIFIED: The KPIs array is updated with the new values
     const kpis = [
         { label: 'Total Claims Processed', value: totalClaimsProcessed.toLocaleString() },
         { label: 'Value in PEND Inventory', value: formatCurrency(valueInPend) },
         { label: 'Denied Dollars at Risk', value: formatCurrency(deniedDollars) },
         { label: 'Average Clean Age (PEND)', value: avgPendAge },
-        { label: 'Denial Overturn Rate', value: denialOverturnRate },
-        { label: 'Out-of-Network %', value: oonPercent }
+        { label: 'Claims Hitting Critical Tomorrow', value: approachingCriticalCount.toLocaleString() },
+        { label: 'Critical Claims Aging to Backlog', value: criticalAgingToBacklogCount.toLocaleString() }
     ];
 
     const kpiStartY = currentY + 4;
