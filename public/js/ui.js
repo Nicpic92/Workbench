@@ -15,7 +15,6 @@ export function displayStatus(message, type, showLoader = false) {
     document.getElementById('processBtn').disabled = !!showLoader;
 }
 
-// MODIFIED: This function now displays a more prominent warning
 export function displayWarning(message) {
     const warningContainer = document.getElementById('warning-container');
     const warningMessage = document.getElementById('warning-message');
@@ -132,8 +131,6 @@ function displayAssignmentEditor() {
         }
     });
 
-    // MODIFIED: Check if the warning is already displayed. If not, proceed as normal.
-    // The warning function now handles the description text.
     const editorDescription = document.getElementById('assignment-editor-description');
     if (editorDescription.textContent.includes('Action Required')) {
         // If the warning is active, just show a simplified message below it.
