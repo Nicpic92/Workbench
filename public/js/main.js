@@ -220,7 +220,7 @@ function copyEmailText() {
         const todayStats = calculateStats(state.processedClaimsList);
         const formatStatLine = (today, yesterday) => `${today} (Yest. ${yesterday ?? 0})`;
         
-        // START: Bug fix - Standardized keys to match the calculateStats function
+        // START: Bug fix - Standardized keys to match the calculateStats function and updated labels
         const createStatBlock = (title, statusKey) => {
             const yestBlock = state.yesterdayStats?.[statusKey] || { total: 0, '28-30': 0, '21-27': 0, '31+': 0, '0-20': 0 };
             const todayBlock = todayStats?.[statusKey] || { total: 0, '28-30': 0, '21-27': 0, '31+': 0, '0-20': 0 };
@@ -247,7 +247,6 @@ function copyEmailText() {
     }).catch(err => alert('Failed to copy text.'));
 }
 
-// MODIFIED: This function is updated to use the correct age ranges for buckets.
 function runDetailedCohortAnalysis() {
     state.workflowMovement = { pvToClaims: 0, claimsToPv: 0, criticalToBacklog: 0, criticalWorked: 0 };
     state.detailedMovementStats = {};
@@ -256,7 +255,6 @@ function runDetailedCohortAnalysis() {
     const config = gatherConfig();
     const prebatchClaimNumbers = new Set(state.prebatchClaims.map(row => String(row[config.claimNumberIndex] || '').trim()));
 
-    // START: Bug fix - Standardized age ranges
     const getBucketFromAge = (age) => {
         if (isNaN(age)) return 'UNKNOWN';
         if (age >= 28 && age <= 30) return 'Critical';
@@ -264,7 +262,6 @@ function runDetailedCohortAnalysis() {
         if (age >= 21 && age <= 27) return 'Priority';
         return 'Queue';
     };
-    // END: Bug fix
 
     const getStateKey = (stateStr) => (stateStr || '').includes('MANAGEMENT') ? 'MANAGEMENTREVIEW' : (stateStr || '');
     
