@@ -135,7 +135,6 @@ export function buildWorkbook(claimsData, reportTitle, ownerFilter = null) {
 
 // --- PDF Report Generation ---
 
-// MODIFIED: Added a new page for the advanced pivot table
 export async function generatePdfReport() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
@@ -146,7 +145,7 @@ export async function generatePdfReport() {
     doc.addPage();
     createPivotTablesPage(doc);
     doc.addPage();
-    createAdvancedPivotPage(doc); // New page added here
+    createAdvancedPivotPage(doc); 
     doc.addPage();
     await createDetailedTablesPage(doc);
 
@@ -268,10 +267,6 @@ function createPivotTablesPage(doc) {
     drawPivotTable(finalY + 20, 'Active Claim Counts', 'Filters: Clean Claims only, includes both DSNP and Non DSNP, All but Prebatch', processedPivotData);
 }
 
-// START: New functions for the advanced pivot table
-/**
- * Aggregates data for the detailed pivot table (Claim Type > Claim State vs. DSNP Status)
- */
 function aggregateAdvancedPivotData() {
     const config = gatherConfig();
     const result = { 'Institutional': {}, 'Professional': {} };
@@ -302,10 +297,7 @@ function aggregateAdvancedPivotData() {
     return { data: result, columns: sortedColumns, states: sortedStates };
 }
 
-/**
- * Creates the advanced pivot table page in the PDF.
- * @param {jsPDF} doc The jsPDF document instance.
- */
+// MODIFIED: This function now correctly calculates all totals.
 function createAdvancedPivotPage(doc) {
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
@@ -325,7 +317,6 @@ function createAdvancedPivotPage(doc) {
         columns.forEach(c => typeSubtotals[c] = 0);
         typeSubtotals.total = 0;
         
-        // Add main group row
         body.push([{ content: type, colSpan: head[0].length, styles: { fillColor: [217, 225, 242], textColor: 0, fontStyle: 'bold' } }]);
 
         states.forEach(stateName => {
@@ -340,10 +331,13 @@ function createAdvancedPivotPage(doc) {
                 });
                 row.push(rowTotal.toLocaleString());
                 body.push(row);
+                
+                // START: Bug fix - This line was missing, causing totals to be zero.
+                typeSubtotals.total += rowTotal;
+                // END: Bug fix
             }
         });
         
-        // Add subtotal row for the type
         const subtotalRow = [{ content: `${type} Total`, styles: { fontStyle: 'bold' } }];
         columns.forEach(c => {
             subtotalRow.push({ content: typeSubtotals[c].toLocaleString(), styles: { fontStyle: 'bold' } });
@@ -368,7 +362,6 @@ function createAdvancedPivotPage(doc) {
         footStyles: { fillColor: [217, 225, 242], textColor: 0, fontStyle: 'bold' }
     });
 }
-// END: New functions
 
 function formatCurrency(value) {
     if (value === null || isNaN(value)) return '$0';
@@ -377,7 +370,6 @@ function formatCurrency(value) {
     return `$${(value / 1000000).toFixed(1)}M`;
 }
 
-// MODIFIED: Added new KPIs and replaced two old ones
 async function createTitlePage(doc) {
     const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
     let currentY = 20;
@@ -472,10 +464,8 @@ async function createTitlePage(doc) {
     let valueInPend = 0, deniedDollars = 0;
     let pendAgeSum = 0, pendAgeCount = 0;
     
-    // START: Calculations for new KPIs
     const approachingCriticalCount = state.processedClaimsList.filter(c => c.cleanAge === 27).length;
     const criticalAgingToBacklogCount = state.processedClaimsList.filter(c => c.cleanAge === 30).length;
-    // END: Calculations for new KPIs
 
     state.processedClaimsList.forEach(claim => {
         const charges = parseFloat(String(claim.originalRow[config.totalChargesIndex]).replace(/[^0-9.-]/g, '')) || 0;
@@ -488,7 +478,6 @@ async function createTitlePage(doc) {
 
     const avgPendAge = pendAgeCount > 0 ? (pendAgeSum / pendAgeCount).toFixed(1) + ' Days' : 'N/A';
     
-    // MODIFIED: The KPIs array is updated with the new values
     const kpis = [
         { label: 'Total Claims Processed', value: totalClaimsProcessed.toLocaleString() },
         { label: 'Value in PEND Inventory', value: formatCurrency(valueInPend) },
