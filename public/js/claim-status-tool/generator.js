@@ -17,17 +17,22 @@ export function downloadPrebatchReport() {
 
 export function generateAssignmentReport() {
     const assignmentData = new Map();
+    const targetStates = ['PEND', 'ONHOLD']; // Define the statuses to include.
 
     // Aggregate claims by a unique key of state + note
     state.processedClaimsList.forEach(claim => {
-        const noteText = claim.noteText || "No Note";
         const claimState = claim.claimState || "UNKNOWN";
+        
+        // **FIX**: Only include claims if their status is PEND, ONHOLD, or contains MANAGEMENT.
+        if (!targetStates.includes(claimState) && !claimState.includes('MANAGEMENT')) {
+            return; // Skip any claim that doesn't match the required statuses.
+        }
+
+        const noteText = claim.noteText || "No Note";
         const key = `${claimState}||${noteText}`;
         
         let yesterdayOwner = 'NEW'; // Default owner if no yesterday file is present
 
-        // **FIX**: Safely check if the yesterday data exists before trying to access it.
-        // This prevents the crash when no yesterday file is uploaded.
         if (state.hasYesterdayFile && state.yesterdayDataMap) {
             const yestData = state.yesterdayDataMap.get(claim.claimNumber);
             if (yestData && yestData.owner) {
