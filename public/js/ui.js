@@ -9,16 +9,18 @@ import { downloadPrebatchReport, generateAssignmentReport } from './generator.js
 
 export function displayStatus(message, type, showLoader = false) {
     const statusDiv = document.getElementById('status');
-    statusDiv.textContent = message;
-    statusDiv.style.color = type === 'error' ? 'red' : (type === 'success' ? 'green' : '#4f46e5');
-    document.getElementById('loader').style.display = showLoader ? 'block' : 'none';
-    document.getElementById('processBtn').disabled = !!showLoader;
+    const loaderDiv = document.getElementById('loader');
+    const processButton = document.getElementById('processBtn');
+
+    if (statusDiv) statusDiv.textContent = message;
+    if (statusDiv) statusDiv.style.color = type === 'error' ? 'red' : (type === 'success' ? 'green' : '#4f46e5');
+    if (loaderDiv) loaderDiv.style.display = showLoader ? 'block' : 'none';
+    if (processButton) processButton.disabled = !!showLoader;
 }
 
 export function displayWarning(message) {
     const warningContainer = document.getElementById('warning-container');
     const warningMessage = document.getElementById('warning-message');
-    const editorDescription = document.getElementById('assignment-editor-description');
 
     if (warningContainer && warningMessage) {
         warningMessage.textContent = message;
@@ -68,22 +70,32 @@ export function getFormattedDate() {
 // --- Review Step Display Functions ---
 
 export function displayReviewStep() {
-    if (state.prebatchClaims.length > 0) {
-        document.getElementById('prebatch-summary').textContent = `Found ${state.prebatchClaims.length} claims in Prebatch status.`;
-        document.getElementById('downloadPrebatchBtn').onclick = downloadPrebatchReport;
-        document.getElementById('prebatch-container').classList.remove('hidden');
-    } else {
-        document.getElementById('prebatch-container').classList.add('hidden');
+    // Safely handle prebatch container
+    const prebatchContainer = document.getElementById('prebatch-container');
+    if (prebatchContainer) {
+        if (state.prebatchClaims.length > 0) {
+            document.getElementById('prebatch-summary').textContent = `Found ${state.prebatchClaims.length} claims in Prebatch status.`;
+            document.getElementById('downloadPrebatchBtn').onclick = downloadPrebatchReport;
+            prebatchContainer.classList.remove('hidden');
+        } else {
+            prebatchContainer.classList.add('hidden');
+        }
     }
 
     displayApproachingCriticalTable();
     
     // Setup for the new assignment workflow
-    document.getElementById('downloadAssignmentReportBtn').onclick = generateAssignmentReport;
-    document.getElementById('assignment-upload-step').classList.remove('hidden');
-    document.getElementById('generateFinalReportsBtn').disabled = true; // Disable until assignment file is uploaded
+    const downloadAssignmentBtn = document.getElementById('downloadAssignmentReportBtn');
+    if (downloadAssignmentBtn) downloadAssignmentBtn.onclick = generateAssignmentReport;
+    
+    const assignmentUploadStep = document.getElementById('assignment-upload-step');
+    if(assignmentUploadStep) assignmentUploadStep.classList.remove('hidden');
 
-    document.getElementById('review-container').classList.remove('hidden');
+    const generateReportsBtn = document.getElementById('generateFinalReportsBtn');
+    if(generateReportsBtn) generateReportsBtn.disabled = true;
+
+    const reviewContainer = document.getElementById('review-container');
+    if (reviewContainer) reviewContainer.classList.remove('hidden');
 }
 
 function displayApproachingCriticalTable() {
@@ -95,6 +107,9 @@ function displayApproachingCriticalTable() {
     if (countElement) {
         countElement.textContent = approachingCriticalClaims.length.toLocaleString();
     }
+    
+    // Ensure both container and tableContainer exist before proceeding
+    if (!container || !tableContainer) return;
 
     if (approachingCriticalClaims.length > 0) {
         let tableHtml = `
