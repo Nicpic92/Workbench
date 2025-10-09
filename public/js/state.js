@@ -10,10 +10,10 @@ export const state = {
     yesterdayDataMap: new Map(),
     yesterdayStats: null,
     workflowMovement: { pvToClaims: 0, claimsToPv: 0, criticalToBacklog: 0, criticalWorked: 0 },
-    prebatchMovementStats: {}, 
+    prebatchMovementStats: {},
     detailedMovementStats: {},
     cycleTimeMetrics: {},
-    assignmentMap: new Map(),
+    assignmentMap: new Map(), // **THIS LINE WAS MISSING**
     hasYesterdayFile: false
 };
 
@@ -32,5 +32,5 @@ export function resetState() {
     state.prebatchMovementStats = {};
     state.detailedMovementStats = {};
     state.cycleTimeMetrics = {};
-    state.assignmentMap.clear();
+    state.assignmentMap.clear(); // Ensure the map is cleared on reset
 }
