@@ -93,7 +93,7 @@
             <div id="review-container" class="hidden space-y-8 border-t pt-8">
                 <div class="text-center">
                     <h2 class="text-3xl font-extrabold text-gray-900">4. Review & Finalize</h2>
-                    <p class="mt-2 text-lg text-gray-600">Review assignments for all notes and download your reports.</p>
+                    <p class="mt-2 text-lg text-gray-600">Follow the steps below to assign claims and generate your final reports.</p>
                 </div>
 
                 <div id="movement-summary-container" class="hidden bg-blue-50 p-6 rounded-lg">
@@ -119,14 +119,27 @@
                     <p id="prebatch-summary" class="text-gray-700 mb-4"></p>
                     <button id="downloadPrebatchBtn" class="bg-teal-600 text-white font-bold text-lg rounded-lg py-3 px-8 hover:bg-teal-700">Download Prebatch Report</button>
                 </div>
-
-                <div id="assignment-editor-container" class="space-y-4">
-                    <h3 class="text-xl font-bold text-gray-900 mb-3">Assignment Editor</h3>
-                    <p id="assignment-editor-description" class="text-gray-700 mb-4"></p>
+                
+                <div class="bg-gray-50 p-6 rounded-lg space-y-6 border border-gray-200">
+                    <h3 class="text-2xl font-bold text-gray-900 mb-2">Assignment Workflow</h3>
+                    
+                    <div id="assignment-download-step">
+                        <p class="block text-lg font-semibold text-gray-800 mb-1">Step A: Download Assignment Report</p>
+                        <p class="text-gray-600 mb-3">This file contains a unique list of all claim states and notes. Fill in the final column to assign ownership.</p>
+                        <button id="downloadAssignmentReportBtn" class="bg-blue-600 text-white font-bold text-lg rounded-lg py-3 px-8 hover:bg-blue-700">Download Assignment Report</button>
+                    </div>
+                    
+                    <div id="assignment-upload-step" class="hidden border-t pt-6">
+                        <label for="assignmentFileInput" class="block text-lg font-semibold text-gray-800 mb-1">Step B: Upload Completed Assignment Report</label>
+                        <p class="text-gray-600 mb-3">Once uploaded and validated, you can generate the final action reports below.</p>
+                        <input type="file" id="assignmentFileInput" accept=".xlsx, .xls, .csv" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                        <div id="assignmentFileName" class="text-left mt-2 text-sm text-gray-600">No file selected.</div>
+                    </div>
                 </div>
 
+
                 <div class="text-center pt-6">
-                    <button id="generateFinalReportsBtn" class="bg-green-600 text-white font-bold text-lg rounded-lg py-3 px-10 hover:bg-green-700">Generate Final Reports</button>
+                    <button id="generateFinalReportsBtn" disabled class="bg-green-600 text-white font-bold text-lg rounded-lg py-3 px-10 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed">Generate Final Reports</button>
                 </div>
             </div>
 
