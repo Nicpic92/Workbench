@@ -24,33 +24,40 @@ export function generateAssignmentReport() {
         const state = claim.claimState || "UNKNOWN";
         const key = `${state}||${noteText}`;
         
+        // Get the owner from yesterday's data, if it exists
+        const yestData = state.yesterdayDataMap.get(claim.claimNumber);
+        const yesterdayOwner = yestData ? yestData.owner : 'NEW';
+
         if (!assignmentData.has(key)) {
             assignmentData.set(key, { 
                 "Claim State": state,
                 "Note / Edit Text": noteText,
                 "Claim Count": 0,
+                "Yesterday's Owner": yesterdayOwner // Store yesterday's owner
             });
         }
         assignmentData.get(key)["Claim Count"]++;
     });
 
-    // Convert map to array for XLSX
+    // Convert map to array for XLSX, now with the new column
     const reportArray = [
-        ["Claim State", "Note / Edit Text", "Claim Count", "Assign To (Claims or PV)"] // Add the user-fillable column
+        ["Claim State", "Note / Edit Text", "Claim Count", "Yesterday's Owner", "Assign To (Claims or PV)"]
     ];
     assignmentData.forEach(value => {
         reportArray.push([
             value["Claim State"],
             value["Note / Edit Text"],
             value["Claim Count"],
-            "" // Leave this column blank
+            value["Yesterday's Owner"], // Add the data to the row
+            "" // Leave the assignment column blank for the user
         ]);
     });
 
     // Create and download the workbook
     const ws = XLSX.utils.aoa_to_sheet(reportArray);
     ws['!autofilter'] = { ref: ws['!ref'] };
-    ws['!cols'] = [{ wch: 20 }, { wch: 80 }, { wch: 15 }, { wch: 30 }];
+    // Adjust column widths for the new column
+    ws['!cols'] = [{ wch: 20 }, { wch: 80 }, { wch: 15 }, { wch: 20 }, { wch: 30 }];
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Assignment Data");
