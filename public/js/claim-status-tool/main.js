@@ -1,3 +1,4 @@
+// FIXED: Use relative paths for local JS module imports
 import { state, resetState } from './state.js';
 import { clientPresets, gatherConfig } from './config.js';
 import * as ui from './ui.js';
@@ -28,7 +29,6 @@ function initializeTool() {
 }
 
 // --- Event Handler Functions ---
-
 function handleClientSelection() {
     const selectedClient = document.getElementById('client-select').value;
     const configContainer = document.getElementById('configuration-container');
@@ -110,7 +110,6 @@ async function performInitialProcessing() {
         state.processedClaimsList.forEach(claim => {
             if (claim.noteText) {
                 noteStats.totalWithNotes++;
-                // **MODIFIED**: Use the new analysis function to check for "General Investigation"
                 if (analyzeClaimNotes(claim.noteText).rootCause === 'General Investigation') {
                     noteStats.miscellaneous++;
                 }
@@ -123,7 +122,6 @@ async function performInitialProcessing() {
             ui.displayWarning(warningMessage);
         }
 
-        // **MODIFIED**: Update header row for new report structure
         state.fileHeaderRow = [...state.mainReportHeader];
         if (state.hasYesterdayFile) {
             state.fileHeaderRow.splice(config.claimStatusIndex, 0, 'Yest. Claim State');
@@ -136,12 +134,11 @@ async function performInitialProcessing() {
             if (state.hasYesterdayFile) {
                 newRow.splice(config.claimStatusIndex, 0, state.yesterdayDataMap.get(claim.claimNumber)?.state || 'NEW');
             }
-            // **MODIFIED**: Push new data points to the end of the row
             newRow.push(claim.rootCause, claim.owner);
 
             claim.processedRow = newRow;
             claim.defaultOwner = claim.owner;
-            claim.finalOwner = claim.owner; // Initialize finalOwner with the default
+            claim.finalOwner = claim.owner;
         });
 
         ui.displayStatus('Processing Complete. Please generate and complete the assignment report.', 'success');
@@ -172,7 +169,6 @@ async function handleAssignmentFileUpload(event) {
             const ws = wb.Sheets[wb.SheetNames[0]];
             const jsonData = XLSX.utils.sheet_to_json(ws);
 
-            // Assuming state.assignmentMap exists and is cleared in resetState
             state.assignmentMap.clear();
             let validAssignments = 0;
 
@@ -210,7 +206,6 @@ async function handleAssignmentFileUpload(event) {
 async function generateFinalReports() {
     ui.displayStatus('Applying assignments and generating final reports...', 'info', true);
 
-    // Apply assignments from the map
     state.processedClaimsList.forEach(claim => {
         const noteText = claim.noteText || "No Note";
         const stateStr = claim.claimState || "UNKNOWN";
@@ -219,10 +214,8 @@ async function generateFinalReports() {
 
         if (assignedOwner) {
             claim.finalOwner = assignedOwner;
-            // The owner is the last element in the processedRow array
             claim.processedRow[claim.processedRow.length - 1] = assignedOwner;
         } else {
-            // If no specific assignment, it keeps the default owner
             claim.finalOwner = claim.defaultOwner;
             claim.processedRow[claim.processedRow.length - 1] = claim.defaultOwner;
         }
@@ -236,7 +229,6 @@ async function generateFinalReports() {
     const downloadsContainer = document.getElementById('download-links-container');
     downloadsContainer.innerHTML = '';
 
-    // **MODIFIED**: Only a single overall report is generated now
     createDownloadLink(buildWorkbook(state.processedClaimsList, `${clientName} Daily Action Report`), `${clientName} Daily Action Report for ${ui.getFormattedDate()}.xlsx`, downloadsContainer);
 
     if (state.hasYesterdayFile) {
