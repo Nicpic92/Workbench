@@ -31,35 +31,54 @@ export function displayWarning(message) {
 }
 
 export function resetUI() {
-    // Hide all major containers by checking for their existence first
-    ['review-container', 'final-downloads-container', 'movement-summary-container', 'approaching-critical-container', 'prebatch-container', 'warning-container', 'assignment-upload-step'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.classList.add('hidden');
-    });
+    // Configuration of elements to reset. This is a safer way to manage UI state.
+    const elementsToReset = {
+        'review-container': { action: 'hide' },
+        'final-downloads-container': { action: 'hide' },
+        'movement-summary-container': { action: 'hide' },
+        'approaching-critical-container': { action: 'hide' },
+        'prebatch-container': { action: 'hide' },
+        'warning-container': { action: 'hide' },
+        'assignment-upload-step': { action: 'hide' },
+        'download-links-container': { action: 'clearHTML' },
+        'approaching-critical-table-container': { action: 'clearHTML' },
+        'status': { action: 'clearText' },
+        'assignmentFileName': { action: 'setText', value: 'No file selected.' },
+        'copyEmailBtn': { action: 'hide' },
+        'generateFinalReportsBtn': { action: 'disable' },
+        'assignmentFileInput': { action: 'resetValue' }
+    };
 
-    // Safely clear content of specific elements
-    const downloadLinks = document.getElementById('download-links-container');
-    if (downloadLinks) downloadLinks.innerHTML = '';
-
-    const copyBtn = document.getElementById('copyEmailBtn');
-    if (copyBtn) copyBtn.classList.add('hidden');
-
-    const statusDiv = document.getElementById('status');
-    if (statusDiv) statusDiv.textContent = '';
-    
-    const criticalTable = document.getElementById('approaching-critical-table-container');
-    if (criticalTable) criticalTable.innerHTML = '';
-    
-    // Safely reset the assignment file input
-    const assignmentFileInput = document.getElementById('assignmentFileInput');
-    const assignmentFileName = document.getElementById('assignmentFileName');
-    if (assignmentFileInput && assignmentFileName) {
-        assignmentFileInput.value = '';
-        assignmentFileName.textContent = 'No file selected.';
+    // Loop through the configuration and safely update the DOM
+    for (const id in elementsToReset) {
+        const element = document.getElementById(id);
+        if (element) {
+            const config = elementsToReset[id];
+            switch (config.action) {
+                case 'hide':
+                    element.classList.add('hidden');
+                    break;
+                case 'clearHTML':
+                    element.innerHTML = ''; // The operation that previously caused the error
+                    break;
+                case 'clearText':
+                    element.textContent = '';
+                    break;
+                case 'setText':
+                    element.textContent = config.value;
+                    break;
+                case 'disable':
+                    element.disabled = true;
+                    break;
+                case 'resetValue':
+                    element.value = '';
+                    break;
+            }
+        } else {
+            // This will log a warning in the browser's developer console if an element is missing, but it will NOT crash the app.
+            console.warn(`resetUI failed to find element with ID: '${id}'. This may indicate an HTML/JS mismatch.`);
+        }
     }
-
-    const generateBtn = document.getElementById('generateFinalReportsBtn');
-    if (generateBtn) generateBtn.disabled = true;
 }
 
 
@@ -75,8 +94,10 @@ export function displayReviewStep() {
     const prebatchContainer = document.getElementById('prebatch-container');
     if (prebatchContainer) {
         if (state.prebatchClaims.length > 0) {
-            document.getElementById('prebatch-summary').textContent = `Found ${state.prebatchClaims.length} claims in Prebatch status.`;
-            document.getElementById('downloadPrebatchBtn').onclick = downloadPrebatchReport;
+            const summary = document.getElementById('prebatch-summary');
+            const button = document.getElementById('downloadPrebatchBtn');
+            if(summary) summary.textContent = `Found ${state.prebatchClaims.length} claims in Prebatch status.`;
+            if(button) button.onclick = downloadPrebatchReport;
             prebatchContainer.classList.remove('hidden');
         } else {
             prebatchContainer.classList.add('hidden');
@@ -121,7 +142,7 @@ function displayApproachingCriticalTable() {
                             <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Payer</th>
                             <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total Charges</th>
                             <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Claim State</th>
-                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Yesterday's Owner</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Current Owner</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">`;
