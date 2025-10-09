@@ -3,23 +3,29 @@
 // and return new data, without directly affecting the webpage. This makes
 // them easier to test and reason about.
 
-export function getHardcodedAssignment(noteText) { 
+export function getHardcodedAssignment(noteText) {
     // This function can be expanded with specific rules.
     // For now, it returns null to let the main logic handle assignment.
-    return null; 
+    return null;
 }
-    
-export function getNoteCategory(noteText) {
+
+export function analyzeClaimNotes(noteText) {
     const noteLower = noteText.toLowerCase();
-    if (noteLower.includes('w9 req') || noteLower.includes('w9 requested') || noteLower.includes('w9 recvd') || noteLower.includes('w9 past due')) return 'W9 Form Management';
-    if (noteLower.includes('rachael') || noteLower.includes('payer review') || noteLower.includes('hold for') || noteLower.includes('red tab') || noteLower.includes('move to pr')) return 'Manual Review (Rachael/Payer)';
-    if (noteLower.startsWith('error -') || noteLower.startsWith('error-') || noteLower.includes('incorrectly') || noteLower.includes('missed to')) return 'Adjudication & Processing Errors';
-    if (noteLower.includes('payment >') || noteLower.includes('net pay >') || noteLower.includes('>$10000') || noteLower.includes('exceeds total payment') || noteLower.includes('10k')) return 'High-Dollar Amount Review';
-    if (noteLower.includes('contract') || noteLower.includes('provider not found') || noteLower.includes('no data for') || noteLower.includes('pay to name mismatch')) return 'Contract & Provider Data Issues';
-    if (noteLower.includes('remap') || noteLower.includes('rerun') || noteLower.includes('reprocess') || noteLower.includes('pv updated')) return 'System Actions & Reprocessing';
-    if (noteLower.includes('auth') || noteLower.includes('duplicate')) return 'Authorization & Duplicate Issues';
-    return 'Miscellaneous';
+
+    // Detailed root cause analysis
+    if (noteLower.includes('w9 req') || noteLower.includes('w9 requested') || noteLower.includes('w9 recvd') || noteLower.includes('w9 past due') || noteLower.includes('w9')) return { rootCause: 'W9 Form Issue', assignedTo: 'Claims' };
+    if (noteLower.includes('rachael') || noteLower.includes('payer review') || noteLower.includes('hold for') || noteLower.includes('red tab') || noteLower.includes('move to pr')) return { rootCause: 'Manual Payer Review', assignedTo: 'PV' };
+    if (noteLower.startsWith('error -') || noteLower.startsWith('error-') || noteLower.includes('incorrectly') || noteLower.includes('missed to')) return { rootCause: 'Adjudication/Processing Error', assignedTo: 'Claims' };
+    if (noteLower.includes('payment >') || noteLower.includes('net pay >') || noteLower.includes('>$10000') || noteLower.includes('exceeds total payment') || noteLower.includes('10k')) return { rootCause: 'High-Dollar Amount Review', assignedTo: 'PV' };
+    if (noteLower.includes('contract') || noteLower.includes('provider not found') || noteLower.includes('no data for') || noteLower.includes('pay to name mismatch')) return { rootCause: 'Contract & Provider Data', assignedTo: 'PV' };
+    if (noteLower.includes('remap') || noteLower.includes('rerun') || noteLower.includes('reprocess') || noteLower.includes('pv updated')) return { rootCause: 'System Action / Reprocessing', assignedTo: 'Claims' };
+    if (noteLower.includes('auth')) return { rootCause: 'Authorization Missing/Invalid', assignedTo: 'PV' };
+    if (noteLower.includes('duplicate')) return { rootCause: 'Potential Duplicate', assignedTo: 'Claims' };
+
+    // Default fallback
+    return { rootCause: 'General Investigation', assignedTo: 'Default' };
 }
+
 
 export function processAndAssignClaims(aoa, config, yesterdayDataMap) {
     const claims = [];
@@ -27,7 +33,7 @@ export function processAndAssignClaims(aoa, config, yesterdayDataMap) {
     for (const row of aoa.slice(1)) {
         // Skip empty rows
         if (row.every(c => c === null)) continue;
-        
+
         const claimState = String(row[config.claimStatusIndex] || '').trim().toUpperCase();
         // Skip prebatch claims from the main processing
         if (claimState.includes('PREBATCH')) continue;
@@ -35,7 +41,11 @@ export function processAndAssignClaims(aoa, config, yesterdayDataMap) {
         const noteText = String(row[config.notesIndex] || '');
         const cleanAge = parseInt(row[config.cleanAgeIndex], 10);
         let owner = null;
-        
+
+        // Analyze notes for root cause and initial assignment
+        const noteAnalysis = analyzeClaimNotes(noteText);
+        let rootCause = noteAnalysis.rootCause;
+
         // Use yesterday's owner if available
         const claimNumber = String(row[config.claimNumberIndex] || '').trim();
         if (claimNumber && yesterdayDataMap.has(claimNumber)) {
@@ -46,19 +56,25 @@ export function processAndAssignClaims(aoa, config, yesterdayDataMap) {
         if (!owner) {
             owner = getHardcodedAssignment(noteText);
             if (owner === null) { // If no hardcoded rule matched
-                const totalCharges = parseFloat(String(row[config.totalChargesIndex]).replace(/[^0-9.-]/g, '')) || 0;
-                const claimType = String(row[config.claimTypeIndex] || '').toUpperCase();
-                const isMgmtReview = claimState.includes('MANAGEMENT') && claimState.includes('REVIEW');
-                const isHighCost = isMgmtReview && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500));
-                
-                if (isHighCost) owner = 'Claims';
-                else if (isMgmtReview || claimState === 'ONHOLD') owner = 'PV';
-                else if (['PEND', 'APPROVED', 'DENY'].includes(claimState)) owner = 'Claims';
-                else if (claimState === 'PR') owner = row[config.payerIndex] || ''; // Assign to payer name
-                else owner = 'PV'; // Default
+                // Use assignment from note analysis if it's not the default
+                if (noteAnalysis.assignedTo !== 'Default') {
+                    owner = noteAnalysis.assignedTo;
+                } else {
+                    // Fallback to original logic
+                    const totalCharges = parseFloat(String(row[config.totalChargesIndex]).replace(/[^0-9.-]/g, '')) || 0;
+                    const claimType = String(row[config.claimTypeIndex] || '').toUpperCase();
+                    const isMgmtReview = claimState.includes('MANAGEMENT') && claimState.includes('REVIEW');
+                    const isHighCost = isMgmtReview && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500));
+
+                    if (isHighCost) owner = 'Claims';
+                    else if (isMgmtReview || claimState === 'ONHOLD') owner = 'PV';
+                    else if (['PEND', 'APPROVED', 'DENY'].includes(claimState)) owner = 'Claims';
+                    else if (claimState === 'PR') owner = row[config.payerIndex] || ''; // Assign to payer name
+                    else owner = 'PV'; // Default
+                }
             }
         }
-        claims.push({ ...config, originalRow: row, noteText, cleanAge, claimState, owner, claimNumber });
+        claims.push({ ...config, originalRow: row, noteText, cleanAge, claimState, owner, claimNumber, rootCause });
     }
     return claims;
 }
@@ -66,21 +82,25 @@ export function processAndAssignClaims(aoa, config, yesterdayDataMap) {
 export function processYesterdayReport(aoa) {
     const headers = (aoa[0] || []).map(h => String(h || '').trim());
     const claimNumIndex = headers.indexOf('Claim Number');
-    const ownerIndex = headers.indexOf('Added (Owner)');
+    // **MODIFIED**: Look for "Assigned To" first, then fall back to "Added (Owner)" for backward compatibility
+    let ownerIndex = headers.indexOf('Assigned To');
+    if (ownerIndex === -1) {
+        ownerIndex = headers.indexOf('Added (Owner)');
+    }
     const stateIndex = headers.indexOf('Claim State');
-    const cleanAgeHeaderNames = ['Clean Age', 'Age']; 
+    const cleanAgeHeaderNames = ['Clean Age', 'Age'];
     let cleanAgeIndex = -1;
 
     for (const name of cleanAgeHeaderNames) {
         const idx = headers.findIndex(h => h.startsWith(name));
-        if (idx !== -1) { 
-            cleanAgeIndex = idx; 
-            break; 
+        if (idx !== -1) {
+            cleanAgeIndex = idx;
+            break;
         }
     }
-    
+
     if (claimNumIndex === -1 || ownerIndex === -1 || cleanAgeIndex === -1) {
-        throw new Error("Yesterday's report must contain 'Claim Number', 'Added (Owner)', and a 'Clean Age'/'Age' column.");
+        throw new Error("Yesterday's report must contain 'Claim Number', 'Assigned To' (or 'Added (Owner)'), and a 'Clean Age'/'Age' column.");
     }
 
     const dataMap = new Map();
@@ -101,13 +121,13 @@ export function processYesterdayReport(aoa) {
 
 export function calculateStats(claimsList) {
     const dayBuckets = { '28-30': 0, '21-27': 0, '31+': 0, '0-20': 0 };
-    const stats = { 
-        'PEND': { total: 0, ...dayBuckets }, 
-        'ONHOLD': { total: 0, ...dayBuckets }, 
-        'MANAGEMENTREVIEW': { total: 0, ...dayBuckets }, 
-        'DENY': { total: 0, ...dayBuckets }, 
-        'PR': { total: 0, ...dayBuckets }, 
-        'APPROVED': { total: 0, ...dayBuckets} 
+    const stats = {
+        'PEND': { total: 0, ...dayBuckets },
+        'ONHOLD': { total: 0, ...dayBuckets },
+        'MANAGEMENTREVIEW': { total: 0, ...dayBuckets },
+        'DENY': { total: 0, ...dayBuckets },
+        'PR': { total: 0, ...dayBuckets },
+        'APPROVED': { total: 0, ...dayBuckets}
     };
     for(const claim of claimsList) {
         let finalClaimState = (claim.claimState || '').includes('MANAGEMENT') ? 'MANAGEMENTREVIEW' : (claim.claimState || '');
@@ -119,7 +139,7 @@ export function calculateStats(claimsList) {
                 else if (claim.cleanAge >= 21 && claim.cleanAge <= 27) daysValue = '21-27';
                 else if (claim.cleanAge >= 31) daysValue = '31+';
                 else daysValue = '0-20';
-                
+
                 if (stats[finalClaimState][daysValue] !== undefined) {
                     stats[finalClaimState][daysValue]++;
                 }
@@ -137,7 +157,7 @@ export function calculateCycleTimeMetrics(processedClaimsList) {
         total_other_par: 0,    met_goal_other_par: 0,
     };
     const cleanStates = ['PEND', 'APPROVED', 'DENY', 'PR'];
-    
+
     for (const claim of processedClaimsList) {
         const isNonPar = String(claim.originalRow[claim.networkStatusIndex] || '').toUpperCase().includes('OUT');
         const isClean = cleanStates.includes(claim.claimState) || claim.claimState.includes('MANAGEMENT') === false;
