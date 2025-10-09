@@ -27,22 +27,35 @@ export function displayWarning(message) {
 }
 
 export function resetUI() {
+    // Hide all major containers
     ['review-container', 'final-downloads-container', 'movement-summary-container', 'approaching-critical-container', 'prebatch-container', 'warning-container', 'assignment-upload-step'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.add('hidden');
     });
-    document.getElementById('download-links-container').innerHTML = '';
-    document.getElementById('copyEmailBtn').classList.add('hidden');
-    document.getElementById('status').textContent = '';
-    document.getElementById('approaching-critical-table-container').innerHTML = '';
+
+    // Safely clear content of specific elements
+    const downloadLinks = document.getElementById('download-links-container');
+    if (downloadLinks) downloadLinks.innerHTML = '';
+
+    const copyBtn = document.getElementById('copyEmailBtn');
+    if (copyBtn) copyBtn.classList.add('hidden');
+
+    const statusDiv = document.getElementById('status');
+    if (statusDiv) statusDiv.textContent = '';
     
-    // Reset the assignment file input
+    const criticalTable = document.getElementById('approaching-critical-table-container');
+    if (criticalTable) criticalTable.innerHTML = '';
+    
+    // Safely reset the assignment file input
     const assignmentFileInput = document.getElementById('assignmentFileInput');
-    if(assignmentFileInput) {
+    const assignmentFileName = document.getElementById('assignmentFileName');
+    if (assignmentFileInput && assignmentFileName) {
         assignmentFileInput.value = '';
-        document.getElementById('assignmentFileName').textContent = 'No file selected.';
+        assignmentFileName.textContent = 'No file selected.';
     }
-    document.getElementById('generateFinalReportsBtn').disabled = true;
+
+    const generateBtn = document.getElementById('generateFinalReportsBtn');
+    if (generateBtn) generateBtn.disabled = true;
 }
 
 
