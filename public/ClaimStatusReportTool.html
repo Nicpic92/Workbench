@@ -9,8 +9,8 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<!-- FIXED CSS PATH -->
-<link rel="stylesheet" href="claim-status-report.css">
+<!-- FIXED CSS PATH for deployment -->
+<link rel="stylesheet" href="/css/claim-status-report.css">
 </head>
 <body>
 
@@ -135,29 +135,4 @@
                     <div id="assignment-upload-step" class="hidden border-t pt-6">
                         <label for="assignmentFileInput" class="block text-lg font-semibold text-gray-800 mb-1">Step B: Upload Completed Assignment Report</label>
                         <p class="text-gray-600 mb-3">Once uploaded and validated, you can generate the final action reports below.</p>
-                        <input type="file" id="assignmentFileInput" accept=".xlsx, .xls, .csv" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
-                        <div id="assignmentFileName" class="text-left mt-2 text-sm text-gray-600">No file selected.</div>
-                    </div>
-                </div>
-
-                <div class="text-center pt-6">
-                    <button id="generateFinalReportsBtn" disabled class="bg-green-600 text-white font-bold text-lg rounded-lg py-3 px-10 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed">Generate Final Reports</button>
-                </div>
-            </div>
-            <!-- REVIEW CONTAINER END -->
-
-            <div id="final-downloads-container" class="hidden text-center mt-4 space-y-4">
-                <div id="download-links-container" class="flex flex-wrap justify-center gap-4">
-                    <!-- Download links will be inserted here -->
-                </div>
-                <button id="copyEmailBtn" class="hidden inline-block bg-blue-600 text-white font-bold text-lg rounded-lg py-3 px-10 hover:bg-blue-700">Copy Email Text</button>
-            </div>
-        </div>
-    </div>
-</main>
-
-<div id="chart-render-container" class="chart-container"></div>
-<!-- FIXED JAVASCRIPT PATH -->
-<script type="module" src="main.js"></script>
-</body>
-</html>
+                        <input type="file" id="assignmentFileInput" accept=".xlsx, .xls, .csv" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:
