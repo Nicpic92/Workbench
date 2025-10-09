@@ -1,12 +1,12 @@
+// FIXED: Use relative paths for local JS module imports
 import { state } from './state.js';
-import { getNoteCategory } from './processing.js';
+import { analyzeClaimNotes } from './processing.js'; // Changed from getNoteCategory
 import { downloadPrebatchReport, generateAssignmentReport } from './generator.js';
 
 // This module contains all functions that directly interact with the DOM (the HTML page).
 // This keeps the logic for how the page looks and behaves separate from the data processing logic.
 
 // --- Core UI Functions ---
-
 export function displayStatus(message, type, showLoader = false) {
     const statusDiv = document.getElementById('status');
     const loaderDiv = document.getElementById('loader');
@@ -31,8 +31,6 @@ export function displayWarning(message) {
 }
 
 export function resetUI() {
-    // This new, safer function finds an element and performs an action,
-    // but it will NOT crash if the element doesn't exist.
     const safeUpdate = (id, action, value = null) => {
         const element = document.getElementById(id);
         if (element) {
@@ -41,7 +39,7 @@ export function resetUI() {
                     element.classList.add('hidden');
                     break;
                 case 'clearHTML':
-                    element.innerHTML = ''; // This was the source of the error
+                    element.innerHTML = '';
                     break;
                 case 'clearText':
                     element.textContent = '';
@@ -56,26 +54,15 @@ export function resetUI() {
                     element.value = '';
                     break;
             }
-        } else {
-            // This message will appear in the developer console (F12) if an element is missing,
-            // but it will not stop the application from working.
-            console.warn(`UI element not found: #${id}. This is safe, but may indicate an HTML/JS mismatch.`);
         }
     };
 
-    // Hide all major containers
     ['review-container', 'final-downloads-container', 'movement-summary-container', 'approaching-critical-container', 'prebatch-container', 'warning-container', 'assignment-upload-step', 'copyEmailBtn'].forEach(id => safeUpdate(id, 'hide'));
-
-    // Clear the content of containers that are filled later
     safeUpdate('download-links-container', 'clearHTML');
     safeUpdate('approaching-critical-table-container', 'clearHTML');
-    
-    // Reset text and inputs
     safeUpdate('status', 'clearText');
     safeUpdate('assignmentFileName', 'setText', 'No file selected.');
     safeUpdate('assignmentFileInput', 'resetValue');
-
-    // Disable the final button
     safeUpdate('generateFinalReportsBtn', 'disable');
 }
 
@@ -87,7 +74,6 @@ export function getFormattedDate() {
 }
 
 // --- Review Step Display Functions ---
-
 export function displayReviewStep() {
     const prebatchContainer = document.getElementById('prebatch-container');
     if (prebatchContainer) {
@@ -103,14 +89,13 @@ export function displayReviewStep() {
     }
 
     displayApproachingCriticalTable();
-    
-    // Setup for the new assignment workflow
+
     const downloadBtn = document.getElementById('downloadAssignmentReportBtn');
     if (downloadBtn) downloadBtn.onclick = generateAssignmentReport;
-    
+
     const uploadStep = document.getElementById('assignment-upload-step');
     if (uploadStep) uploadStep.classList.remove('hidden');
-    
+
     const generateBtn = document.getElementById('generateFinalReportsBtn');
     if(generateBtn) generateBtn.disabled = true;
 
@@ -127,8 +112,8 @@ function displayApproachingCriticalTable() {
     if (countElement) {
         countElement.textContent = approachingCriticalClaims.length.toLocaleString();
     }
-    
-    if (!container || !tableContainer) return; // Exit if essential elements are missing
+
+    if (!container || !tableContainer) return;
 
     if (approachingCriticalClaims.length > 0) {
         let tableHtml = `
@@ -148,7 +133,7 @@ function displayApproachingCriticalTable() {
         for (const claim of approachingCriticalClaims) {
             const totalCharges = (parseFloat(String(claim.originalRow[claim.totalChargesIndex]).replace(/[^0-9.-]/g, '')) || 0)
                                  .toLocaleString('en-US', { style: 'currency', currency: 'USD' });
-            
+
             tableHtml += `
                 <tr>
                     <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">${claim.claimNumber}</td>
