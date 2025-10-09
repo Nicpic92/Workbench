@@ -15,6 +15,51 @@ export function downloadPrebatchReport() {
     XLSX.writeFile(wb, `${clientName} Prebatch Report for ${getFormattedDate()}.xlsx`);
 }
 
+export function generateAssignmentReport() {
+    const assignmentData = new Map();
+
+    // Aggregate claims by a unique key of state + note
+    state.processedClaimsList.forEach(claim => {
+        const noteText = claim.noteText || "No Note";
+        const state = claim.claimState || "UNKNOWN";
+        const key = `${state}||${noteText}`;
+        
+        if (!assignmentData.has(key)) {
+            assignmentData.set(key, { 
+                "Claim State": state,
+                "Note / Edit Text": noteText,
+                "Claim Count": 0,
+            });
+        }
+        assignmentData.get(key)["Claim Count"]++;
+    });
+
+    // Convert map to array for XLSX
+    const reportArray = [
+        ["Claim State", "Note / Edit Text", "Claim Count", "Assign To (Claims or PV)"] // Add the user-fillable column
+    ];
+    assignmentData.forEach(value => {
+        reportArray.push([
+            value["Claim State"],
+            value["Note / Edit Text"],
+            value["Claim Count"],
+            "" // Leave this column blank
+        ]);
+    });
+
+    // Create and download the workbook
+    const ws = XLSX.utils.aoa_to_sheet(reportArray);
+    ws['!autofilter'] = { ref: ws['!ref'] };
+    ws['!cols'] = [{ wch: 20 }, { wch: 80 }, { wch: 15 }, { wch: 30 }];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Assignment Data");
+    
+    const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
+    XLSX.writeFile(wb, `${clientName} Assignment Report for ${getFormattedDate()}.xlsx`);
+}
+
+
 export function buildWorkbook(claimsData, reportTitle, ownerFilter = null) {
     const masterSheetName = "All Processed Data", highDollarSheetName = "High Dollar";
     const sheetsData = { [masterSheetName]: [state.fileHeaderRow] };
