@@ -1,7 +1,7 @@
 import { state, resetState } from './state.js';
 import { clientPresets, gatherConfig } from './config.js';
 import * as ui from './ui.js';
-import { processYesterdayReport, processAndAssignClaims, calculateStats, getNoteCategory } from './processing.js';
+import { processYesterdayReport, processAndAssignClaims, calculateStats, analyzeClaimNotes } from './processing.js';
 import { buildWorkbook, generatePdfReport } from './generator.js';
 
 // This is the main entry point for the application. It orchestrates the other modules.
@@ -16,12 +16,12 @@ function initializeTool() {
     const yesterdayFileInput = document.getElementById('yesterdayFileInput');
     const assignmentFileInput = document.getElementById('assignmentFileInput');
     const processBtn = document.getElementById('processBtn');
-    
+
     // --- Event Listeners ---
     clientSelect.addEventListener('change', handleClientSelection);
     fileInput.addEventListener('change', checkFiles);
     yesterdayFileInput.addEventListener('change', checkFiles);
-    assignmentFileInput.addEventListener('change', handleAssignmentFileUpload); // This is the relevant listener
+    assignmentFileInput.addEventListener('change', handleAssignmentFileUpload);
     processBtn.addEventListener('click', performInitialProcessing);
     document.getElementById('generateFinalReportsBtn').addEventListener('click', generateFinalReports);
     document.getElementById('copyEmailBtn').addEventListener('click', copyEmailText);
@@ -33,10 +33,10 @@ function handleClientSelection() {
     const selectedClient = document.getElementById('client-select').value;
     const configContainer = document.getElementById('configuration-container');
     const uploadContainer = document.getElementById('upload-container');
-    
+
     ui.resetUI();
     resetState(); // Reset state when client changes
-    
+
     if (selectedClient && clientPresets[selectedClient]) {
         const preset = clientPresets[selectedClient];
         document.getElementById('cleanAgeCol-label').textContent = preset.label;
@@ -59,7 +59,7 @@ function checkFiles() {
 
     if(fileInput.files[0]) document.getElementById('fileName').textContent = `Selected: ${fileInput.files[0].name}`;
     if(yesterdayFileInput.files[0]) document.getElementById('yesterdayFileName').textContent = `Selected: ${yesterdayFileInput.files[0].name}`;
-    
+
     processBtn.disabled = !fileInput.files[0];
 }
 
@@ -76,7 +76,7 @@ async function performInitialProcessing() {
     ui.displayStatus('Processing... Please wait.', 'info', true);
     ui.resetUI();
     resetState();
-    
+
     state.hasYesterdayFile = !!yesterdayFile;
 
     const readFileAsAOA = (file) => new Promise((resolve, reject) => {
@@ -103,14 +103,15 @@ async function performInitialProcessing() {
         const main_aoa = await readFileAsAOA(mainFile);
         state.mainReportHeader = main_aoa[0];
         state.prebatchClaims = main_aoa.slice(1).filter(row => String(row[config.claimStatusIndex] || '').toUpperCase().includes('PREBATCH'));
-        
+
         state.processedClaimsList = processAndAssignClaims(main_aoa, config, state.yesterdayDataMap);
-        
+
         const noteStats = { miscellaneous: 0, totalWithNotes: 0 };
         state.processedClaimsList.forEach(claim => {
             if (claim.noteText) {
                 noteStats.totalWithNotes++;
-                if (getNoteCategory(claim.noteText) === 'Miscellaneous') {
+                // **MODIFIED**: Use the new analysis function to check for "General Investigation"
+                if (analyzeClaimNotes(claim.noteText).rootCause === 'General Investigation') {
                     noteStats.miscellaneous++;
                 }
             }
@@ -118,35 +119,26 @@ async function performInitialProcessing() {
 
         if (noteStats.totalWithNotes > 10 && (noteStats.miscellaneous / noteStats.totalWithNotes > 0.9)) {
             const configuredNoteCol = document.getElementById('notesCol').value.toUpperCase();
-            const warningMessage = `Warning: Over 90% of notes were categorized as 'Miscellaneous'. This often means the configured 'W9/Notes Column' (currently set to column '${configuredNoteCol}') is incorrect for this report. Please verify all column configurations above.`;
+            const warningMessage = `Warning: Over 90% of notes were categorized as 'General Investigation'. This often means the configured 'W9/Notes Column' (currently set to column '${configuredNoteCol}') is incorrect for this report. Please verify all column configurations above.`;
             ui.displayWarning(warningMessage);
         }
 
+        // **MODIFIED**: Update header row for new report structure
         state.fileHeaderRow = [...state.mainReportHeader];
         if (state.hasYesterdayFile) {
             state.fileHeaderRow.splice(config.claimStatusIndex, 0, 'Yest. Claim State');
         }
-        let daysInsertIndex = config.cleanAgeIndex + 1;
-        if (state.hasYesterdayFile && config.cleanAgeIndex >= config.claimStatusIndex) daysInsertIndex++; 
-        state.fileHeaderRow.splice(daysInsertIndex, 0, 'Days Bucket');
-        state.fileHeaderRow.push('Added (Owner)', 'Due Date');
-        
-        const getDaysBucketText = (age) => {
-             if (isNaN(age)) return '';
-             if (age >= 28 && age <= 30) return '28-30 days';
-             if (age >= 21 && age <= 27) return '21-27 days';
-             if (age >= 31) return '31+ days';
-             return '0-20 days';
-        };
+        state.fileHeaderRow.push('Root Cause', 'Assigned To');
+
 
         state.processedClaimsList.forEach(claim => {
             const newRow = [...claim.originalRow];
             if (state.hasYesterdayFile) {
                 newRow.splice(config.claimStatusIndex, 0, state.yesterdayDataMap.get(claim.claimNumber)?.state || 'NEW');
             }
-            newRow.splice(daysInsertIndex, 0, getDaysBucketText(claim.cleanAge));
-            newRow.push(claim.owner, (claim.noteText.match(/due\s*by?[:\s]*(\d{1,2}[\/-]\d{1,2}(?:[\/-]\d{2,4})?)/i) || [])[1] || '');
-            
+            // **MODIFIED**: Push new data points to the end of the row
+            newRow.push(claim.rootCause, claim.owner);
+
             claim.processedRow = newRow;
             claim.defaultOwner = claim.owner;
             claim.finalOwner = claim.owner; // Initialize finalOwner with the default
@@ -160,19 +152,17 @@ async function performInitialProcessing() {
     }
 }
 
-// **THIS IS THE FUNCTION TO FOCUS ON**
 async function handleAssignmentFileUpload(event) {
     const file = event.target.files[0];
-    const fileNameDiv = document.getElementById('assignmentFileName'); // Get the text element
+    const fileNameDiv = document.getElementById('assignmentFileName');
 
-    // **FIX**: Ensure the text updates immediately when a file is chosen.
     if (!file) {
-        if(fileNameDiv) fileNameDiv.textContent = 'No file selected.'; // Reset if selection is cancelled
+        if(fileNameDiv) fileNameDiv.textContent = 'No file selected.';
         return;
     }
 
-    if(fileNameDiv) fileNameDiv.textContent = `Selected: ${file.name}`; // Update the text
-    
+    if(fileNameDiv) fileNameDiv.textContent = `Selected: ${file.name}`;
+
     ui.displayStatus('Processing assignment file...', 'info', true);
 
     try {
@@ -181,10 +171,11 @@ async function handleAssignmentFileUpload(event) {
             const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
             const ws = wb.Sheets[wb.SheetNames[0]];
             const jsonData = XLSX.utils.sheet_to_json(ws);
-            
+
+            // Assuming state.assignmentMap exists and is cleared in resetState
             state.assignmentMap.clear();
             let validAssignments = 0;
-            
+
             jsonData.forEach(row => {
                 const claimState = row['Claim State'];
                 const noteText = row['Note / Edit Text'];
@@ -218,37 +209,36 @@ async function handleAssignmentFileUpload(event) {
 
 async function generateFinalReports() {
     ui.displayStatus('Applying assignments and generating final reports...', 'info', true);
-    
+
     // Apply assignments from the map
     state.processedClaimsList.forEach(claim => {
         const noteText = claim.noteText || "No Note";
         const stateStr = claim.claimState || "UNKNOWN";
         const key = `${stateStr}||${noteText}`;
         const assignedOwner = state.assignmentMap.get(key);
-        
+
         if (assignedOwner) {
             claim.finalOwner = assignedOwner;
-            // The owner is the second to last element in the processedRow array
-            claim.processedRow[claim.processedRow.length - 2] = assignedOwner; 
+            // The owner is the last element in the processedRow array
+            claim.processedRow[claim.processedRow.length - 1] = assignedOwner;
         } else {
             // If no specific assignment, it keeps the default owner
             claim.finalOwner = claim.defaultOwner;
-            claim.processedRow[claim.processedRow.length - 2] = claim.defaultOwner;
+            claim.processedRow[claim.processedRow.length - 1] = claim.defaultOwner;
         }
     });
 
     if (state.hasYesterdayFile) {
         runDetailedCohortAnalysis();
     }
-    
+
     const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
     const downloadsContainer = document.getElementById('download-links-container');
     downloadsContainer.innerHTML = '';
-    
-    createDownloadLink(buildWorkbook(state.processedClaimsList, `${clientName} Daily Action Report`), `${clientName} Overall Daily Action Report for ${ui.getFormattedDate()}.xlsx`, downloadsContainer);
-    createDownloadLink(buildWorkbook(state.processedClaimsList.filter(c => c.finalOwner === 'CLAIMS'), `${clientName} Claims - Action Report`, 'Claims'), `${clientName} Claims - Action Report for ${ui.getFormattedDate()}.xlsx`, downloadsContainer);
-    createDownloadLink(buildWorkbook(state.processedClaimsList.filter(c => c.finalOwner === 'PV'), `${clientName} PV - Action Report`, 'PV'), `${clientName} PV - Action Report for ${ui.getFormattedDate()}.xlsx`, downloadsContainer);
-    
+
+    // **MODIFIED**: Only a single overall report is generated now
+    createDownloadLink(buildWorkbook(state.processedClaimsList, `${clientName} Daily Action Report`), `${clientName} Daily Action Report for ${ui.getFormattedDate()}.xlsx`, downloadsContainer);
+
     if (state.hasYesterdayFile) {
         const pdfButton = document.createElement('button');
         pdfButton.id = 'downloadPdfReportBtn';
@@ -283,7 +273,7 @@ function copyEmailText() {
     if (state.hasYesterdayFile) {
         const todayStats = calculateStats(state.processedClaimsList);
         const formatStatLine = (today, yesterday) => `${today} (Yest. ${yesterday ?? 0})`;
-        
+
         const createStatBlock = (title, statusKey) => {
             const yestBlock = state.yesterdayStats?.[statusKey] || { total: 0, '28-30': 0, '21-27': 0, '31+': 0, '0-20': 0 };
             const todayBlock = todayStats?.[statusKey] || { total: 0, '28-30': 0, '21-27': 0, '31+': 0, '0-20': 0 };
@@ -293,7 +283,7 @@ function copyEmailText() {
                `Backlog (31+ Days): ${formatStatLine(todayBlock['31+'], yestBlock['31+'])}\n` +
                `Queue (0-20 Days): ${formatStatLine(todayBlock['0-20'], yestBlock['0-20'])}`;
         };
-        
+
         emailBody += `\n\nBelow are the detailed highlights from the report. For a full visual breakdown of claim movement, please see the attached 'Daily Claim-Flow Analysis' PDF.\n\n` +
               `${createStatBlock('pending', 'PEND')}\n\n` +
               `${createStatBlock('On Hold', 'ONHOLD')}\n\n` +
@@ -301,7 +291,7 @@ function copyEmailText() {
     }
 
     emailBody += `\n\nPlease let me know if you have any questions.`;
-    
+
     navigator.clipboard.writeText(emailBody).then(() => {
         const btn = document.getElementById('copyEmailBtn');
         btn.textContent = 'Copied!';
@@ -326,7 +316,7 @@ function runDetailedCohortAnalysis() {
     };
 
     const getStateKey = (stateStr) => (stateStr || '').includes('MANAGEMENT') ? 'MANAGEMENTREVIEW' : (stateStr || '');
-    
+
     const yestCohorts = {};
     for (const [claimNumber, yestData] of state.yesterdayDataMap.entries()) {
         const yestState = getStateKey(yestData.state);
@@ -349,7 +339,7 @@ function runDetailedCohortAnalysis() {
             const breakdown = {
                 totalYesterday: claimNumbersInCohort.length, movedToPrebatch: 0, resolvedOrRemoved: 0, movedTo: {}
             };
-            
+
             for(const claimNumber of claimNumbersInCohort){
                 if(prebatchClaimNumbers.has(claimNumber)){
                     breakdown.movedToPrebatch++;
@@ -382,7 +372,7 @@ function runDetailedCohortAnalysis() {
              }
          }
     }
-     
+
     document.getElementById('pv-to-claims-count').textContent = state.workflowMovement.pvToClaims.toLocaleString();
     document.getElementById('claims-to-pv-count').textContent = state.workflowMovement.claimsToPv.toLocaleString();
     document.getElementById('critical-to-backlog-count').textContent = state.workflowMovement.criticalToBacklog.toLocaleString();
