@@ -13,6 +13,7 @@ export const state = {
     prebatchMovementStats: {}, 
     detailedMovementStats: {},
     cycleTimeMetrics: {},
+    assignmentMap: new Map(),
     hasYesterdayFile: false
 };
 
@@ -31,4 +32,5 @@ export function resetState() {
     state.prebatchMovementStats = {};
     state.detailedMovementStats = {};
     state.cycleTimeMetrics = {};
+    state.assignmentMap.clear();
 }
