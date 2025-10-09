@@ -1,6 +1,6 @@
 import { state } from './state.js';
 import { getNoteCategory } from './processing.js';
-import { downloadPrebatchReport } from './generator.js';
+import { downloadPrebatchReport, generateAssignmentReport } from './generator.js';
 
 // This module contains all functions that directly interact with the DOM (the HTML page).
 // This keeps the logic for how the page looks and behaves separate from the data processing logic.
@@ -24,23 +24,27 @@ export function displayWarning(message) {
         warningMessage.textContent = message;
         warningContainer.classList.remove('hidden');
     }
-    // Also add the warning directly to the assignment editor for high visibility
-    if(editorDescription) {
-        editorDescription.innerHTML = `<strong class="text-red-600">Action Required:</strong> ${message}`;
-    }
 }
 
 export function resetUI() {
-    ['review-container', 'final-downloads-container', 'movement-summary-container', 'approaching-critical-container', 'prebatch-container', 'warning-container'].forEach(id => {
+    ['review-container', 'final-downloads-container', 'movement-summary-container', 'approaching-critical-container', 'prebatch-container', 'warning-container', 'assignment-upload-step'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.add('hidden');
     });
     document.getElementById('download-links-container').innerHTML = '';
     document.getElementById('copyEmailBtn').classList.add('hidden');
     document.getElementById('status').textContent = '';
-    document.getElementById('assignment-editor-container').innerHTML = '';
     document.getElementById('approaching-critical-table-container').innerHTML = '';
+    
+    // Reset the assignment file input
+    const assignmentFileInput = document.getElementById('assignmentFileInput');
+    if(assignmentFileInput) {
+        assignmentFileInput.value = '';
+        document.getElementById('assignmentFileName').textContent = 'No file selected.';
+    }
+    document.getElementById('generateFinalReportsBtn').disabled = true;
 }
+
 
 export function getFormattedDate() {
     const d = new Date(), day = d.getDate(), month = d.toLocaleString('default', { month: 'short' }), year = d.getFullYear();
@@ -60,7 +64,11 @@ export function displayReviewStep() {
     }
 
     displayApproachingCriticalTable();
-    displayAssignmentEditor();
+    
+    // Setup for the new assignment workflow
+    document.getElementById('downloadAssignmentReportBtn').onclick = generateAssignmentReport;
+    document.getElementById('assignment-upload-step').classList.remove('hidden');
+    document.getElementById('generateFinalReportsBtn').disabled = true; // Disable until assignment file is uploaded
 
     document.getElementById('review-container').classList.remove('hidden');
 }
@@ -100,7 +108,7 @@ function displayApproachingCriticalTable() {
                     <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-700">${claim.originalRow[claim.payerIndex] || 'N/A'}</td>
                     <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-700">${totalCharges}</td>
                     <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-700">${claim.claimState}</td>
-                    <td class="px-4 py-2 whitespace-nowrap text-sm font-semibold text-gray-800">${claim.finalOwner}</td>
+                    <td class="px-4 py-2 whitespace-nowrap text-sm font-semibold text-gray-800">${claim.defaultOwner}</td>
                 </tr>`;
         }
 
@@ -109,58 +117,5 @@ function displayApproachingCriticalTable() {
         container.classList.remove('hidden');
     } else {
         container.classList.add('hidden');
-    }
-}
-
-function displayAssignmentEditor() {
-    const assignmentContainer = document.getElementById('assignment-editor-container');
-    assignmentContainer.innerHTML = `<h3 class="text-xl font-bold text-gray-900 mb-3">Assignment Editor</h3><p id="assignment-editor-description" class="text-gray-700 mb-4"></p>`;
-    const categorizedNotes = {};
-    let uniqueNoteCount = 0;
-    
-    state.processedClaimsList.forEach(claim => {
-        const note = claim.noteText || "No Note";
-        if (note !== "No Note") {
-            const category = getNoteCategory(note);
-            if (!categorizedNotes[category]) categorizedNotes[category] = {};
-            if (!categorizedNotes[category][note]) {
-                categorizedNotes[category][note] = { count: 0, defaultOwner: claim.defaultOwner };
-                uniqueNoteCount++;
-            }
-            categorizedNotes[category][note].count++;
-        }
-    });
-
-    const editorDescription = document.getElementById('assignment-editor-description');
-    if (editorDescription.textContent.includes('Action Required')) {
-        assignmentContainer.innerHTML += `<div class="text-center py-4 text-gray-500 border rounded-lg bg-gray-50">Please correct the column configuration above to see note categories.</div>`;
-        return;
-    }
-
-    if (uniqueNoteCount === 0) {
-        editorDescription.textContent = "No notes were found in the report to assign.";
-        assignmentContainer.innerHTML += `<div class="text-center py-4 text-gray-500">No notes found.</div>`;
-    } else {
-        editorDescription.textContent = `Found ${uniqueNoteCount} unique notes. The 'Default Assignment' now reflects yesterday's final assignment. Please review.`;
-        Object.keys(categorizedNotes).sort().forEach(category => {
-            const notes = categorizedNotes[category];
-            const categoryId = category.replace(/\s|&/g, '-');
-            let tableRowsHtml = '';
-            Object.keys(notes).sort((a, b) => notes[b].count - notes[a].count).forEach(noteText => {
-                const data = notes[noteText];
-                tableRowsHtml += `<tr class="bg-white"><td class="px-6 py-4 text-sm text-gray-700 break-words">${noteText}</td><td class="px-6 py-4 text-sm text-gray-700">${data.count}</td><td class="px-6 py-4 text-sm font-medium text-gray-900">${data.defaultOwner || 'N/A'}</td><td class="px-6 py-4 text-sm text-gray-500"><select class="p-2 border rounded-md w-full assignment-override" data-note-text="${noteText.replace(/"/g, '&quot;')}" data-category="${categoryId}"><option value="">Keep Default</option><option value="Claims">Claims</option><option value="PV">PV</option></select></td></tr>`;
-            });
-            const categoryHtml = `<details class="bg-gray-50 border rounded-lg overflow-hidden" open><summary class="p-4 bg-gray-100 hover:bg-gray-200 flex justify-between items-center"><h4 class="text-lg font-bold text-gray-800">${category} (${Object.keys(notes).length} notes)</h4><div class="flex items-center space-x-2"><label class="text-sm font-medium">Assign All to:</label><select class="p-2 border rounded-md category-assign" data-category-target="${categoryId}"><option value="">-- Bulk Assign --</option><option value="Claims">Claims</option><option value="PV">PV</option></select></div></summary><div class="p-2"><div class="table-container border rounded-lg"><table class="min-w-full divide-y divide-gray-200 table-fixed"><thead class="bg-white sticky top-0"><tr><th scope="col" class="w-1/2 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Note Text</th><th scope="col" class="w-1/12 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Count</th><th scope="col" class="w-1/4 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Default Assignment</th><th scope="col" class="w-1/4 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">New Assignment</th></tr></thead><tbody class="divide-y divide-gray-200">${tableRowsHtml}</tbody></table></div></div></details>`;
-            assignmentContainer.innerHTML += categoryHtml;
-        });
-
-        document.querySelectorAll('.category-assign').forEach(select => {
-            select.addEventListener('change', (e) => {
-                const targetCategory = e.target.dataset.categoryTarget;
-                const newAssignment = e.target.value;
-                if (!newAssignment) return;
-                document.querySelectorAll(`.assignment-override[data-category="${targetCategory}"]`).forEach(noteSelect => { noteSelect.value = newAssignment; });
-            });
-        });
     }
 }
