@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { getFormattedDate } from './ui.js';
-import { gatherConfig } from './config.js'; 
-import { calculateStats } from './processing.js'; 
+import { gatherConfig } from './config.js';
+import { calculateStats } from './processing.js';
 
 // This module is responsible for generating all final file outputs (Excel, PDF, etc.)
 
@@ -22,15 +22,14 @@ export function generateAssignmentReport() {
     // Aggregate claims by a unique key of state + note
     state.processedClaimsList.forEach(claim => {
         const claimState = claim.claimState || "UNKNOWN";
-        
-        // **FIX**: Only include claims if their status is PEND, ONHOLD, or contains MANAGEMENT.
+
         if (!targetStates.includes(claimState) && !claimState.includes('MANAGEMENT')) {
             return; // Skip any claim that doesn't match the required statuses.
         }
 
         const noteText = claim.noteText || "No Note";
         const key = `${claimState}||${noteText}`;
-        
+
         let yesterdayOwner = 'NEW'; // Default owner if no yesterday file is present
 
         if (state.hasYesterdayFile && state.yesterdayDataMap) {
@@ -41,7 +40,7 @@ export function generateAssignmentReport() {
         }
 
         if (!assignmentData.has(key)) {
-            assignmentData.set(key, { 
+            assignmentData.set(key, {
                 "Claim State": claimState,
                 "Note / Edit Text": noteText,
                 "Claim Count": 0,
@@ -73,143 +72,85 @@ export function generateAssignmentReport() {
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Assignment Data");
-    
+
     const clientName = document.getElementById('client-select').options[document.getElementById('client-select').selectedIndex].text;
     XLSX.writeFile(wb, `${clientName} Assignment Report for ${getFormattedDate()}.xlsx`);
 }
 
 
-export function buildWorkbook(claimsData, reportTitle, ownerFilter = null) {
-    const masterSheetName = "All Processed Data", highDollarSheetName = "High Dollar";
-    const sheetsData = { [masterSheetName]: [state.fileHeaderRow] };
-    if (ownerFilter !== 'PV') sheetsData[highDollarSheetName] = [state.fileHeaderRow];
-    
-    const tabMetadata = {};
-    const overallSummary = { par: { '28-30': 0, '21-27': 0, '31+': 0, '0-20': 0, total: 0 }, nonpar: { '28-30': 0, '21-27': 0, '31+': 0, '0-20': 0, total: 0 } };
+/**
+ * **NEW `buildWorkbook` Function**
+ * This function has been completely rewritten to meet the new requirements.
+ * It creates a workbook with three sheets based on claim age (0-20, 21-27, 28+).
+ * Within each sheet, the claims are sorted by their "Note / Edit Text".
+ */
+export function buildWorkbook(claimsData, reportTitle) {
+    const wb = XLSX.utils.book_new();
+    const header = state.fileHeaderRow;
+    const notesIndex = state.mainReportHeader.indexOf(document.getElementById('notesCol').value)
+
+    // 1. Categorize claims into age buckets
+    const buckets = {
+        '0-20 Days': [],
+        '21-27 Days': [],
+        '28+ Days': []
+    };
 
     for (const claim of claimsData) {
-        const networkType = String(claim.originalRow[claim.networkStatusIndex] || '').toUpperCase().includes('OUT') ? 'nonpar' : 'par';
-        overallSummary[networkType].total++;
-        if (!isNaN(claim.cleanAge)) {
-            if (claim.cleanAge >= 28 && claim.cleanAge <= 30) overallSummary[networkType]['28-30']++;
-            else if (claim.cleanAge >= 21 && claim.cleanAge <= 27) overallSummary[networkType]['21-27']++;
-            else if (claim.cleanAge >= 31) overallSummary[networkType]['31+']++;
-            else overallSummary[networkType]['0-20']++;
-        }
-        
-        sheetsData[masterSheetName].push(claim.processedRow);
-        
-        const totalCharges = parseFloat(String(claim.originalRow[claim.totalChargesIndex]).replace(/[^0-9.-]/g, '')) || 0;
-        const claimType = String(claim.originalRow[claim.claimTypeIndex] || '').toUpperCase();
-        const isMgmtReview = claim.claimState.includes('MANAGEMENT') && claim.claimState.includes('REVIEW');
-        const isHighCost = isMgmtReview && ((claimType.includes('PROFESSIONAL') && totalCharges > 3500) || (claimType.includes('INSTITUTIONAL') && totalCharges > 6500));
-        
-        if (isHighCost && ownerFilter !== 'PV') sheetsData[highDollarSheetName].push(claim.processedRow);
-        
-        const dsnpRaw = String(claim.originalRow[claim.dsnpIndex] || '').toUpperCase();
-        const dsnpStatus = dsnpRaw.includes('NON DSNP') ? 'NonDSNP' : (dsnpRaw.includes('DSNP') || dsnpRaw === 'Y' ? 'DSNP' : '');
-        
-        let statusTab = '', tabOwner = '';
-        if (isMgmtReview) { statusTab = 'MgmtRev'; tabOwner = 'PV'; }
-        else if (claim.claimState === 'ONHOLD') { statusTab = 'OnHold'; tabOwner = 'PV'; }
-        else if (claim.claimState === 'PEND') { statusTab = 'Pend'; tabOwner = 'Claims'; }
-        else if (claim.claimState === 'DENY') { statusTab = 'Deny'; tabOwner = 'Claims'; }
-        
-        if (claim.claimState === 'PR') {
-            const payerName = String(claim.originalRow[claim.payerIndex] || 'Unknown Payer').trim();
-            const sanitizedPayer = payerName.replace(/[\\\/\?\*\[\]]/g, '').substring(0, 25);
-            const tabKey = `PR - ${sanitizedPayer}`;
-            
-            if (!sheetsData[tabKey]) {
-                sheetsData[tabKey] = [state.fileHeaderRow];
-                tabMetadata[tabKey] = { owner: 'Claims', priority: 6 }; 
-            }
-            sheetsData[tabKey].push(claim.processedRow);
-        }
-
-        if (dsnpStatus && tabOwner && networkType && claim.claimState !== 'PR' && (ownerFilter === 'PV' || !isHighCost)) {
-            let tabKey = '', priorityLevel = 0;
-            if (claim.cleanAge >= 28 && claim.cleanAge <= 30) { priorityLevel = 1; tabKey = `CRITICAL (28-30d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
-            else if (claim.cleanAge >= 21 && claim.cleanAge <= 27) { priorityLevel = 2; tabKey = `PRIORITY (21-27d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
-            else if (claim.cleanAge >= 31) { priorityLevel = 3; tabKey = `Backlog (31+d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
-            else { priorityLevel = 4; tabKey = `Queue (0-20d) ${networkType === 'par' ? 'Par' : 'NonPar'} ${statusTab} ${dsnpStatus}`; }
-            
-            if (!(ownerFilter && priorityLevel === 4)) {
-                const truncatedTabKey = tabKey.replace(/[\\\/\?\*\[\]]/g, '').substring(0, 31);
-                if (!sheetsData[truncatedTabKey]) { sheetsData[truncatedTabKey] = [state.fileHeaderRow]; tabMetadata[truncatedTabKey] = { owner: tabOwner, priority: priorityLevel }; }
-                sheetsData[truncatedTabKey].push(claim.processedRow);
-            }
-        }
-
-        const noteLower = claim.noteText.toLowerCase();
-        if (noteLower.includes('w9')) {
-            let w9SheetName = '', w9Owner = '';
-            if (noteLower.includes('req')) { w9SheetName = 'W9 Follow-Up'; w9Owner = 'Claims'; }
-            else if (noteLower.includes('denied') || noteLower.includes('missing')) { w9SheetName = 'W9 Letter Needed'; w9Owner = 'PV'; }
-            else if (noteLower.includes('received') || noteLower.includes('reprocess')) { w9SheetName = 'W9 Received - Reprocess'; w9Owner = 'Claims'; }
-            if (w9SheetName) {
-                if (!sheetsData[w9SheetName]) { sheetsData[w9SheetName] = [state.fileHeaderRow]; tabMetadata[w9SheetName] = { owner: w9Owner, priority: 5 }; }
-                sheetsData[w9SheetName].push(claim.processedRow);
-            }
+        const age = claim.cleanAge;
+        if (isNaN(age) || age <= 20) {
+            buckets['0-20 Days'].push(claim.processedRow);
+        } else if (age >= 21 && age <= 27) {
+            buckets['21-27 Days'].push(claim.processedRow);
+        } else { // 28+
+            buckets['28+ Days'].push(claim.processedRow);
         }
     }
 
-    const coverPageData = [[reportTitle], [`Date: ${getFormattedDate()}`], [], ["Overall Claim Summary"], ["Category", "28-30 Days (Critical)", "21-27 Days (Priority)", "31+ Days (Backlog)", "0-20 Days (Queue)", "Total Active Claims"], ["Par Claims", overallSummary.par['28-30'], overallSummary.par['21-27'], overallSummary.par['31+'], overallSummary.par['0-20'], overallSummary.par.total], ["Non-Par Claims", overallSummary.nonpar['28-30'], overallSummary.nonpar['21-27'], overallSummary.nonpar['31+'], overallSummary.nonpar['0-20'], overallSummary.nonpar.total], [], ["Core Strategy: Focus on claims nearing the 31-day threshold. Work tabs in priority order."], []];
-    const allBreakoutTabs = Object.keys(tabMetadata);
+    // 2. Process each bucket: sort the data and create a sheet
+    for (const sheetName in buckets) {
+        const claimsInBucket = buckets[sheetName];
 
-    const addSectionToCover = (title, priority) => {
-        const filteredTabs = allBreakoutTabs.filter(key => tabMetadata[key]?.priority === priority && (!ownerFilter || tabMetadata[key].owner === ownerFilter)).sort();
-        if (filteredTabs.length > 0) {
-            coverPageData.push([title], ["Tab Name", "Claim Count", "Assigned Owner"]);
-            filteredTabs.forEach(key => {
-                const totalCount = sheetsData[key].length - 1;
-                let pvCount = 0, claimsCount = 0;
-                for (const row of sheetsData[key].slice(1)) { if (row[state.fileHeaderRow.length - 2] === 'PV') pvCount++; else if (row[state.fileHeaderRow.length - 2] === 'Claims') claimsCount++; }
-                coverPageData.push([key, totalCount, `PV (${pvCount}) Claims (${claimsCount})`]);
+        // Sort the data based on the notes/edits column
+        if (notesIndex !== -1) {
+            claimsInBucket.sort((a, b) => {
+                const noteA = String(a[notesIndex] || '').toLowerCase();
+                const noteB = String(b[notesIndex] || '').toLowerCase();
+                if (noteA < noteB) return -1;
+                if (noteA > noteB) return 1;
+                return 0;
             });
-            coverPageData.push([]);
         }
-    };
-    
-    addSectionToCover("Priority 1: CRITICAL (28-30 days)", 1);
-    addSectionToCover("Priority 2: PRIORITY (21-27 days)", 2);
-    addSectionToCover("Priority 3: Backlog (31+ days)", 3);
-    addSectionToCover("W9 and Other Tasks", 5);
-    addSectionToCover("Payer Review (by Payer)", 6);
+        
+        // Add header row to the sorted data
+        const sheetData = [header, ...claimsInBucket];
 
-    const wb = XLSX.utils.book_new();
-    const coverWS = XLSX.utils.aoa_to_sheet(coverPageData);
-    coverWS['!cols'] = [{ wch: 35 }, { wch: 20 }, { wch: 22 }];
-    XLSX.utils.book_append_sheet(wb, coverWS, "Cover Page");
-    
-    let sheetOrder = ["Cover Page"];
-    if (ownerFilter !== 'PV') sheetOrder.push(highDollarSheetName);
-    sheetOrder.push(...allBreakoutTabs.sort((a,b) => (tabMetadata[a].priority - tabMetadata[b].priority) || a.localeCompare(b)), masterSheetName);
-    
-    sheetOrder.forEach(sheetName => { 
-        if (sheetsData[sheetName] && sheetsData[sheetName].length > 1) { 
-            const ws = XLSX.utils.aoa_to_sheet(sheetsData[sheetName]);
-            ws['!autofilter'] = { ref: ws['!ref'] }; 
-            XLSX.utils.book_append_sheet(wb, ws, sheetName); 
-        } 
-    });
-    
+        // Create and append the worksheet
+        if (sheetData.length > 1) { // Only add sheet if it has data
+             const ws = XLSX.utils.aoa_to_sheet(sheetData);
+             ws['!autofilter'] = { ref: ws['!ref'] };
+             XLSX.utils.book_append_sheet(wb, ws, sheetName);
+        }
+    }
+
     return new Blob([XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
 
-// --- PDF Report Generation ---
+
+// --- PDF Report Generation (Unchanged) ---
+// Note: The PDF generation logic remains the same as it provides a different, high-level analytical view.
 
 export async function generatePdfReport() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-    
+
     await createTitlePage(doc);
     doc.addPage();
     await createChartsPage(doc);
     doc.addPage();
     createPivotTablesPage(doc);
     doc.addPage();
-    createAdvancedPivotPage(doc); 
+    createAdvancedPivotPage(doc);
     doc.addPage();
     await createDetailedTablesPage(doc);
 
@@ -242,9 +183,9 @@ function aggregatePivotData(claimsList, config, isPrebatch) {
 
         const networkStatusValue = String(row[config.networkStatusIndex] || '');
         const isNonPar = networkStatusValue.toUpperCase().includes('OUT');
-        
+
         const cleanAge = isPrebatch ? parseInt(row[config.cleanAgeIndex], 10) : claim.cleanAge;
-        
+
         let ageBucket = '';
         if (isNaN(cleanAge)) continue;
 
@@ -269,14 +210,14 @@ function createPivotTablesPage(doc) {
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
     doc.text("Claim Counts by Aging & Network Status", 14, 20);
-    
+
     let finalY = 35;
 
     const drawPivotTable = (startY, title, subtitle, tableData) => {
         const ageBuckets = ['0-20', '21-27', '28-30', '31+'];
         let totalPar = 0;
         let totalNonPar = 0;
-        
+
         const body = ageBuckets.map(bucket => {
             const parCount = tableData[bucket].par;
             const nonParCount = tableData[bucket].nonPar;
@@ -340,7 +281,7 @@ function aggregateAdvancedPivotData() {
     for (const claim of state.processedClaimsList) {
         const claimTypeRaw = String(claim.originalRow[config.claimTypeIndex] || 'Other').toUpperCase();
         const claimType = claimTypeRaw.includes('INSTITUTIONAL') ? 'Institutional' : (claimTypeRaw.includes('PROFESSIONAL') ? 'Professional' : 'Other');
-        
+
         if (claimType === 'Other') continue;
 
         const claimState = claim.claimState;
@@ -351,10 +292,10 @@ function aggregateAdvancedPivotData() {
 
         if (!result[claimType][claimState]) result[claimType][claimState] = {};
         if (!result[claimType][claimState][dsnpStatus]) result[claimType][claimState][dsnpStatus] = 0;
-        
+
         result[claimType][claimState][dsnpStatus]++;
     }
-    
+
     const sortedColumns = [...columnSet].sort();
     const sortedStates = [...stateSet].sort();
 
@@ -379,7 +320,7 @@ function createAdvancedPivotPage(doc) {
         const typeSubtotals = {};
         columns.forEach(c => typeSubtotals[c] = 0);
         typeSubtotals.total = 0;
-        
+
         body.push([{ content: type, colSpan: head[0].length, styles: { fillColor: [217, 225, 242], textColor: 0, fontStyle: 'bold' } }]);
 
         states.forEach(stateName => {
@@ -394,11 +335,11 @@ function createAdvancedPivotPage(doc) {
                 });
                 row.push(rowTotal.toLocaleString());
                 body.push(row);
-                
+
                 typeSubtotals.total += rowTotal;
             }
         });
-        
+
         const subtotalRow = [{ content: `${type} Total`, styles: { fontStyle: 'bold' } }];
         columns.forEach(c => {
             subtotalRow.push({ content: typeSubtotals[c].toLocaleString(), styles: { fontStyle: 'bold' } });
@@ -408,7 +349,7 @@ function createAdvancedPivotPage(doc) {
         body.push(subtotalRow);
         grandTotals.total += typeSubtotals.total;
     });
-    
+
     const foot = [['Grand Total']];
     columns.forEach(c => foot[0].push(grandTotals[c].toLocaleString()));
     foot[0].push(grandTotals.total.toLocaleString());
@@ -439,7 +380,7 @@ async function createTitlePage(doc) {
     doc.setFont('helvetica', 'bold');
     doc.text('Daily Claim-Flow Analysis', 14, currentY);
     currentY += 8;
-    
+
     doc.setFontSize(14);
     doc.setFont('helvetica', 'normal');
     doc.text(`Prepared for: ${clientName}`, 14, currentY);
@@ -460,7 +401,7 @@ async function createTitlePage(doc) {
     const summaryText = doc.splitTextToSize(introText, 182);
     doc.text(summaryText, 14, currentY);
     currentY += (summaryText.length * 5) + 4;
-    
+
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.text('Summary of Findings', 14, currentY);
@@ -469,7 +410,7 @@ async function createTitlePage(doc) {
     currentY += 8;
 
     const config = gatherConfig();
-    
+
     let totalClaimsProcessed = 0;
     for (const stateName in state.detailedMovementStats) {
         for (const bucket in state.detailedMovementStats[stateName]) {
@@ -524,7 +465,7 @@ async function createTitlePage(doc) {
 
     let valueInPend = 0, deniedDollars = 0;
     let pendAgeSum = 0, pendAgeCount = 0;
-    
+
     const approachingCriticalCount = state.processedClaimsList.filter(c => c.cleanAge === 27).length;
     const criticalAgingToBacklogCount = state.processedClaimsList.filter(c => c.cleanAge === 30).length;
 
@@ -538,7 +479,7 @@ async function createTitlePage(doc) {
     });
 
     const avgPendAge = pendAgeCount > 0 ? (pendAgeSum / pendAgeCount).toFixed(1) + ' Days' : 'N/A';
-    
+
     const kpis = [
         { label: 'Total Claims Processed', value: totalClaimsProcessed.toLocaleString() },
         { label: 'Value in PEND Inventory', value: formatCurrency(valueInPend) },
@@ -553,12 +494,12 @@ async function createTitlePage(doc) {
     doc.setFont('helvetica', 'bold');
     doc.text('Key Performance Indicators', 14, kpiStartY);
     doc.line(14, kpiStartY + 2, 70, kpiStartY + 2);
-    
+
     let currentX = 14;
     let kpiY = kpiStartY + 10;
     const rectWidth = 58;
     const rectHeight = 30;
-    
+
     kpis.forEach((kpi, index) => {
         if (index === 3) {
             kpiY += rectHeight + 5;
@@ -589,7 +530,7 @@ async function createChartsPage(doc) {
         canvas.width = width;
         canvas.height = height;
         container.appendChild(canvas);
-        
+
         return new Promise((resolve) => {
             const chartInstance = new Chart(canvas, {
                 ...config,
@@ -662,7 +603,7 @@ async function createChartsPage(doc) {
             else if(newBucket === 'Critical') critOutcomes['Remained Critical'] += count;
         }
     }
-    
+
     const totalCritOutcomes = Object.values(critOutcomes).reduce((a, b) => a + b, 0);
     if (totalCritOutcomes > 0) {
         const critChartConfig = {
@@ -684,7 +625,7 @@ async function createDetailedTablesPage(doc) {
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
     doc.text("Detailed Cohort Movement Analysis", 14, 20);
-    
+
     let finalY = 25;
 
     const sortedStates = Object.keys(state.detailedMovementStats).sort();
@@ -701,7 +642,7 @@ async function createDetailedTablesPage(doc) {
             const tableBody = [];
             if (cohortData.resolvedOrRemoved > 0) tableBody.push(['Resolved/Removed from report', cohortData.resolvedOrRemoved, `${(cohortData.resolvedOrRemoved / cohortData.totalYesterday * 100).toFixed(1)}%`, 'Positive']);
             if (cohortData.movedToPrebatch > 0) tableBody.push(['Moved to Prebatch', cohortData.movedToPrebatch, `${(cohortData.movedToPrebatch / cohortData.totalYesterday * 100).toFixed(1)}%`, 'Positive']);
-            
+
             const sortedDestinations = Object.entries(cohortData.movedTo).sort((a,b) => b[1] - a[1]);
             sortedDestinations.forEach(([dest, count]) => {
                  const [newState, newBucket] = dest.split('_');
