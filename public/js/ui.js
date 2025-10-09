@@ -31,41 +31,23 @@ export function displayWarning(message) {
 }
 
 export function resetUI() {
-    // Configuration of elements to reset. This is a safer way to manage UI state.
-    const elementsToReset = {
-        'review-container': { action: 'hide' },
-        'final-downloads-container': { action: 'hide' },
-        'movement-summary-container': { action: 'hide' },
-        'approaching-critical-container': { action: 'hide' },
-        'prebatch-container': { action: 'hide' },
-        'warning-container': { action: 'hide' },
-        'assignment-upload-step': { action: 'hide' },
-        'download-links-container': { action: 'clearHTML' },
-        'approaching-critical-table-container': { action: 'clearHTML' },
-        'status': { action: 'clearText' },
-        'assignmentFileName': { action: 'setText', value: 'No file selected.' },
-        'copyEmailBtn': { action: 'hide' },
-        'generateFinalReportsBtn': { action: 'disable' },
-        'assignmentFileInput': { action: 'resetValue' }
-    };
-
-    // Loop through the configuration and safely update the DOM
-    for (const id in elementsToReset) {
+    // This new, safer function finds an element and performs an action,
+    // but it will NOT crash if the element doesn't exist.
+    const safeUpdate = (id, action, value = null) => {
         const element = document.getElementById(id);
         if (element) {
-            const config = elementsToReset[id];
-            switch (config.action) {
+            switch (action) {
                 case 'hide':
                     element.classList.add('hidden');
                     break;
                 case 'clearHTML':
-                    element.innerHTML = ''; // The operation that previously caused the error
+                    element.innerHTML = ''; // This was the source of the error
                     break;
                 case 'clearText':
                     element.textContent = '';
                     break;
                 case 'setText':
-                    element.textContent = config.value;
+                    element.textContent = value;
                     break;
                 case 'disable':
                     element.disabled = true;
@@ -75,10 +57,26 @@ export function resetUI() {
                     break;
             }
         } else {
-            // This will log a warning in the browser's developer console if an element is missing, but it will NOT crash the app.
-            console.warn(`resetUI failed to find element with ID: '${id}'. This may indicate an HTML/JS mismatch.`);
+            // This message will appear in the developer console (F12) if an element is missing,
+            // but it will not stop the application from working.
+            console.warn(`UI element not found: #${id}. This is safe, but may indicate an HTML/JS mismatch.`);
         }
-    }
+    };
+
+    // Hide all major containers
+    ['review-container', 'final-downloads-container', 'movement-summary-container', 'approaching-critical-container', 'prebatch-container', 'warning-container', 'assignment-upload-step', 'copyEmailBtn'].forEach(id => safeUpdate(id, 'hide'));
+
+    // Clear the content of containers that are filled later
+    safeUpdate('download-links-container', 'clearHTML');
+    safeUpdate('approaching-critical-table-container', 'clearHTML');
+    
+    // Reset text and inputs
+    safeUpdate('status', 'clearText');
+    safeUpdate('assignmentFileName', 'setText', 'No file selected.');
+    safeUpdate('assignmentFileInput', 'resetValue');
+
+    // Disable the final button
+    safeUpdate('generateFinalReportsBtn', 'disable');
 }
 
 
