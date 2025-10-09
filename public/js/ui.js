@@ -12,8 +12,10 @@ export function displayStatus(message, type, showLoader = false) {
     const loaderDiv = document.getElementById('loader');
     const processButton = document.getElementById('processBtn');
 
-    if (statusDiv) statusDiv.textContent = message;
-    if (statusDiv) statusDiv.style.color = type === 'error' ? 'red' : (type === 'success' ? 'green' : '#4f46e5');
+    if (statusDiv) {
+        statusDiv.textContent = message;
+        statusDiv.style.color = type === 'error' ? 'red' : (type === 'success' ? 'green' : '#4f46e5');
+    }
     if (loaderDiv) loaderDiv.style.display = showLoader ? 'block' : 'none';
     if (processButton) processButton.disabled = !!showLoader;
 }
@@ -29,7 +31,7 @@ export function displayWarning(message) {
 }
 
 export function resetUI() {
-    // Hide all major containers
+    // Hide all major containers by checking for their existence first
     ['review-container', 'final-downloads-container', 'movement-summary-container', 'approaching-critical-container', 'prebatch-container', 'warning-container', 'assignment-upload-step'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.add('hidden');
@@ -70,7 +72,6 @@ export function getFormattedDate() {
 // --- Review Step Display Functions ---
 
 export function displayReviewStep() {
-    // Safely handle prebatch container
     const prebatchContainer = document.getElementById('prebatch-container');
     if (prebatchContainer) {
         if (state.prebatchClaims.length > 0) {
@@ -85,14 +86,14 @@ export function displayReviewStep() {
     displayApproachingCriticalTable();
     
     // Setup for the new assignment workflow
-    const downloadAssignmentBtn = document.getElementById('downloadAssignmentReportBtn');
-    if (downloadAssignmentBtn) downloadAssignmentBtn.onclick = generateAssignmentReport;
+    const downloadBtn = document.getElementById('downloadAssignmentReportBtn');
+    if (downloadBtn) downloadBtn.onclick = generateAssignmentReport;
     
-    const assignmentUploadStep = document.getElementById('assignment-upload-step');
-    if(assignmentUploadStep) assignmentUploadStep.classList.remove('hidden');
-
-    const generateReportsBtn = document.getElementById('generateFinalReportsBtn');
-    if(generateReportsBtn) generateReportsBtn.disabled = true;
+    const uploadStep = document.getElementById('assignment-upload-step');
+    if (uploadStep) uploadStep.classList.remove('hidden');
+    
+    const generateBtn = document.getElementById('generateFinalReportsBtn');
+    if(generateBtn) generateBtn.disabled = true;
 
     const reviewContainer = document.getElementById('review-container');
     if (reviewContainer) reviewContainer.classList.remove('hidden');
@@ -108,8 +109,7 @@ function displayApproachingCriticalTable() {
         countElement.textContent = approachingCriticalClaims.length.toLocaleString();
     }
     
-    // Ensure both container and tableContainer exist before proceeding
-    if (!container || !tableContainer) return;
+    if (!container || !tableContainer) return; // Exit if essential elements are missing
 
     if (approachingCriticalClaims.length > 0) {
         let tableHtml = `
@@ -121,7 +121,7 @@ function displayApproachingCriticalTable() {
                             <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Payer</th>
                             <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total Charges</th>
                             <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Claim State</th>
-                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Current Owner</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Yesterday's Owner</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">`;
