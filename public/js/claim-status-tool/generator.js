@@ -21,19 +21,26 @@ export function generateAssignmentReport() {
     // Aggregate claims by a unique key of state + note
     state.processedClaimsList.forEach(claim => {
         const noteText = claim.noteText || "No Note";
-        const state = claim.claimState || "UNKNOWN";
-        const key = `${state}||${noteText}`;
+        const claimState = claim.claimState || "UNKNOWN";
+        const key = `${claimState}||${noteText}`;
         
-        // Get the owner from yesterday's data, if it exists
-        const yestData = state.yesterdayDataMap.get(claim.claimNumber);
-        const yesterdayOwner = yestData ? yestData.owner : 'NEW';
+        let yesterdayOwner = 'NEW'; // Default owner if no yesterday file is present
+
+        // **FIX**: Safely check if the yesterday data exists before trying to access it.
+        // This prevents the crash when no yesterday file is uploaded.
+        if (state.hasYesterdayFile && state.yesterdayDataMap) {
+            const yestData = state.yesterdayDataMap.get(claim.claimNumber);
+            if (yestData && yestData.owner) {
+                yesterdayOwner = yestData.owner;
+            }
+        }
 
         if (!assignmentData.has(key)) {
             assignmentData.set(key, { 
-                "Claim State": state,
+                "Claim State": claimState,
                 "Note / Edit Text": noteText,
                 "Claim Count": 0,
-                "Yesterday's Owner": yesterdayOwner // Store yesterday's owner
+                "Yesterday's Owner": yesterdayOwner // Store the determined owner
             });
         }
         assignmentData.get(key)["Claim Count"]++;
